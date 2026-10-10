@@ -1,20 +1,40 @@
-import { Link } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui";
 import { PageHeader, SettingsLink } from "@/components/ui/Placeholder";
-
-const BLOCKS = [
-  { icon: "🔥", title: "Разминка", minutes: 10, hint: "Хроматика, паук, растяжки, легато, пентатоника" },
-  { icon: "🧩", title: "Разбор нового", minutes: 20, hint: "Техника, кусок песни, лик или теория" },
-  { icon: "🔁", title: "Повторение", minutes: 15, hint: "То, что дольше всего не играл" },
-  { icon: "🎶", title: "Импровизация", minutes: 15, hint: "Тональность, ступени и лады под них" },
-];
+import { buildPlan } from "@/features/session/plan";
+import { resolveProgression } from "@/music/improv";
+import { localDate } from "@/lib/date";
+import { unitTitle } from "@/lib/progress";
+import { weekStreak } from "@/lib/stats";
+import { useData } from "@/store/data";
+import { useSession } from "@/store/session";
+import { BLOCK_META } from "@/shared/types";
 
 const DAYS = ["ВС", "ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ"];
-const PRACTICE_DAYS = [1, 3, 6];
 
 export function TodayPage() {
+  const data = useData();
+  const { active, start } = useSession();
+  const navigate = useNavigate();
+  const [seed, setSeed] = useState(0);
   const today = new Date().getDay();
-  const isPracticeDay = PRACTICE_DAYS.includes(today);
+  const isPracticeDay = data.practice.days.includes(today);
+  const doneToday = data.sessions.some((s) => s.date === localDate());
+  // Recomputed when the library changes or the user asks for another improv task.
+  const plan = useMemo(
+    () => buildPlan(data),
+    [data.items, data.lastPlayed, data.practice, seed],
+  );
+  const streak = weekStreak(data.sessions, data.practice, localDate());
+
+  const begin = () => {
+    const task = plan.find((b) => b.improv)?.improv;
+    if (task) data.pushRecentKey(task.key);
+    start(plan);
+    navigate("/session");
+  };
+
   return (
     <div>
       <PageHeader title="Сегодня" action={<SettingsLink />} />
@@ -24,7 +44,7 @@ export function TodayPage() {
             <div
               key={d}
               className={`flex h-10 flex-1 items-center justify-center rounded-xl text-xs font-semibold ${
-                PRACTICE_DAYS.includes(d) ? "bg-accent/20 text-accent" : "bg-surface-2 text-muted"
+                data.practice.days.includes(d) ? "bg-accent/20 text-accent" : "bg-surface-2 text-muted"
               } ${d === today ? "ring-2 ring-accent" : ""}`}
             >
               {DAYS[d]}
@@ -32,33 +52,78 @@ export function TodayPage() {
           ))}
         </div>
         <p className="mt-3 text-sm text-muted">
-          {isPracticeDay ? "Сегодня день занятия — 60 минут." : "Сегодня отдых. Следующее занятие по расписанию: ПН, СР, СБ."}
+          {doneToday
+            ? "Сегодня уже позанимался — отлично! 🎸"
+            : isPracticeDay
+              ? `Сегодня день занятия — ${Object.values(data.practice.blocks).reduce((a, b) => a + b, 0)} минут.`
+              : "Сегодня отдых по расписанию. Можно позаниматься и сейчас."}
+          {streak > 0 && ` Недель без пропусков: ${streak}.`}
         </p>
       </Card>
 
-      <h2 className="px-1 pb-2 pt-5 text-xs font-semibold uppercase tracking-wide text-muted">План занятия</h2>
-      <div className="space-y-2">
-        {BLOCKS.map((b) => (
-          <Card key={b.title} className="flex items-center gap-3">
-            <span className="text-2xl">{b.icon}</span>
-            <div className="min-w-0 flex-1">
-              <div className="font-semibold">{b.title}</div>
-              <div className="truncate text-xs text-muted">{b.hint}</div>
-            </div>
-            <span className="text-sm font-semibold text-muted">{b.minutes} мин</span>
-          </Card>
-        ))}
-      </div>
-
-      <button type="button" disabled className="mt-4 h-14 w-full rounded-2xl bg-accent text-base font-bold text-on-accent opacity-40">
-        Начать занятие — скоро
-      </button>
-      <p className="mt-3 text-center text-sm text-muted">
-        Пока готов справочник:{" "}
-        <Link to="/theory" className="font-semibold text-accent">
-          лады и аккорды на грифе →
+      {active ? (
+        <Link to="/session" className="mt-4 flex h-14 w-full items-center justify-center rounded-2xl bg-accent text-base font-bold text-on-accent">
+          ▶ Вернуться к занятию
         </Link>
-      </p>
+      ) : (
+        <>
+          <h2 className="px-1 pb-2 pt-5 text-xs font-semibold uppercase tracking-wide text-muted">План занятия</h2>
+          <div className="space-y-2">
+            {plan.map((b) => (
+              <Card key={b.kind}>
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{BLOCK_META[b.kind].icon}</span>
+                  <div className="min-w-0 flex-1 font-semibold">{BLOCK_META[b.kind].title}</div>
+                  <span className="text-sm font-semibold text-muted">{b.minutes} мин</span>
+                </div>
+                <div className="mt-1.5 pl-10 text-sm text-muted">
+                  {b.improv ? (
+                    <ImprovLine improv={b.improv} onReroll={() => setSeed(seed + 1)} />
+                  ) : b.entries.length ? (
+                    <ul className="space-y-0.5">
+                      {b.entries.map((e) => (
+                        <li key={`${e.itemId}#${e.sectionId ?? ""}`} className="truncate">
+                          · {unitTitle(data.items.find((i) => i.id === e.itemId), e.sectionId)}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span>
+                      Пусто — добавь элементы в{" "}
+                      <Link to="/library" className="text-accent">
+                        библиотеке
+                      </Link>
+                    </span>
+                  )}
+                </div>
+              </Card>
+            ))}
+          </div>
+          <button type="button" onClick={begin} className="mt-4 h-14 w-full rounded-2xl bg-accent text-base font-bold text-on-accent">
+            ▶ Начать занятие
+          </button>
+        </>
+      )}
+      <Link to="/improv" className="mt-3 flex h-12 items-center justify-center rounded-2xl bg-surface-2 text-sm font-semibold">
+        🎶 Импровизация вне занятия
+      </Link>
+    </div>
+  );
+}
+
+function ImprovLine({ improv, onReroll }: { improv: { key: string; progressionId: string; challenge: string }; onReroll: () => void }) {
+  const r = resolveProgression(improv.key, improv.progressionId);
+  return (
+    <div className="flex items-start gap-2">
+      <div className="min-w-0 flex-1">
+        <div>
+          {r.keyName}: {r.chords.map((c) => c.symbol).join(" – ")}
+        </div>
+        <div className="text-xs">{improv.challenge}</div>
+      </div>
+      <button type="button" onClick={onReroll} className="shrink-0 rounded-lg bg-surface-2 px-2 py-1 text-base" aria-label="Другое задание">
+        🎲
+      </button>
     </div>
   );
 }

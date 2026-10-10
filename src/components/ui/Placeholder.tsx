@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Card } from ".";
 
 export function PageHeader({ title, action }: { title: string; action?: ReactNode }) {
   return (
@@ -16,19 +15,5 @@ export function SettingsLink() {
     <Link to="/settings" aria-label="Настройки" className="flex h-11 w-11 items-center justify-center rounded-2xl bg-surface-2 text-xl">
       ⚙️
     </Link>
-  );
-}
-
-/** Screens that are planned in the PRD but not built yet. */
-export function ComingSoon({ items }: { items: string[] }) {
-  return (
-    <Card>
-      <p className="text-sm text-muted">Этот экран появится в следующих версиях. Здесь будет:</p>
-      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
-        {items.map((i) => (
-          <li key={i}>{i}</li>
-        ))}
-      </ul>
-    </Card>
   );
 }

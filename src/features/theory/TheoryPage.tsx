@@ -1,24 +1,16 @@
-import { useMemo, useState } from "react";
-import { Fretboard } from "@/components/fretboard/Fretboard";
-import { FullscreenBoard } from "./FullscreenBoard";
+import { useMemo } from "react";
 import { ChordDiagram } from "@/components/fretboard/ChordDiagram";
-import { Card, Chip, IconButton, ScrollRow, Segmented, SectionTitle } from "@/components/ui";
-import { playNote, strum } from "@/audio/player";
-import { CHORD_TYPES, chordTones, chordTypeById, isGuideTone, voicings } from "@/music/chords";
-import { buildPatterns, fretNotes, STANDARD_TUNING, STRING_NAMES, type ChordHighlight, type FretNote } from "@/music/fretboard";
-import { SCALES, diatonicChords, scaleById, scaleTones, type Tone } from "@/music/scales";
+import { ScaleBoard, highlightOf } from "@/components/fretboard/ScaleBoard";
+import { Chip, ScrollRow, Segmented, SectionTitle } from "@/components/ui";
+import { strum } from "@/audio/player";
+import { CHORD_TYPES, chordTones, chordTypeById, voicings } from "@/music/chords";
+import { buildPatterns, STANDARD_TUNING } from "@/music/fretboard";
+import { SCALES, diatonicChords, scaleById, scaleTones } from "@/music/scales";
 import { TONICS, noteName, parseNote } from "@/music/notes";
-import { useSettings, type LabelMode } from "@/store/settings";
-
-const highlightOf = (tones: Tone[]): ChordHighlight => ({
-  tones,
-  guide: new Set(tones.filter(isGuideTone).map((t) => t.chroma)),
-});
+import { useSettings } from "@/store/settings";
 
 export function TheoryPage() {
-  const { theory, setTheory, fretboard, setFretboard } = useSettings();
-  const [selected, setSelected] = useState<FretNote | null>(null);
-  const [fullscreen, setFullscreen] = useState(false);
+  const { theory, setTheory } = useSettings();
   const { tab, tonic, scaleId, chordType, diatonic } = theory;
   const scale = scaleById(scaleId);
 
@@ -54,58 +46,7 @@ export function TheoryPage() {
     };
   }, [tab, tonic, scaleId, chordType, diatonic, scale]);
 
-  const position = theory.position >= view.patterns.length ? 0 : theory.position;
-  const pattern = position >= 0 ? view.patterns[position] : null;
-  const notes = fretNotes({ tones: view.tones, frets: fretboard.frets, chord: view.chord, pattern });
   const vs = view.voicingRoot && view.voicingType ? voicings(view.voicingRoot, view.voicingType, STANDARD_TUNING) : [];
-
-  const labelOptions: { value: LabelMode; label: string }[] = [
-    { value: "degree", label: tab === "chord" ? "Интервалы" : "Ступени" },
-    { value: "note", label: "Ноты" },
-    ...(tab === "scale" && view.chord ? [{ value: "chord" as const, label: "Аккорд" }] : []),
-    ...(pattern ? [{ value: "finger" as const, label: "Пальцы" }] : []),
-    { value: "none", label: "—" },
-  ];
-  const labelMode = labelOptions.some((o) => o.value === fretboard.labelMode) ? fretboard.labelMode : "degree";
-
-  const tap = (n: FretNote) => {
-    playNote(n.midi);
-    setSelected((cur) => (cur?.key === n.key ? null : n));
-  };
-  const stepPosition = (d: number) => {
-    const count = view.patterns.length;
-    setTheory({ position: position < 0 ? (d > 0 ? 0 : count - 1) : (position + d + count) % count });
-  };
-
-  const positionLabel = position < 0 ? "Весь гриф" : `Позиция ${position + 1} из ${view.patterns.length}`;
-  const togglePosition = () => setTheory({ position: position < 0 ? 0 : -1 });
-  const boardProps = {
-    notes,
-    frets: fretboard.frets,
-    labelMode,
-    leftHanded: fretboard.leftHanded,
-    showOutside: fretboard.showOutside,
-    focus: pattern ? { min: pattern.minFret, max: pattern.maxFret } : { min: 0, max: 0 },
-    selectedChroma: selected?.chroma ?? null,
-    onTap: tap,
-  };
-
-  if (fullscreen) {
-    return (
-      <FullscreenBoard
-        title={view.title}
-        board={boardProps}
-        positionLabel={positionLabel}
-        onPrev={() => stepPosition(-1)}
-        onNext={() => stepPosition(1)}
-        onTogglePosition={togglePosition}
-        labelMode={labelMode}
-        labelOptions={labelOptions}
-        onLabelMode={(v) => setFretboard({ labelMode: v })}
-        onClose={() => setFullscreen(false)}
-      />
-    );
-  }
 
   return (
     <div className="space-y-3">
@@ -149,82 +90,16 @@ export function TheoryPage() {
         </ScrollRow>
       )}
 
-      <Card className="px-0 pb-2">
-        <div className="flex items-start justify-between gap-2 px-3">
-          <div className="min-w-0">
-            <div className="truncate text-lg font-bold">{view.title}</div>
-            <div className="text-xs text-muted">{view.subtitle}</div>
-          </div>
-          <div className="flex shrink-0 gap-1.5">
-            <IconButton label="Во весь экран" onClick={() => setFullscreen(true)}>
-              ⤢
-            </IconButton>
-            <IconButton label="Уменьшить" onClick={() => setFretboard({ zoom: Math.max(0.6, +(fretboard.zoom - 0.15).toFixed(2)) })}>
-              −
-            </IconButton>
-            <IconButton label="Увеличить" onClick={() => setFretboard({ zoom: Math.min(1.6, +(fretboard.zoom + 0.15).toFixed(2)) })}>
-              +
-            </IconButton>
-          </div>
-        </div>
-
-        <div className="mt-2 flex flex-wrap gap-1.5 px-3">
-          {view.tones.map((t) => (
-            <span
-              key={t.name + t.interval.label}
-              className="rounded-lg px-2 py-1 text-xs font-semibold"
-              style={{
-                background: t.chroma === (view.chord?.tones[0].chroma ?? view.tones[0].chroma) ? "var(--root)" : "var(--surface-2)",
-                color: t.chroma === (view.chord?.tones[0].chroma ?? view.tones[0].chroma) ? "var(--on-note)" : "var(--text)",
-              }}
-            >
-              {t.name} <span className="opacity-60">{t.interval.label}</span>
-            </span>
-          ))}
-        </div>
-
-        <div className="mt-3">
-          <Fretboard {...boardProps} zoom={fretboard.zoom} />
-        </div>
-
-        <div className="mt-1 min-h-6 px-3 text-sm">
-          {selected ? (
-            <span>
-              <b>{selected.name}</b>
-              {selected.degree && <> · ступень {selected.degree}</>}
-              {selected.chordInterval && tab === "scale" && <> · в аккорде {selected.chordInterval}</>}
-              <span className="text-muted">
-                {" "}
-                · струна {STRING_NAMES[selected.string]}, {selected.fret === 0 ? "открытая" : `${selected.fret} лад`}
-              </span>
-            </span>
-          ) : (
-            <span className="text-muted">Нажми на ноту, чтобы услышать её и увидеть все такие ноты на грифе</span>
-          )}
-        </div>
-
-        <div className="mt-2 flex items-center gap-2 px-3">
-          <IconButton label="Предыдущая позиция" onClick={() => stepPosition(-1)}>
-            ‹
-          </IconButton>
-          <button
-            type="button"
-            onClick={togglePosition}
-            className="h-11 flex-1 rounded-2xl bg-surface-2 text-sm font-semibold"
-          >
-            {positionLabel}
-          </button>
-          <IconButton label="Следующая позиция" onClick={() => stepPosition(1)}>
-            ›
-          </IconButton>
-        </div>
-
-        <div className="mt-2 px-3">
-          <Segmented size="sm" value={labelMode} onChange={(v) => setFretboard({ labelMode: v })} options={labelOptions} />
-        </div>
-
-        <Legend hasChord={!!view.chord} chordTab={tab === "chord"} />
-      </Card>
+      <ScaleBoard
+        title={view.title}
+        subtitle={view.subtitle}
+        tones={view.tones}
+        chord={view.chord}
+        patterns={view.patterns}
+        position={theory.position}
+        onPosition={(position) => setTheory({ position })}
+        chordOnly={tab === "chord"}
+      />
 
       {tab === "scale" && view.chords.length > 0 && (
         <>
@@ -249,32 +124,6 @@ export function TheoryPage() {
           </ScrollRow>
         </>
       )}
-    </div>
-  );
-}
-
-function Legend({ hasChord, chordTab }: { hasChord: boolean; chordTab: boolean }) {
-  const items = [
-    { color: "var(--root)", label: "Тоника" },
-    ...(hasChord
-      ? [
-          { color: "var(--guide)", label: "Терция и септима" },
-          { color: "var(--chord)", label: "Звуки аккорда" },
-        ]
-      : []),
-    ...(chordTab ? [] : [{ color: "transparent", label: "Лад", outline: true }]),
-  ];
-  return (
-    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 px-3 text-xs text-muted">
-      {items.map((i) => (
-        <span key={i.label} className="flex items-center gap-1.5">
-          <span
-            className="inline-block h-3 w-3 rounded-full"
-            style={{ background: i.color, border: "outline" in i ? "1.5px solid var(--scale)" : undefined }}
-          />
-          {i.label}
-        </span>
-      ))}
     </div>
   );
 }

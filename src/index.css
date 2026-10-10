@@ -15,6 +15,7 @@
   --chord: #4dabf7;
   --scale: #c3c8ce;
   --on-note: #101113;
+  --good: #51cf66;
   --fret-wood: #2a2420;
   --fret-wire: #8c8f93;
   --string: #c9ccd0;
@@ -36,6 +37,7 @@
   --chord: #1c7ed6;
   --scale: #495057;
   --on-note: #ffffff;
+  --good: #2b8a3e;
   --fret-wood: #efe6dc;
   --fret-wire: #a0a4a8;
   --string: #6c7177;
@@ -55,6 +57,7 @@
   --color-root: var(--root);
   --color-guide: var(--guide);
   --color-chord: var(--chord);
+  --color-good: var(--good);
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -78,4 +81,13 @@ body {
 }
 .no-scrollbar {
   scrollbar-width: none;
+}
+
+@keyframes flash {
+  from {
+    opacity: 0.28;
+  }
+  to {
+    opacity: 0;
+  }
 }
