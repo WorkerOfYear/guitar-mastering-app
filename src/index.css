@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+/* Design tokens. Dark is the default (phone on a music stand); inside Telegram they follow its theme. */
+:root {
+  --bg: #111214;
+  --surface: #1b1d21;
+  --surface-2: #25282d;
+  --border: #33373d;
+  --text: #f1f3f5;
+  --muted: #9aa1a9;
+  --accent: #f59f00;
+  --on-accent: #1a1a1a;
+  --root: #f59f00;
+  --guide: #ff6b6b;
+  --chord: #4dabf7;
+  --scale: #c3c8ce;
+  --on-note: #101113;
+  --fret-wood: #2a2420;
+  --fret-wire: #8c8f93;
+  --string: #c9ccd0;
+  --inlay: #4a4540;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #eef0f3;
+  --border: #dde1e6;
+  --text: #16181b;
+  --muted: #697078;
+  --accent: #e67700;
+  --on-accent: #ffffff;
+  --root: #e67700;
+  --guide: #e03131;
+  --chord: #1c7ed6;
+  --scale: #495057;
+  --on-note: #ffffff;
+  --fret-wood: #efe6dc;
+  --fret-wire: #a0a4a8;
+  --string: #6c7177;
+  --inlay: #d6cabd;
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--border);
+  --color-fg: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-root: var(--root);
+  --color-guide: var(--guide);
+  --color-chord: var(--chord);
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
