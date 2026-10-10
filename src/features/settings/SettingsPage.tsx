@@ -6,6 +6,7 @@ import { localDate } from "@/lib/date";
 import { exportData, useData, type DataState } from "@/store/data";
 import { useSettings } from "@/store/settings";
 import { BLOCK_META, type BlockKind } from "@/shared/types";
+import { SyncCard } from "./SyncCard";
 
 const DAY_LABELS = ["ВС", "ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ"];
 
@@ -85,9 +86,11 @@ export function SettingsPage() {
         <Toggle label="Показывать ноты вне позиции (приглушённо)" checked={fretboard.showOutside} onChange={(v) => setFretboard({ showOutside: v })} />
       </Card>
 
-      <SectionTitle>Данные</SectionTitle>
+      <SectionTitle>Синхронизация и Telegram</SectionTitle>
+      <SyncCard />
+
+      <SectionTitle>Бэкап</SectionTitle>
       <Card className="space-y-2">
-        <p className="text-sm text-muted">Прогресс хранится на этом устройстве. Синхронизация через Telegram-бота появится позже — пока делай бэкап в файл.</p>
         <div className="grid grid-cols-2 gap-2">
           <button type="button" onClick={download} className="h-12 rounded-2xl bg-surface-2 text-sm font-semibold">
             💾 Сохранить в файл

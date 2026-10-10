@@ -26,6 +26,9 @@ export interface DataState {
   lastPlayed: Record<string, string>;
   recentKeys: string[];
   practice: PracticeSettings;
+  practiceUpdatedAt?: number;
+  /** Deleted item ids → when, so a sync doesn't bring them back */
+  deleted?: Record<string, number>;
 }
 
 interface DataActions {
@@ -47,15 +50,18 @@ interface DataActions {
 const uid = (prefix: string) => `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
 const initial = (): DataState => ({
-  items: STARTER_LIBRARY.map((i) => ({ ...i, createdAt: Date.now() })),
+  // Starter items keep timestamp 0: on a fresh device they never override edits synced from elsewhere.
+  items: STARTER_LIBRARY,
   log: [],
   sessions: [],
   lastPlayed: {},
   recentKeys: [],
   practice: DEFAULT_PRACTICE,
+  deleted: {},
 });
 
-const mapItem = (items: Item[], id: string, fn: (i: Item) => Item) => items.map((i) => (i.id === id ? fn(i) : i));
+const mapItem = (items: Item[], id: string, fn: (i: Item) => Item) =>
+  items.map((i) => (i.id === id ? { ...fn(i), updatedAt: Date.now() } : i));
 
 export const useData = create<DataState & DataActions>()(
   persist(
@@ -63,11 +69,11 @@ export const useData = create<DataState & DataActions>()(
       ...initial(),
       addItem: (item) => {
         const id = uid(item.type);
-        set((s) => ({ items: [...s.items, { ...item, id, createdAt: Date.now() }] }));
+        set((s) => ({ items: [...s.items, { ...item, id, createdAt: Date.now(), updatedAt: Date.now() }] }));
         return id;
       },
       updateItem: (id, patch) => set((s) => ({ items: mapItem(s.items, id, (i) => ({ ...i, ...patch })) })),
-      removeItem: (id) => set((s) => ({ items: s.items.filter((i) => i.id !== id) })),
+      removeItem: (id) => set((s) => ({ items: s.items.filter((i) => i.id !== id), deleted: { ...s.deleted, [id]: Date.now() } })),
       setStatus: (id, status) => set((s) => ({ items: mapItem(s.items, id, (i) => ({ ...i, status })) })),
       updateSection: (itemId, sectionId, patch) =>
         set((s) => ({
@@ -94,7 +100,7 @@ export const useData = create<DataState & DataActions>()(
         }),
       addSession: (session) => set((s) => ({ sessions: [...s.sessions.filter((x) => x.id !== session.id), session] })),
       pushRecentKey: (key) => set((s) => ({ recentKeys: [...s.recentKeys, key].slice(-6) })),
-      setPractice: (patch) => set((s) => ({ practice: { ...s.practice, ...patch } })),
+      setPractice: (patch) => set((s) => ({ practice: { ...s.practice, ...patch }, practiceUpdatedAt: Date.now() })),
       replaceAll: (data) => set(() => ({ ...initial(), ...data })),
     }),
     { name: "guitar:data", version: 1 },
@@ -103,6 +109,6 @@ export const useData = create<DataState & DataActions>()(
 
 /** Plain data for backups and (later) sync. */
 export const exportData = (): DataState => {
-  const { items, log, sessions, lastPlayed, recentKeys, practice } = useData.getState();
-  return { items, log, sessions, lastPlayed, recentKeys, practice };
+  const { items, log, sessions, lastPlayed, recentKeys, practice, practiceUpdatedAt, deleted } = useData.getState();
+  return { items, log, sessions, lastPlayed, recentKeys, practice, practiceUpdatedAt, deleted };
 };

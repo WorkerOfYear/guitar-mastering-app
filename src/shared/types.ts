@@ -41,6 +41,8 @@ export interface Item {
   theory?: TheoryLink;
   notes?: string;
   createdAt: number;
+  /** Last edit; the newer copy wins when two devices sync */
+  updatedAt?: number;
 }
 
 export interface TempoEntry {
