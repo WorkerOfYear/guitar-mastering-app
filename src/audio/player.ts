@@ -6,12 +6,15 @@ import { midiToFreq } from "@/music/notes";
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 
-function audio() {
+export function audio() {
   if (!ctx) {
     ctx = new AudioContext();
     master = ctx.createGain();
     master.gain.value = 0.5;
     master.connect(ctx.destination);
+    // iOS: play through the silent switch like a music app (Safari 17+).
+    const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+    if (session) session.type = "playback";
   }
   if (ctx.state === "suspended") void ctx.resume();
   return { ctx, out: master! };
