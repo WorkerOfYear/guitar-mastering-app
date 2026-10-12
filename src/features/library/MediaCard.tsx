@@ -5,7 +5,8 @@ import { YouTubePlayer } from "@/components/video/YouTubePlayer";
 import type { ScoreInfo } from "@/components/tab/TabPlayer";
 import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
 import { audio } from "@/audio/player";
-import { deleteTabFile, loadTabFile, saveTabFile } from "@/lib/tabFiles";
+import { deleteAudioFile, deleteTabFile, loadAudioFile, loadTabFile, saveAudioFile, saveTabFile } from "@/lib/tabFiles";
+import { AudioSync } from "./AudioSync";
 import { useData } from "@/store/data";
 import type { Item, Section } from "@/shared/types";
 
@@ -26,10 +27,33 @@ export function parseYouTube(url: string) {
   }
 }
 
+/** 🎧 the original recording or 🎹 the synthesizer. */
+export function SourceSwitch({ recording, onChange }: { recording: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex rounded-2xl bg-surface-2 p-1 text-xs font-medium">
+      {[
+        [true, "🎧 Запись"],
+        [false, "🎹 Синтезатор"],
+      ].map(([v, label]) => (
+        <button
+          key={String(v)}
+          type="button"
+          onClick={() => onChange(v as boolean)}
+          className={`flex-1 rounded-xl px-2 py-1.5 ${recording === v ? "bg-surface text-fg shadow-sm" : "text-muted"}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** Video, tab and Guitar Pro file of an item, with a preview player. */
 export function MediaCard({ item }: { item: Item }) {
   const { updateItem } = useData();
   const [file, setFile] = useState<ArrayBuffer | null>(null);
+  const [audioData, setAudioData] = useState<ArrayBuffer | null>(null);
+  const [useRecording, setUseRecording] = useState(true);
   const [score, setScore] = useState<ScoreInfo | null>(null);
   const [track, setTrack] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -39,6 +63,25 @@ export function MediaCard({ item }: { item: Item }) {
   useEffect(() => {
     if (item.tabFile) void loadTabFile(item.id).then((f) => setFile(f ?? null));
   }, [item.id, item.tabFile]);
+  useEffect(() => {
+    if (item.audioFile) void loadAudioFile(item.id).then((f) => setAudioData(f ?? null));
+  }, [item.id, item.audioFile]);
+
+  const uploadAudio = async (f: File) => {
+    setError("");
+    if (f.size > 40_000_000) return setError("Аудио больше 40 МБ — сожми его в mp3");
+    const data = await f.arrayBuffer();
+    await saveAudioFile(item.id, data);
+    setAudioData(data);
+    setPlaying(false);
+    updateItem(item.id, { audioFile: { name: f.name, size: f.size } });
+  };
+  const removeAudio = async () => {
+    await deleteAudioFile(item.id);
+    setAudioData(null);
+    setPlaying(false);
+    updateItem(item.id, { audioFile: undefined, audioSync: undefined });
+  };
 
   const upload = async (f: File) => {
     setError("");
@@ -113,6 +156,8 @@ export function MediaCard({ item }: { item: Item }) {
             <TabPlayer
               tex={file ? undefined : item.tab}
               file={file ?? undefined}
+              audio={file && useRecording ? audioData : null}
+              sync={item.audioSync}
               bpm={file ? undefined : (item.startBpm ?? undefined)}
               playing={playing}
               track={track}
@@ -122,6 +167,7 @@ export function MediaCard({ item }: { item: Item }) {
             />
           </Suspense>
           <TabViewSwitch />
+          {file && audioData && <SourceSwitch recording={useRecording} onChange={(v) => { setPlaying(false); setUseRecording(v); }} />}
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -159,7 +205,23 @@ export function MediaCard({ item }: { item: Item }) {
               Разделы из меток файла ({score.sections.map((s) => s.title).join(", ")})
             </button>
           )}
-          <p className="text-xs text-muted">Файл хранится на этом устройстве. На другом устройстве его нужно загрузить ещё раз.</p>
+          {item.audioFile && audioData ? (
+            <div className="space-y-2 rounded-2xl bg-surface-2 p-3">
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <span className="min-w-0 truncate">🎧 {item.audioFile.name}</span>
+                <button type="button" onClick={removeAudio} className="shrink-0 text-xs text-guide">
+                  Удалить запись
+                </button>
+              </div>
+              <AudioSync item={item} audio={audioData} sections={score?.sections ?? []} bars={score?.bars ?? 1} />
+            </div>
+          ) : (
+            <label className="flex h-12 cursor-pointer items-center justify-center rounded-2xl border border-dashed border-line px-3 text-center text-sm font-semibold">
+              🎧 Загрузить запись, по которой написан таб (mp3, m4a, wav)
+              <input type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg,.flac" hidden onChange={(e) => e.target.files?.[0] && void uploadAudio(e.target.files[0])} />
+            </label>
+          )}
+          <p className="text-xs text-muted">Файлы хранятся на этом устройстве. На другом устройстве их нужно загрузить ещё раз.</p>
         </div>
       ) : (
         <label className="flex h-12 cursor-pointer items-center justify-center rounded-2xl border border-dashed border-line text-sm font-semibold">

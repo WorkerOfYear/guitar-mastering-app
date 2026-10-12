@@ -25,3 +25,9 @@ async function run<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore) => I
 export const saveTabFile = (itemId: string, data: ArrayBuffer) => run("readwrite", (s) => s.put(data, itemId));
 export const loadTabFile = (itemId: string) => run<ArrayBuffer | undefined>("readonly", (s) => s.get(itemId));
 export const deleteTabFile = (itemId: string) => run("readwrite", (s) => s.delete(itemId));
+
+// The recording behind a tab, stored next to it.
+const audioKey = (itemId: string) => `${itemId}:audio`;
+export const saveAudioFile = (itemId: string, data: ArrayBuffer) => run("readwrite", (s) => s.put(data, audioKey(itemId)));
+export const loadAudioFile = (itemId: string) => run<ArrayBuffer | undefined>("readonly", (s) => s.get(audioKey(itemId)));
+export const deleteAudioFile = (itemId: string) => run("readwrite", (s) => s.delete(audioKey(itemId)));

@@ -12,7 +12,8 @@ import { ImprovPanel } from "@/features/improv/ImprovPanel";
 import { formatClock, useNow, useWakeLock } from "@/lib/hooks";
 import { localDate } from "@/lib/date";
 import { findSection, startingBpm, unitTitle } from "@/lib/progress";
-import { loadTabFile } from "@/lib/tabFiles";
+import { loadAudioFile, loadTabFile } from "@/lib/tabFiles";
+import { SourceSwitch } from "@/features/library/MediaCard";
 import { useData } from "@/store/data";
 import { clampBpm, useMetronome } from "@/store/metronome";
 import { blockSeconds, plannedSeconds, useSession } from "@/store/session";
@@ -376,13 +377,16 @@ function TabStage({ item, playing, control, onBlocked }: { item: Item; playing: 
 
 function SongStage({ item, entry, playing, control, onBlocked }: { item: Item; entry: PlanEntry; playing: boolean; control: StageProps["control"]; onBlocked: (b: boolean) => void }) {
   const [file, setFile] = useState<ArrayBuffer | null | undefined>(undefined);
+  const [audio, setAudio] = useState<ArrayBuffer | null>(null);
+  const [useRecording, setUseRecording] = useState(true);
   const [speed, setSpeed] = useState(0.75);
   const [click, setClick] = useState(false);
   const [tempo, setTempo] = useState(0);
   const section = findSection(item, entry.sectionId);
   useEffect(() => {
     void loadTabFile(item.id).then((f) => setFile(f ?? null));
-  }, [item.id]);
+    if (item.audioFile) void loadAudioFile(item.id).then((f) => setAudio(f ?? null));
+  }, [item.id, item.audioFile]);
   // Keep the "record result" tempo in sync with what's actually playing.
   useEffect(() => {
     if (tempo) useMetronome.getState().set({ bpm: clampBpm(tempo * speed) });
@@ -394,6 +398,8 @@ function SongStage({ item, entry, playing, control, onBlocked }: { item: Item; e
         <Suspense fallback={<div className="rounded-3xl border border-line bg-surface" style={{ height: TAB_HEIGHT }} />}>
           <TabPlayer
             file={file}
+            audio={useRecording ? audio : null}
+            sync={item.audioSync}
             height={TAB_HEIGHT}
             speed={speed}
             playing={playing}
@@ -411,8 +417,9 @@ function SongStage({ item, entry, playing, control, onBlocked }: { item: Item; e
         onPlus={() => setSpeed((s) => Math.min(1.5, +(s + 0.05).toFixed(2)))}
         extra={<MetronomeToggle on={click} onChange={setClick} />}
       />
-      <div className="mt-2">
+      <div className="mt-2 space-y-2">
         <TabViewSwitch />
+        {audio && <SourceSwitch recording={useRecording} onChange={setUseRecording} />}
       </div>
       {section && !section.bars && <p className="mt-2 px-1 text-xs text-muted">Раздел не привязан к тактам — играет весь файл. Привязать можно в карточке песни.</p>}
     </div>

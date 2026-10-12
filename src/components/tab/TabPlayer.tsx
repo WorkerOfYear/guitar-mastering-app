@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import * as alphaTab from "@coderline/alphatab";
 import { useSettings, type TabView } from "@/store/settings";
+import { applyBackingTrack } from "@/lib/backingTrack";
+import type { SyncPoint } from "@/shared/types";
 
 /**
  * Show tab and/or standard notation on every staff. Stave profiles only reveal what the file
@@ -39,6 +41,10 @@ export interface ScoreInfo {
 interface Props {
   tex?: string;
   file?: ArrayBuffer;
+  /** The original recording: played instead of the synthesizer, kept in sync with the notes */
+  audio?: ArrayBuffer | null;
+  /** Where bars start in the recording */
+  sync?: SyncPoint[];
   /** Desired tempo in bpm; playback speed = bpm / tempo written in the tab */
   bpm?: number;
   /** Or a speed factor directly (1 = original) */
@@ -58,7 +64,7 @@ interface Props {
   control?: RefObject<PlayerControl | null>;
 }
 
-export default function TabPlayer({ tex, file, bpm, speed, playing, loopBars, track = 0, countIn = false, metronome = false, height = "50vh", onScore, onBlocked, onProgress, control }: Props) {
+export default function TabPlayer({ tex, file, audio, sync, bpm, speed, playing, loopBars, track = 0, countIn = false, metronome = false, height = "50vh", onScore, onBlocked, onProgress, control }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<alphaTab.AlphaTabApi | null>(null);
@@ -71,6 +77,8 @@ export default function TabPlayer({ tex, file, bpm, speed, playing, loopBars, tr
   viewRef.current = view;
   const trackRef = useRef(track);
   trackRef.current = track;
+  const syncRef = useRef(sync);
+  syncRef.current = sync;
   const cb = useRef({ onScore, onBlocked, onProgress });
   cb.current = { onScore, onBlocked, onProgress };
 
@@ -101,7 +109,7 @@ export default function TabPlayer({ tex, file, bpm, speed, playing, loopBars, tr
       alphaTab.NotationElement.EffectDynamics,
     ])
       settings.notation.elements.set(el, false);
-    settings.player.playerMode = alphaTab.PlayerMode.EnabledSynthesizer;
+    settings.player.playerMode = audio ? alphaTab.PlayerMode.EnabledBackingTrack : alphaTab.PlayerMode.EnabledSynthesizer;
     settings.player.soundFont = "/soundfont/sonivox.sf2";
     settings.player.scrollElement = scroller.current;
     settings.player.scrollOffsetY = -40;
@@ -135,14 +143,33 @@ export default function TabPlayer({ tex, file, bpm, speed, playing, loopBars, tr
     a.isLooping = true;
     if (control) control.current = { resume: () => a.play() };
     if (tex) a.tex(tex);
-    else if (file) a.load(file, [track]);
+    else if (file) {
+      try {
+        // Parse here so the recording and its sync points can be attached before alphaTab loads the score.
+        const parsed = alphaTab.importer.ScoreLoader.loadScoreFromBytes(new Uint8Array(file), settings);
+        if (audio) applyBackingTrack(parsed, new Uint8Array(audio), syncRef.current ?? []);
+        a.renderScore(parsed, [Math.min(trackRef.current, parsed.tracks.length - 1)]);
+      } catch (e) {
+        setError((e as Error).message);
+        setLoading(false);
+      }
+    }
     return () => {
       a.destroy();
       api.current = null;
       setReady(false);
       setLoading(true);
     };
-  }, [tex, file]);
+  }, [tex, file, audio]);
+
+  // Moving a sync point doesn't need a reload.
+  const syncKey = JSON.stringify(sync ?? []);
+  useEffect(() => {
+    const a = api.current;
+    if (!a || !score.current || !audio) return;
+    applyBackingTrack(score.current, null, sync ?? []);
+    a.updateSyncPoints();
+  }, [syncKey, ready]);
 
   // Switch between tab and notation without reloading.
   const shownView = useRef(view);

@@ -15,6 +15,11 @@ export interface Section {
   bars?: [number, number] | null;
 }
 
+export interface SyncPoint {
+  bar: number;
+  ms: number;
+}
+
 export interface VideoLink {
   youtubeId: string;
   /** Start offset in seconds */
@@ -53,6 +58,10 @@ export interface Item {
   video?: VideoLink;
   /** A Guitar Pro file is stored on this device for this item (IndexedDB) */
   tabFile?: { name: string; size: number };
+  /** The recording the tab was written from (IndexedDB), played in sync with the notes */
+  audioFile?: { name: string; size: number };
+  /** Where bars start in the recording: bar (1-based) → milliseconds. Sorted by bar. */
+  audioSync?: SyncPoint[];
   /** How long this item takes in a session; otherwise the block time is split evenly */
   minutes?: number;
   notes?: string;
