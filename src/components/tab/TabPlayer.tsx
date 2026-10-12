@@ -253,7 +253,7 @@ export default function TabPlayer({
   }, [playing, ready]);
 
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-line bg-surface">
+    <div className="relative isolate overflow-hidden rounded-3xl border border-line bg-surface">
       <div ref={scroller} className="overflow-y-auto overscroll-contain" style={{ height }}>
         <div ref={host} className="at-host px-2" />
       </div>

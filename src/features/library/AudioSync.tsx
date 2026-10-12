@@ -13,12 +13,27 @@ interface Props {
   /** Section markers of the tab, offered as sync candidates */
   sections: { title: string; bar: number }[];
   bars: number;
-  /** Run the automatic detection as soon as this shows up (the recording was just fetched) */
-  autoDetect?: boolean;
+}
+
+/** Automatic alignment of the recording with the tab: what to store on the item and what to tell the user. */
+export async function detectSync(tab: ArrayBuffer, audio: ArrayBuffer) {
+  const { autoSync } = await import("@/lib/autoSync");
+  const r = await autoSync(tab, audio);
+  const shift = r.scale === 1 ? "" : `, запись ${r.scale > 1 ? "медленнее" : "быстрее"} таба на ${Math.abs(Math.round((r.scale - 1) * 1000) / 10)}%`;
+  const repeat = r.skippedRepeat ? " В записи повтор в начале звучит один раз — с записью он тоже играется один раз." : "";
+  const start = r.bar1Ms === null ? "" : `такт 1 на ${formatClockMs(r.bar1Ms)}`;
+  const ok = r.confidence >= 1.3;
+  return {
+    ok,
+    patch: { audioSync: r.points, audioUnrepeat: r.unrepeat.length ? r.unrepeat : undefined },
+    message: ok
+      ? `Готово: ${start}${shift}, ${r.points.length} отметок.${repeat} Проверь на слух.`
+      : `Совпадение неуверенное — проверь на слух и поправь отметки вручную${start ? ` (${start})` : ""}.`,
+  };
 }
 
 /** Mark where bars start in the recording: listen, and tap ⏱ when the bar begins. */
-export function AudioSync({ item, audio, tab, sections, bars, autoDetect }: Props) {
+export function AudioSync({ item, audio, tab, sections, bars }: Props) {
   const { updateItem } = useData();
   const player = useRef<HTMLAudioElement>(null);
   const [url, setUrl] = useState("");
@@ -29,26 +44,13 @@ export function AudioSync({ item, audio, tab, sections, bars, autoDetect }: Prop
   const detect = async () => {
     setAuto({ busy: true, message: "Слушаю запись и сравниваю с табом… (5–20 секунд)" });
     try {
-      const { autoSync } = await import("@/lib/autoSync");
-      const r = await autoSync(tab, audio);
-      updateItem(item.id, { audioSync: r.points, audioUnrepeat: r.unrepeat.length ? r.unrepeat : undefined });
-      const shift = r.scale === 1 ? "" : `, запись ${r.scale > 1 ? "медленнее" : "быстрее"} таба на ${Math.abs(Math.round((r.scale - 1) * 1000) / 10)}%`;
-      const repeat = r.skippedRepeat ? " В записи повтор в начале звучит один раз — с записью он тоже играется один раз." : "";
-      const start = r.bar1Ms === null ? "" : `такт 1 на ${formatClockMs(r.bar1Ms)}`;
-      setAuto({
-        busy: false,
-        message:
-          r.confidence >= 1.3
-            ? `✅ Готово: ${start}${shift}, ${r.points.length} отметок.${repeat} Проверь на слух.`
-            : `⚠️ Совпадение неуверенное — проверь на слух и поправь отметки вручную (${start}).`,
-      });
+      const r = await detectSync(tab, audio);
+      updateItem(item.id, r.patch);
+      setAuto({ busy: false, message: `${r.ok ? "✅" : "⚠️"} ${r.message}` });
     } catch (e) {
       setAuto({ busy: false, message: `Не получилось: ${(e as Error).message}` });
     }
   };
-  useEffect(() => {
-    if (autoDetect) void detect();
-  }, []);
   useEffect(() => {
     const u = URL.createObjectURL(new Blob([audio]));
     setUrl(u);

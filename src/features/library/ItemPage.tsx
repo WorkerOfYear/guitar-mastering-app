@@ -97,7 +97,6 @@ export function ItemPage() {
         </Button>
       )}
 
-      <SectionTitle>Таб и видео</SectionTitle>
       <MediaCard item={item} />
 
       {isSong && (

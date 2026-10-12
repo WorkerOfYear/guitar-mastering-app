@@ -1,18 +1,37 @@
 import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { toast } from "sonner";
-import { FileMusic, Headphones, ListTree, LoaderCircle, Pause, Piano, Play, Plus, Trash2, Upload, Video, WandSparkles } from "lucide-react";
-import { Button, Card, Input, NumberField, Segmented } from "@/components/ui";
+import {
+  Check,
+  ChevronDown,
+  FileMusic,
+  Headphones,
+  Link2,
+  ListTree,
+  LoaderCircle,
+  MoreHorizontal,
+  Pause,
+  Piano,
+  Play,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Video,
+  WandSparkles,
+} from "lucide-react";
+import { Badge, Button, Card, Input, NumberField, Segmented } from "@/components/ui";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { YouTubePlayer } from "@/components/video/YouTubePlayer";
 import type { ScoreInfo } from "@/components/tab/TabPlayer";
 import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
 import { audio } from "@/audio/player";
 import { deleteAudioFile, deleteTabFile, loadAudioFile, loadTabFile, saveAudioFile, saveTabFile } from "@/lib/tabFiles";
-import { AudioSync } from "./AudioSync";
+import { AudioSync, detectSync } from "./AudioSync";
 import { fetchYoutubeAudio, serverReady } from "@/lib/youtubeAudio";
 import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
+import { cn } from "@/lib/utils";
 import type { Item, Section } from "@/shared/types";
 
 const TabPlayer = lazy(() => import("@/components/tab/TabPlayer"));
@@ -67,21 +86,95 @@ export const TAB_MAX = 5_000_000;
 export const AUDIO_ACCEPT = "audio/*,.mp3,.m4a,.wav,.ogg,.flac";
 export const AUDIO_MAX = 40_000_000;
 
-/** Dashed drop-zone-like button that opens a file picker. */
-function FilePick({ children, accept, onFile }: { children: ReactNode; accept: string; onFile: (f: File) => void }) {
+const ICON = "flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent/12 text-accent [&_svg]:size-[18px]";
+
+/** One material: icon, what it is, then the same icon actions everywhere (replace, delete). */
+function MaterialRow({ icon, title, sub, actions }: { icon: ReactNode; title: string; sub?: ReactNode; actions: ReactNode }) {
   return (
-    <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-line px-3 py-2 text-center text-sm font-semibold transition-colors hover:bg-surface-2 active:scale-[0.99]">
-      <Upload className="size-4 shrink-0 text-muted" />
-      <span>{children}</span>
+    <div className="flex items-center gap-3 rounded-2xl bg-surface-2/50 py-2 pl-3 pr-1.5">
+      <span className={ICON}>{icon}</span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-semibold">{title}</div>
+        {sub && <div className="truncate text-xs text-muted">{sub}</div>}
+      </div>
+      {actions}
+    </div>
+  );
+}
+
+const addClass =
+  "flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-line px-3 py-2 text-left text-sm transition-colors hover:bg-surface-2 active:scale-[0.99] [&_svg]:size-[18px]";
+
+/** A missing material: dashed row; a button, or a file picker when `accept` is given. */
+function AddRow({
+  icon,
+  title,
+  sub,
+  accept,
+  onFile,
+  onClick,
+  busy,
+}: {
+  icon: ReactNode;
+  title: string;
+  sub?: string;
+  accept?: string;
+  onFile?: (f: File) => void;
+  onClick?: () => void;
+  busy?: boolean;
+}) {
+  const inner = (
+    <>
+      <span className="shrink-0 text-muted">{busy ? <LoaderCircle className="animate-spin" /> : icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold">{title}</span>
+        {sub && <span className="block text-xs text-muted">{sub}</span>}
+      </span>
+      <Plus className="shrink-0 text-muted" />
+    </>
+  );
+  if (accept)
+    return (
+      <label className={addClass}>
+        {inner}
+        <input type="file" accept={accept} hidden onChange={(e) => e.target.files?.[0] && onFile?.(e.target.files[0])} />
+      </label>
+    );
+  return (
+    <button type="button" disabled={busy} onClick={onClick} className={addClass}>
+      {inner}
+    </button>
+  );
+}
+
+function IconAction({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <Button variant="ghost" size="icon-sm" aria-label={label} title={label} onClick={onClick}>
+      {children}
+    </Button>
+  );
+}
+
+/** Replace-with-a-file action, same look as the other icon actions. */
+function FileAction({ label, accept, onFile }: { label: string; accept: string; onFile: (f: File) => void }) {
+  return (
+    <label
+      aria-label={label}
+      title={label}
+      className="flex size-9 cursor-pointer items-center justify-center rounded-xl text-muted transition-colors hover:bg-surface-2 hover:text-fg"
+    >
+      <RefreshCw className="size-4" />
       <input type="file" accept={accept} hidden onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
     </label>
   );
 }
 
-/** Video, tab and Guitar Pro file of an item, with a preview player. */
+/** Video, tabs and recording of an item: the players up front, everything else in the "Материалы" sheet. */
 export function MediaCard({ item }: { item: Item }) {
   const { updateItem } = useData();
   const [file, setFile] = useState<ArrayBuffer | null>(null);
+  const fileRef = useRef<ArrayBuffer | null>(null);
+  fileRef.current = file;
   const [audioData, setAudioData] = useState<ArrayBuffer | null>(null);
   // The item says a file exists, but this device doesn't have it (another device, a restored backup).
   const [missing, setMissing] = useState({ tab: false, audio: false });
@@ -89,8 +182,7 @@ export function MediaCard({ item }: { item: Item }) {
   const [score, setScore] = useState<ScoreInfo | null>(null);
   const [track, setTrack] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [videoUrl, setVideoUrl] = useState("");
-  const [error, setError] = useState("");
+  const [sheet, setSheet] = useState(false);
 
   useEffect(() => {
     if (item.tabFile)
@@ -111,36 +203,43 @@ export function MediaCard({ item }: { item: Item }) {
   // alone and rebuilding a moment later (when the recording arrives) left alphaTab half-initialised,
   // and the next play froze the page.
   const mediaReady = !item.audioFile || audioData !== null || missing.audio;
+  const hasTab = !!(item.tab || file);
 
-  const uploadAudio = async (f: File) => {
-    setError("");
-    if (f.size > AUDIO_MAX) return setError("Аудио больше 40 МБ — сожми его в mp3");
-    const data = await f.arrayBuffer();
+  /** A new recording: sync the tab to it right away when there is one. */
+  const setRecording = async (data: ArrayBuffer, meta: NonNullable<Item["audioFile"]>) => {
     await saveAudioFile(item.id, data);
     setAudioData(data);
     setMissing((m) => ({ ...m, audio: false }));
     setPlaying(false);
-    updateItem(item.id, { audioFile: { name: f.name, size: f.size } });
+    updateItem(item.id, { audioFile: meta, audioSync: undefined, audioUnrepeat: undefined });
+    const tab = fileRef.current ?? (item.tabFile ? await loadTabFile(item.id) : null);
+    if (!tab) return;
+    const id = toast.loading("Связываю табы с записью…");
+    try {
+      const r = await detectSync(tab, data);
+      updateItem(item.id, r.patch);
+      (r.ok ? toast.success : toast.warning)(r.ok ? "Табы связаны с записью" : "Табы связаны, но не уверенно", { id, description: r.message });
+    } catch (e) {
+      toast.error("Не удалось связать табы с записью", { id, description: (e as Error).message });
+    }
   };
-  // The recording taken from the item's YouTube video by the user's server; a tab then gets synced to it.
+
+  const uploadAudio = async (f: File) => {
+    if (f.size > AUDIO_MAX) return toast.error("Аудио больше 40 МБ — сожми его в mp3");
+    await setRecording(await f.arrayBuffer(), { name: f.name, size: f.size });
+  };
+
+  // The recording taken from the item's YouTube video by the user's server.
   const audioServer = useSettings((s) => s.audioServer);
   const [grabbing, setGrabbing] = useState(false);
   const [grabAttempt, setGrabAttempt] = useState(1);
-  const [justGrabbed, setJustGrabbed] = useState(false);
   const grabAudio = async () => {
     if (!item.video) return;
     if (!serverReady(audioServer)) return toast.error("Укажи сервер для звука в настройках");
     setGrabbing(true);
-    setError("");
     try {
       const { data, name } = await fetchYoutubeAudio(item.video.youtubeId, audioServer, setGrabAttempt);
-      await saveAudioFile(item.id, data);
-      setAudioData(data);
-      setMissing((m) => ({ ...m, audio: false }));
-      setPlaying(false);
-      setJustGrabbed(true);
-      updateItem(item.id, { audioFile: { name, size: data.byteLength }, audioSync: undefined, audioUnrepeat: undefined });
-      toast.success("Звук из видео загружен");
+      await setRecording(data, { name, size: data.byteLength, fromVideo: true });
     } catch (e) {
       toast.error("Не удалось взять звук из видео", { description: (e as Error).message });
     } finally {
@@ -155,23 +254,16 @@ export function MediaCard({ item }: { item: Item }) {
     autoGrab.current = false;
     void grabAudio();
   }, []);
-  const grabButton = item.video && (
-    <Button onClick={() => void grabAudio()} disabled={grabbing} className="h-auto min-h-12 w-full whitespace-normal py-2">
-      {grabbing ? <LoaderCircle className="animate-spin" /> : <WandSparkles />}
-      {grabbing ? `Скачиваю звук из видео…${grabAttempt > 1 ? ` (попытка ${grabAttempt})` : ""}` : "Взять звук из видео"}
-    </Button>
-  );
 
   const removeAudio = async () => {
     await deleteAudioFile(item.id);
     setAudioData(null);
     setPlaying(false);
-    updateItem(item.id, { audioFile: undefined, audioSync: undefined });
+    updateItem(item.id, { audioFile: undefined, audioSync: undefined, audioUnrepeat: undefined });
   };
 
   const upload = async (f: File) => {
-    setError("");
-    if (f.size > TAB_MAX) return setError("Файл больше 5 МБ — это точно таб?");
+    if (f.size > TAB_MAX) return toast.error("Файл больше 5 МБ — это точно табы?");
     const data = await f.arrayBuffer();
     await saveTabFile(item.id, data);
     setFile(data);
@@ -185,6 +277,16 @@ export function MediaCard({ item }: { item: Item }) {
     setFile(null);
     setScore(null);
     updateItem(item.id, { tabFile: undefined });
+  };
+
+  const [videoUrl, setVideoUrl] = useState("");
+  const [editVideo, setEditVideo] = useState(false);
+  const saveVideo = () => {
+    const v = parseYouTube(videoUrl);
+    if (!v) return toast.error("Не похоже на ссылку YouTube");
+    updateItem(item.id, { video: v, links: item.links.includes(videoUrl.trim()) ? item.links : [...item.links, videoUrl.trim()] });
+    setVideoUrl("");
+    setEditVideo(false);
   };
 
   /** Sections from the file's markers: each runs until the next marker. */
@@ -214,178 +316,267 @@ export function MediaCard({ item }: { item: Item }) {
     sectionsFromFile();
   }, [score, noSections]);
 
-  return (
-    <Card className="space-y-3">
+  const synced = !!item.audioSync?.length;
+  const sectionCount = item.sections?.length ?? 0;
+  const empty = !item.video && !item.tabFile && !item.tab && !item.audioFile;
+  const [showSync, setShowSync] = useState(false);
+
+  const badges = (
+    <>
       {item.video && (
-        <div className="space-y-2">
-          <YouTubePlayer videoId={item.video.youtubeId} start={item.video.start} playing={false} />
-          <Button variant="destructive-ghost" size="sm" onClick={() => updateItem(item.id, { video: undefined })} className="h-8 px-2 text-xs">
-            <Trash2 className="size-3.5" /> Убрать видео
+        <Badge variant="soft">
+          <Video /> видео
+        </Badge>
+      )}
+      {item.tabFile && (
+        <Badge variant={missing.tab ? "outline" : "soft"}>
+          <FileMusic /> {missing.tab ? "табы не на этом устройстве" : sectionCount ? `табы · разделов: ${sectionCount}` : "табы"}
+        </Badge>
+      )}
+      {grabbing ? (
+        <Badge variant="secondary">
+          <LoaderCircle className="animate-spin" /> беру звук из видео
+        </Badge>
+      ) : item.audioFile && missing.audio ? (
+        <Badge variant="outline">
+          <Headphones /> запись не на этом устройстве
+        </Badge>
+      ) : item.audioFile && hasTab && synced ? (
+        <Badge variant="good">
+          <Link2 /> {item.audioFile.fromVideo ? "табы идут за видео" : "табы идут за записью"}
+        </Badge>
+      ) : item.audioFile ? (
+        <Badge variant="soft">
+          <Headphones /> {item.audioFile.fromVideo ? "звук из видео" : "запись"}
+        </Badge>
+      ) : null}
+    </>
+  );
+
+  const materials = (
+    <div className="space-y-2">
+      {/* Video */}
+      {item.video && !editVideo ? (
+        <MaterialRow
+          icon={<Video />}
+          title="Видео YouTube"
+          sub={`youtu.be/${item.video.youtubeId}`}
+          actions={
+            <>
+              <IconAction label="Заменить видео" onClick={() => setEditVideo(true)}>
+                <RefreshCw className="size-4" />
+              </IconAction>
+              <IconAction label="Удалить видео" onClick={() => updateItem(item.id, { video: undefined })}>
+                <Trash2 className="size-4" />
+              </IconAction>
+            </>
+          }
+        />
+      ) : editVideo || empty ? (
+        <div className="flex gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Video className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted" />
+            <Input
+              autoFocus={editVideo}
+              value={videoUrl}
+              onChange={(e) => setVideoUrl(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && saveVideo()}
+              inputMode="url"
+              placeholder="Ссылка YouTube"
+              className="h-12 pl-10 text-sm"
+            />
+          </div>
+          <Button variant="secondary" size="icon" aria-label="Сохранить видео" onClick={saveVideo} className="size-12">
+            <Check />
           </Button>
         </div>
+      ) : (
+        <AddRow icon={<Video />} title="Добавить видео" sub="ссылка YouTube" onClick={() => setEditVideo(true)} />
       )}
-      <div className="flex gap-2">
-        <div className="relative min-w-0 flex-1">
-          <Video className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted" />
-          <Input
-            value={videoUrl}
-            onChange={(e) => setVideoUrl(e.target.value)}
-            inputMode="url"
-            placeholder={item.video ? "Другое видео: ссылка YouTube" : "Видео: ссылка YouTube (можно с таймкодом)"}
-            className="h-11 pl-10 text-sm"
-          />
-        </div>
-        <Button
-          variant="secondary"
-          size="icon"
-          aria-label="Добавить видео"
-          onClick={() => {
-            const v = parseYouTube(videoUrl);
-            if (!v) return setError("Не похоже на ссылку YouTube");
-            setError("");
-            updateItem(item.id, { video: v, links: item.links.includes(videoUrl.trim()) ? item.links : [...item.links, videoUrl.trim()] });
-            setVideoUrl("");
-          }}
-        >
-          <Plus />
-        </Button>
-      </div>
 
-      {(item.tab || file) && mediaReady && (
+      {/* Tabs */}
+      {item.tabFile ? (
+        <MaterialRow
+          icon={<FileMusic />}
+          title="Табы"
+          sub={missing.tab ? `${item.tabFile.name} · загрузи на этом устройстве` : `${item.tabFile.name}${sectionCount ? ` · разделов: ${sectionCount}` : ""}`}
+          actions={
+            <>
+              <FileAction label="Заменить табы" accept={TAB_ACCEPT} onFile={(f) => void upload(f)} />
+              <IconAction label="Удалить табы" onClick={() => void removeFile()}>
+                <Trash2 className="size-4" />
+              </IconAction>
+            </>
+          }
+        />
+      ) : (
+        <AddRow icon={<FileMusic />} title="Добавить табы" sub="Guitar Pro или MusicXML" accept={TAB_ACCEPT} onFile={(f) => void upload(f)} />
+      )}
+
+      {/* Recording */}
+      {item.audioFile ? (
+        <MaterialRow
+          icon={<Headphones />}
+          title={hasTab ? "Звук для табов" : "Запись"}
+          sub={[
+            item.audioFile.fromVideo ? "из видео" : item.audioFile.name,
+            missing.audio ? "загрузи на этом устройстве" : hasTab ? (synced ? "синхронизирован" : "без синхронизации") : "",
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+          actions={
+            <>
+              <FileAction label="Заменить запись" accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)} />
+              <IconAction label="Удалить запись" onClick={() => void removeAudio()}>
+                <Trash2 className="size-4" />
+              </IconAction>
+            </>
+          }
+        />
+      ) : (
         <>
-          <Suspense fallback={<div className="h-72 animate-pulse rounded-3xl border border-line bg-surface" />}>
-            <TabPlayer
-              tex={file ? undefined : item.tab}
-              file={file ?? undefined}
-              audio={file && useRecording ? audioData : null}
-              sync={item.audioSync}
-              unrepeat={item.audioUnrepeat}
-              bpm={file ? undefined : (item.startBpm ?? undefined)}
-              playing={playing}
-              track={track}
-              countIn
-              height="40vh"
-              onScore={setScore}
-            />
-          </Suspense>
-          <TabViewSwitch />
-          {file && audioData && (
-            <SourceSwitch
-              recording={useRecording}
-              onChange={(v) => {
-                setPlaying(false);
-                setUseRecording(v);
-              }}
+          {item.video && (
+            <AddRow
+              icon={<WandSparkles />}
+              title={grabbing ? `Беру звук из видео…${grabAttempt > 1 ? ` (попытка ${grabAttempt})` : ""}` : "Звук из видео"}
+              sub={hasTab ? "табы будут играть под запись из видео, а не синтезатор" : "запись можно будет замедлять без смены тона"}
+              busy={grabbing}
+              onClick={() => void grabAudio()}
             />
           )}
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={() => {
-                audio();
-                setPlaying(!playing);
-              }}
-              className="flex-1"
-            >
-              {playing ? <Pause fill="currentColor" /> : <Play fill="currentColor" />}
-              {playing ? "Пауза" : "Прослушать"}
-            </Button>
-            {score && score.tracks.length > 1 && (
-              <Select value={String(track)} onValueChange={(v) => setTrack(Number(v))}>
-                <SelectTrigger className="max-w-[50%]" aria-label="Дорожка">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {score.tracks.map((t, i) => (
-                    <SelectItem key={i} value={String(i)}>
-                      {t}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
+          <AddRow icon={<Headphones />} title="Своя запись" sub="mp3, m4a, wav" accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)} />
         </>
       )}
+    </div>
+  );
 
-      {item.tabFile && !missing.tab ? (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2 text-sm">
-            <span className="flex min-w-0 items-center gap-2">
-              <FileMusic className="size-4 shrink-0 text-accent" />
-              <span className="truncate">{item.tabFile.name}</span>
-            </span>
-            <Button variant="destructive-ghost" size="sm" onClick={removeFile} className="h-8 px-2 text-xs">
-              <Trash2 className="size-3.5" /> Удалить файл
-            </Button>
-          </div>
-          {score && score.sections.length > 0 && !noSections && (
-            <Button variant="ghost" size="sm" onClick={sectionsFromFile} className="w-full">
-              <ListTree className="size-4" /> Заново взять разделы из меток файла
-            </Button>
-          )}
-          {item.audioFile && audioData && file ? (
-            <div className="space-y-2 rounded-2xl bg-surface-2/60 p-3">
-              <div className="flex items-center justify-between gap-2 text-sm">
-                <span className="flex min-w-0 items-center gap-2">
-                  <Headphones className="size-4 shrink-0 text-accent" />
-                  <span className="truncate">{item.audioFile.name}</span>
-                </span>
-                <Button variant="destructive-ghost" size="sm" onClick={removeAudio} className="h-8 px-2 text-xs">
-                  <Trash2 className="size-3.5" /> Удалить запись
-                </Button>
-              </div>
-              <AudioSync item={item} audio={audioData} tab={file!} sections={score?.sections ?? []} bars={score?.bars ?? 1} autoDetect={justGrabbed} />
-            </div>
-          ) : (
-            <>
-              {grabButton}
-              <FilePick accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)}>
-                {missing.audio
-                  ? `Загрузи «${item.audioFile?.name}» на этом устройстве (отметки сохранятся)`
-                  : "Загрузить запись, по которой написан таб (mp3, m4a, wav)"}
-              </FilePick>
-            </>
-          )}
-          <p className="text-xs text-muted">Файлы хранятся на этом устройстве. На другом устройстве их нужно загрузить ещё раз.</p>
-        </div>
-      ) : (
-        <FilePick accept={TAB_ACCEPT} onFile={(f) => void upload(f)}>
-          {missing.tab ? `Загрузи «${item.tabFile?.name}» на этом устройстве` : "Загрузить таб: Guitar Pro или MusicXML (.gp, .gp5, .gpx, .musicxml, .mxl)"}
-        </FilePick>
-      )}
-
-      {/* A recording without a tab: just play along with it. */}
-      {!item.tabFile &&
-        (item.audioFile && audioData ? (
-          <div className="space-y-2 rounded-2xl bg-surface-2/60 p-3">
-            <div className="flex items-center justify-between gap-2 text-sm">
-              <span className="flex min-w-0 items-center gap-2">
-                <Headphones className="size-4 shrink-0 text-accent" />
-                <span className="truncate">{item.audioFile.name}</span>
-              </span>
-              <Button variant="destructive-ghost" size="sm" onClick={removeAudio} className="h-8 px-2 text-xs">
-                <Trash2 className="size-3.5" /> Удалить запись
-              </Button>
-            </div>
-            <AudioPreview data={audioData} />
-          </div>
+  return (
+    <>
+      <Card className="space-y-3 p-3">
+        {empty ? (
+          <>
+            <div className="px-1 text-sm text-muted">Добавь видео, табы или запись — под них и будешь играть.</div>
+            {materials}
+          </>
         ) : (
           <>
-            {grabButton}
-            <FilePick accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)}>
-              {missing.audio ? `Загрузи «${item.audioFile?.name}» на этом устройстве` : "Загрузить аудиозапись (mp3, m4a, wav)"}
-            </FilePick>
+            {item.video && <YouTubePlayer videoId={item.video.youtubeId} start={item.video.start} playing={false} />}
+            {hasTab && mediaReady && (
+              <Suspense fallback={<div className="h-72 animate-pulse rounded-3xl border border-line bg-surface" />}>
+                <TabPlayer
+                  tex={file ? undefined : item.tab}
+                  file={file ?? undefined}
+                  audio={file && useRecording ? audioData : null}
+                  sync={item.audioSync}
+                  unrepeat={item.audioUnrepeat}
+                  bpm={file ? undefined : (item.startBpm ?? undefined)}
+                  playing={playing}
+                  track={track}
+                  countIn
+                  height="40vh"
+                  onScore={setScore}
+                />
+              </Suspense>
+            )}
+            {!hasTab && audioData && <AudioPreview data={audioData} />}
+            {hasTab && <TabViewSwitch />}
+            <div className="flex items-center gap-2">
+              {hasTab ? (
+                <Button
+                  onClick={() => {
+                    audio();
+                    setPlaying(!playing);
+                  }}
+                  className="flex-1"
+                >
+                  {playing ? <Pause fill="currentColor" /> : <Play fill="currentColor" />}
+                  {playing ? "Пауза" : file && audioData && useRecording ? "Играть с записью" : "Прослушать"}
+                </Button>
+              ) : (
+                <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">{badges}</div>
+              )}
+              <Button variant="secondary" size="icon" aria-label="Материалы" title="Материалы" onClick={() => setSheet(true)} className="size-12">
+                <MoreHorizontal />
+              </Button>
+            </div>
+            {hasTab && <div className="flex flex-wrap gap-1.5">{badges}</div>}
           </>
-        ))}
+        )}
+      </Card>
 
-      <NumberField
-        label="Длительность в занятии, мин (0 — поровну с остальными)"
-        min={0}
-        value={item.minutes ?? 0}
-        onChange={(v) => updateItem(item.id, { minutes: v || undefined })}
-      />
-      {error && <p className="text-sm text-guide">{error}</p>}
-    </Card>
+      <Drawer open={sheet} onOpenChange={setSheet}>
+        <DrawerContent>
+          <DrawerHeader>
+            <DrawerTitle>Материалы</DrawerTitle>
+          </DrawerHeader>
+          <div className="-mx-1 min-h-0 flex-1 space-y-4 overflow-y-auto px-1 pb-2">
+            {materials}
+
+            {item.audioFile && audioData && file && (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowSync(!showSync)}
+                  className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-3 text-left text-sm font-semibold transition-colors active:bg-surface-2"
+                >
+                  <Link2 className="size-[18px] text-muted" />
+                  <span className="flex-1">Поправить синхронизацию</span>
+                  <ChevronDown className={cn("size-4 text-muted transition-transform", showSync && "rotate-180")} />
+                </button>
+                {showSync && (
+                  <div className="mt-1 rounded-2xl bg-surface-2/40 p-3">
+                    <AudioSync item={item} audio={audioData} tab={file} sections={score?.sections ?? []} bars={score?.bars ?? 1} />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {hasTab && ((score && score.tracks.length > 1) || (file && audioData)) && (
+              <div className="space-y-2">
+                <div className="px-1 text-xs font-semibold uppercase tracking-wider text-muted">Воспроизведение</div>
+                {file && audioData && (
+                  <SourceSwitch
+                    recording={useRecording}
+                    onChange={(v) => {
+                      setPlaying(false);
+                      setUseRecording(v);
+                    }}
+                  />
+                )}
+                {score && score.tracks.length > 1 && (
+                  <Select value={String(track)} onValueChange={(v) => setTrack(Number(v))}>
+                    <SelectTrigger className="w-full" aria-label="Дорожка">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {score.tracks.map((t, i) => (
+                        <SelectItem key={i} value={String(i)}>
+                          {t}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            )}
+
+            {score && score.sections.length > 0 && !noSections && (
+              <Button variant="ghost" size="sm" onClick={sectionsFromFile} className="w-full">
+                <ListTree className="size-4" /> Заново взять разделы из табов
+              </Button>
+            )}
+
+            <NumberField
+              label="Длительность в занятии, мин (0 — поровну с остальными)"
+              min={0}
+              value={item.minutes ?? 0}
+              onChange={(v) => updateItem(item.id, { minutes: v || undefined })}
+            />
+            <p className="px-1 text-xs text-muted">Файлы табов и записей хранятся на этом устройстве.</p>
+          </div>
+        </DrawerContent>
+      </Drawer>
+    </>
   );
 }
 

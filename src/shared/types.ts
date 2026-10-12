@@ -61,7 +61,7 @@ export interface Item {
   /** A Guitar Pro file is stored on this device for this item (IndexedDB) */
   tabFile?: { name: string; size: number };
   /** The recording the tab was written from (IndexedDB), played in sync with the notes */
-  audioFile?: { name: string; size: number };
+  audioFile?: { name: string; size: number; /** Taken from the item's YouTube video */ fromVideo?: boolean };
   /** Where bars start in the recording: bar (1-based) → milliseconds. Sorted by bar. */
   audioSync?: SyncPoint[];
   /** Repeats (by closing bar) the recording plays only once — switched off when playing along with it */
