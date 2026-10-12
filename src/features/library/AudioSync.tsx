@@ -13,10 +13,12 @@ interface Props {
   /** Section markers of the tab, offered as sync candidates */
   sections: { title: string; bar: number }[];
   bars: number;
+  /** Run the automatic detection as soon as this shows up (the recording was just fetched) */
+  autoDetect?: boolean;
 }
 
 /** Mark where bars start in the recording: listen, and tap ⏱ when the bar begins. */
-export function AudioSync({ item, audio, tab, sections, bars }: Props) {
+export function AudioSync({ item, audio, tab, sections, bars, autoDetect }: Props) {
   const { updateItem } = useData();
   const player = useRef<HTMLAudioElement>(null);
   const [url, setUrl] = useState("");
@@ -44,6 +46,9 @@ export function AudioSync({ item, audio, tab, sections, bars }: Props) {
       setAuto({ busy: false, message: `Не получилось: ${(e as Error).message}` });
     }
   };
+  useEffect(() => {
+    if (autoDetect) void detect();
+  }, []);
   useEffect(() => {
     const u = URL.createObjectURL(new Blob([audio]));
     setUrl(u);

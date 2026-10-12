@@ -369,6 +369,9 @@ interface StageProps {
 function Stage({ block, entry, item, playing, control, onBlocked }: StageProps) {
   if (block === "improv") return <CompactMetronome />;
   if (!entry || !item) return null;
+  // A tab with its recording beats the video: the notes follow the sound.
+  if (item.tabFile && item.audioFile)
+    return <SongStage key={`${item.id}#${entry.sectionId ?? ""}`} item={item} entry={entry} playing={playing} control={control} onBlocked={onBlocked} />;
   if (item.video) {
     return (
       <div className="space-y-3">

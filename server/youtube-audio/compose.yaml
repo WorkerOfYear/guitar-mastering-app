@@ -1,0 +1,18 @@
+# docker compose up -d --build   (KEY and DOMAIN come from .env next to this file)
+services:
+  audio:
+    build: .
+    restart: unless-stopped
+    environment:
+      KEY: ${KEY:?задай KEY в .env}
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN: ${DOMAIN:?задай DOMAIN в .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+volumes:
+  caddy-data:

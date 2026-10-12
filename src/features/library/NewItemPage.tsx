@@ -10,6 +10,8 @@ import { PageHeader } from "@/components/ui/Placeholder";
 import { parseYouTube, AUDIO_ACCEPT, AUDIO_MAX, TAB_ACCEPT, TAB_MAX } from "./MediaCard";
 import { saveAudioFile, saveTabFile } from "@/lib/tabFiles";
 import { fileTitle, youtubeTitle } from "@/lib/titles";
+import { serverReady } from "@/lib/youtubeAudio";
+import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
 import { TYPE_META, type ItemType } from "@/shared/types";
 
@@ -70,7 +72,9 @@ export function NewItemPage() {
         await saveAudioFile(id, await audioFile.arrayBuffer());
         updateItem(id, { audioFile: { name: audioFile.name, size: audioFile.size } });
       }
-      navigate(`/library/${id}`, { replace: true });
+      // A video and our own audio server: the card takes the sound right away (and syncs it with the tab).
+      const grabAudio = source === "video" && !!video && serverReady(useSettings.getState().audioServer);
+      navigate(`/library/${id}`, { replace: true, state: { grabAudio } });
     } catch (e) {
       toast.error("Не удалось сохранить файл", { description: (e as Error).message });
       setBusy(false);

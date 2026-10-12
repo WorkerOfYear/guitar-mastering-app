@@ -12,6 +12,7 @@ import { exportData, useData, type DataState } from "@/store/data";
 import { useSettings } from "@/store/settings";
 import { BLOCK_META, type BlockKind } from "@/shared/types";
 import { SyncCard } from "./SyncCard";
+import { AudioServerCard } from "./AudioServerCard";
 
 const DAY_LABELS = ["ВС", "ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ"];
 const SECTIONS: [string, string, LucideIcon][] = [
@@ -135,6 +136,9 @@ export function SettingsPage() {
           onChange={(v) => setFretboard({ showOutside: v })}
         />
       </Card>
+
+      <SectionTitle>Звук из YouTube</SectionTitle>
+      <AudioServerCard />
 
       <SectionTitle>Синхронизация и Telegram</SectionTitle>
       <SyncCard />

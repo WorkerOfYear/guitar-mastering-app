@@ -1,5 +1,7 @@
 import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from "react";
-import { FileMusic, Headphones, ListTree, Pause, Piano, Play, Plus, Trash2, Upload, Video } from "lucide-react";
+import { useLocation } from "react-router-dom";
+import { toast } from "sonner";
+import { FileMusic, Headphones, ListTree, LoaderCircle, Pause, Piano, Play, Plus, Trash2, Upload, Video, WandSparkles } from "lucide-react";
 import { Button, Card, Input, NumberField, Segmented } from "@/components/ui";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { YouTubePlayer } from "@/components/video/YouTubePlayer";
@@ -8,6 +10,8 @@ import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
 import { audio } from "@/audio/player";
 import { deleteAudioFile, deleteTabFile, loadAudioFile, loadTabFile, saveAudioFile, saveTabFile } from "@/lib/tabFiles";
 import { AudioSync } from "./AudioSync";
+import { fetchYoutubeAudio, serverReady } from "@/lib/youtubeAudio";
+import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
 import type { Item, Section } from "@/shared/types";
 
@@ -118,6 +122,45 @@ export function MediaCard({ item }: { item: Item }) {
     setPlaying(false);
     updateItem(item.id, { audioFile: { name: f.name, size: f.size } });
   };
+  // The recording taken from the item's YouTube video by the user's server; a tab then gets synced to it.
+  const audioServer = useSettings((s) => s.audioServer);
+  const [grabbing, setGrabbing] = useState(false);
+  const [justGrabbed, setJustGrabbed] = useState(false);
+  const grabAudio = async () => {
+    if (!item.video) return;
+    if (!serverReady(audioServer)) return toast.error("Укажи сервер для звука в настройках");
+    setGrabbing(true);
+    setError("");
+    try {
+      const { data, name } = await fetchYoutubeAudio(item.video.youtubeId, audioServer);
+      await saveAudioFile(item.id, data);
+      setAudioData(data);
+      setMissing((m) => ({ ...m, audio: false }));
+      setPlaying(false);
+      setJustGrabbed(true);
+      updateItem(item.id, { audioFile: { name, size: data.byteLength }, audioSync: undefined, audioUnrepeat: undefined });
+      toast.success("Звук из видео загружен");
+    } catch (e) {
+      toast.error("Не удалось взять звук из видео", { description: (e as Error).message });
+    } finally {
+      setGrabbing(false);
+    }
+  };
+  // Right after creating an item with a video: take its sound without asking.
+  const location = useLocation();
+  const autoGrab = useRef((location.state as { grabAudio?: boolean } | null)?.grabAudio);
+  useEffect(() => {
+    if (!autoGrab.current) return;
+    autoGrab.current = false;
+    void grabAudio();
+  }, []);
+  const grabButton = item.video && (
+    <Button onClick={() => void grabAudio()} disabled={grabbing} className="h-auto min-h-12 w-full whitespace-normal py-2">
+      {grabbing ? <LoaderCircle className="animate-spin" /> : <WandSparkles />}
+      {grabbing ? "Скачиваю звук из видео…" : "Взять звук из видео"}
+    </Button>
+  );
+
   const removeAudio = async () => {
     await deleteAudioFile(item.id);
     setAudioData(null);
@@ -290,14 +333,17 @@ export function MediaCard({ item }: { item: Item }) {
                   <Trash2 className="size-3.5" /> Удалить запись
                 </Button>
               </div>
-              <AudioSync item={item} audio={audioData} tab={file!} sections={score?.sections ?? []} bars={score?.bars ?? 1} />
+              <AudioSync item={item} audio={audioData} tab={file!} sections={score?.sections ?? []} bars={score?.bars ?? 1} autoDetect={justGrabbed} />
             </div>
           ) : (
-            <FilePick accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)}>
-              {missing.audio
-                ? `Загрузи «${item.audioFile?.name}» на этом устройстве (отметки сохранятся)`
-                : "Загрузить запись, по которой написан таб (mp3, m4a, wav)"}
-            </FilePick>
+            <>
+              {grabButton}
+              <FilePick accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)}>
+                {missing.audio
+                  ? `Загрузи «${item.audioFile?.name}» на этом устройстве (отметки сохранятся)`
+                  : "Загрузить запись, по которой написан таб (mp3, m4a, wav)"}
+              </FilePick>
+            </>
           )}
           <p className="text-xs text-muted">Файлы хранятся на этом устройстве. На другом устройстве их нужно загрузить ещё раз.</p>
         </div>
@@ -323,9 +369,12 @@ export function MediaCard({ item }: { item: Item }) {
             <AudioPreview data={audioData} />
           </div>
         ) : (
-          <FilePick accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)}>
-            {missing.audio ? `Загрузи «${item.audioFile?.name}» на этом устройстве` : "Загрузить аудиозапись (mp3, m4a, wav)"}
-          </FilePick>
+          <>
+            {grabButton}
+            <FilePick accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)}>
+              {missing.audio ? `Загрузи «${item.audioFile?.name}» на этом устройстве` : "Загрузить аудиозапись (mp3, m4a, wav)"}
+            </FilePick>
+          </>
         ))}
 
       <NumberField
