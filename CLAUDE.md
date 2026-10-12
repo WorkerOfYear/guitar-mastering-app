@@ -3,7 +3,8 @@
 ## Публикация изменений
 
 - Правки идут в ветку **`dev`**. В `main` — только когда владелец скажет («сливай в main» и т.п.).
-  Vercel деплоит production из `main`; на `dev` он собирает preview (адрес — в Vercel → Deployments).
+  Vercel деплоит production из `main`. Пуш в `dev` собирает тестовый стенд на сервере владельца
+  (GitHub Actions, `.github/workflows/dev-stand.yml`, `server/dev-stand`); Vercel ветку `dev` не собирает.
 - Порядок для каждой законченной и проверенной правки: коммит в рабочую ветку → `git push` рабочей ветки →
   `git fetch origin dev` → если `dev` является предком текущего коммита, `git push origin HEAD:dev` (fast-forward).
   Если `dev` ушёл вперёд — сначала влей его в рабочую ветку (`git merge origin/dev`), прогони проверки и только потом пушь.
@@ -13,7 +14,7 @@
 - Никогда не делай force-push в `main` и `dev`.
 - Автор коммитов — владелец репозитория: `git config user.name "WorkerOfYear"`, `git config user.email "artyomlufirenko@gmail.com"`.
   Vercel (тариф Hobby) не деплоит коммиты авторов не из команды. Строку `Co-Authored-By` в сообщении коммита оставляй.
-- Рабочие ветки `claude/**` Vercel не собирает (`git.deploymentEnabled` в `vercel.json`).
+- Рабочие ветки `claude/**` и `dev` Vercel не собирает (`git.deploymentEnabled` в `vercel.json`).
 
 ## Проект
 

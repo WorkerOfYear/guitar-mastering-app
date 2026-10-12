@@ -1,0 +1,16 @@
+# Test stand: serves /srv/guitar-dev/dist on 127.0.0.1:8788 and publishes it with a Cloudflare quick tunnel.
+#   docker compose up -d
+#   docker compose logs tunnel | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1
+services:
+  web:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["127.0.0.1:8788:80"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /srv/guitar-dev:/srv
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    network_mode: host
+    command: tunnel --no-autoupdate --url http://127.0.0.1:8788
