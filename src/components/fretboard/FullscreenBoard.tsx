@@ -1,6 +1,7 @@
 import { useEffect, useState, type ComponentProps } from "react";
 import { Fretboard, fretboardSize } from "@/components/fretboard/Fretboard";
-import { IconButton, Segmented } from "@/components/ui";
+import { ChevronLeft, ChevronRight, RotateCw, X } from "lucide-react";
+import { Button, IconButton, Segmented } from "@/components/ui";
 import type { LabelMode } from "@/store/settings";
 
 type BoardProps = Omit<ComponentProps<typeof Fretboard>, "zoom">;
@@ -40,7 +41,7 @@ export function FullscreenBoard({ title, board, positionLabel, onPrev, onNext, o
       <div className="flex items-center gap-2 px-3 py-2">
         <div className="min-w-0 flex-1 truncate font-bold">{title}</div>
         <IconButton label="Закрыть" onClick={onClose}>
-          ✕
+          <X />
         </IconButton>
       </div>
       <div className="flex flex-1 flex-col justify-center">
@@ -48,18 +49,20 @@ export function FullscreenBoard({ title, board, positionLabel, onPrev, onNext, o
           <Fretboard {...board} zoom={zoom} />
         </div>
         {viewport.h > viewport.w && (
-          <p className="mt-4 px-4 text-center text-sm text-muted">Поверни телефон — гриф поместится целиком</p>
+          <p className="mt-4 flex items-center justify-center gap-2 px-4 text-center text-sm text-muted">
+            <RotateCw className="size-4" /> Поверни телефон — гриф поместится целиком
+          </p>
         )}
       </div>
       <div className="flex flex-wrap items-center gap-2 px-3 py-2">
         <IconButton label="Предыдущая позиция" onClick={onPrev}>
-          ‹
+          <ChevronLeft />
         </IconButton>
-        <button type="button" onClick={onTogglePosition} className="h-11 shrink-0 rounded-2xl bg-surface-2 px-4 text-sm font-semibold">
+        <Button variant="secondary" onClick={onTogglePosition} className="h-11">
           {positionLabel}
-        </button>
+        </Button>
         <IconButton label="Следующая позиция" onClick={onNext}>
-          ›
+          <ChevronRight />
         </IconButton>
         <div className="min-w-0 flex-1 [@media(orientation:portrait)]:basis-full">
           <Segmented size="sm" value={labelMode} onChange={onLabelMode} options={labelOptions} />

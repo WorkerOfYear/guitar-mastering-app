@@ -1,5 +1,7 @@
 import { useNavigate } from "react-router-dom";
-import { Card } from "@/components/ui";
+import { ExternalLink, FileUp, GraduationCap } from "lucide-react";
+import { Badge, Button, Card, Progress, Stat } from "@/components/ui";
+import { TYPE_ICON } from "@/components/ui/icons";
 import { cleanBpm, findSection, lastEntry, targetBpm } from "@/lib/progress";
 import { localDate } from "@/lib/date";
 import { useData } from "@/store/data";
@@ -19,14 +21,17 @@ export function EntryCard({ entry }: { entry: PlanEntry }) {
   const clean = cleanBpm(log, entry, localDate());
   const last = lastEntry(log, entry);
   const target = targetBpm(item, entry.sectionId);
+  const TypeIcon = TYPE_ICON[item.type];
 
   return (
     <Card>
-      <div className="text-xs text-muted">
-        {TYPE_META[item.type].icon} {item.category ?? TYPE_META[item.type].title}
-        {item.subdivision && <> · {SUBDIVISION_META[item.subdivision]}</>}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Badge variant="soft">
+          <TypeIcon /> {item.category ?? TYPE_META[item.type].title}
+        </Badge>
+        {item.subdivision && <Badge>{SUBDIVISION_META[item.subdivision]}</Badge>}
       </div>
-      <div className="mt-0.5 text-xl font-bold leading-tight">{item.title}</div>
+      <div className="mt-2 text-xl font-bold leading-tight">{item.title}</div>
       {section && <div className="text-lg font-semibold text-accent">{section.title}</div>}
       {item.description && <p className="mt-2 text-sm text-muted">{item.description}</p>}
 
@@ -37,54 +42,44 @@ export function EntryCard({ entry }: { entry: PlanEntry }) {
           <Stat label="последний раз" value={last ? `${last.bpm ?? "—"}` : "—"} hint={last ? RESULT_LABEL[last.result] : undefined} />
         </div>
       )}
-      {clean && target ? (
-        <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-2">
-          <div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, (clean / target) * 100)}%` }} />
-        </div>
-      ) : null}
+      {clean && target ? <Progress className="mt-3" value={(clean / target) * 100} /> : null}
 
       {(item.links.length > 0 || item.theory) && (
         <div className="mt-3 flex flex-wrap gap-2">
           {item.theory && (
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => {
-                setTheory({ ...item.theory!, scaleId: item.theory!.scaleId ?? "ionian", chordType: item.theory!.chordType ?? "maj7", diatonic: item.theory!.diatonic ?? 0, position: 0 });
+                setTheory({
+                  ...item.theory!,
+                  scaleId: item.theory!.scaleId ?? "ionian",
+                  chordType: item.theory!.chordType ?? "maj7",
+                  diatonic: item.theory!.diatonic ?? 0,
+                  position: 0,
+                });
                 navigate("/theory");
               }}
-              className="h-10 rounded-xl bg-surface-2 px-3 text-sm font-semibold"
             >
-              🎼 На грифе
-            </button>
+              <GraduationCap /> На грифе
+            </Button>
           )}
           {item.links.map((url) => (
-            <a key={url} href={url} target="_blank" rel="noreferrer" className="flex h-10 items-center rounded-xl bg-surface-2 px-3 text-sm font-semibold">
-              {linkLabel(url)} ↗
-            </a>
+            <Button key={url} asChild variant="secondary" size="sm">
+              <a href={url} target="_blank" rel="noreferrer">
+                {linkLabel(url)} <ExternalLink className="size-4 text-muted" />
+              </a>
+            </Button>
           ))}
         </div>
       )}
       {item.type === "song" && !item.tabFile && (
-        <button
-          type="button"
-          onClick={() => navigate(`/library/${item.id}`)}
-          className="mt-3 h-11 w-full rounded-2xl border border-dashed border-line text-sm font-semibold"
-        >
-          📄 Загрузи Guitar Pro файл — будет играть как в Songsterr
-        </button>
+        <Button variant="dashed" onClick={() => navigate(`/library/${item.id}`)} className="mt-3 w-full whitespace-normal">
+          <FileUp /> Загрузи Guitar Pro файл — будет играть как в Songsterr
+        </Button>
       )}
-      {item.notes && <p className="mt-3 whitespace-pre-wrap rounded-2xl bg-surface-2 p-3 text-sm">{item.notes}</p>}
+      {item.notes && <p className="mt-3 whitespace-pre-wrap rounded-2xl border-l-4 border-accent/60 bg-surface-2/60 p-3 text-sm">{item.notes}</p>}
     </Card>
-  );
-}
-
-function Stat({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
-  return (
-    <div className="rounded-2xl bg-surface-2 px-2 py-2">
-      <div className="text-xl font-bold tabular-nums">{value}</div>
-      <div className="text-[10px] leading-tight text-muted">{label}</div>
-      {hint && <div className="text-[10px] leading-tight text-muted">{hint}</div>}
-    </div>
   );
 }
 

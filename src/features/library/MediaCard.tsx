@@ -1,6 +1,7 @@
-import { Suspense, lazy, useEffect, useState } from "react";
-import { NumberField } from "@/components/metronome/MetronomePanel";
-import { Card } from "@/components/ui";
+import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
+import { FileMusic, Headphones, ListTree, Pause, Piano, Play, Plus, Trash2, Upload, Video } from "lucide-react";
+import { Button, Card, Input, NumberField, Segmented } from "@/components/ui";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { YouTubePlayer } from "@/components/video/YouTubePlayer";
 import type { ScoreInfo } from "@/components/tab/TabPlayer";
 import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
@@ -27,24 +28,43 @@ export function parseYouTube(url: string) {
   }
 }
 
-/** 🎧 the original recording or 🎹 the synthesizer. */
+/** The original recording or the synthesizer. */
 export function SourceSwitch({ recording, onChange }: { recording: boolean; onChange: (v: boolean) => void }) {
   return (
-    <div className="flex rounded-2xl bg-surface-2 p-1 text-xs font-medium">
-      {[
-        [true, "🎧 Запись"],
-        [false, "🎹 Синтезатор"],
-      ].map(([v, label]) => (
-        <button
-          key={String(v)}
-          type="button"
-          onClick={() => onChange(v as boolean)}
-          className={`flex-1 rounded-xl px-2 py-1.5 ${recording === v ? "bg-surface text-fg shadow-sm" : "text-muted"}`}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
+    <Segmented
+      size="sm"
+      value={recording ? "rec" : "synth"}
+      onChange={(v) => onChange(v === "rec")}
+      options={[
+        {
+          value: "rec",
+          label: (
+            <>
+              <Headphones /> Запись
+            </>
+          ),
+        },
+        {
+          value: "synth",
+          label: (
+            <>
+              <Piano /> Синтезатор
+            </>
+          ),
+        },
+      ]}
+    />
+  );
+}
+
+/** Dashed drop-zone-like button that opens a file picker. */
+function FilePick({ children, accept, onFile }: { children: ReactNode; accept: string; onFile: (f: File) => void }) {
+  return (
+    <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-line px-3 py-2 text-center text-sm font-semibold transition-colors hover:bg-surface-2 active:scale-[0.99]">
+      <Upload className="size-4 shrink-0 text-muted" />
+      <span>{children}</span>
+      <input type="file" accept={accept} hidden onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
+    </label>
   );
 }
 
@@ -139,21 +159,26 @@ export function MediaCard({ item }: { item: Item }) {
       {item.video && (
         <div className="space-y-2">
           <YouTubePlayer videoId={item.video.youtubeId} start={item.video.start} playing={false} />
-          <button type="button" onClick={() => updateItem(item.id, { video: undefined })} className="text-xs text-guide">
-            Убрать видео
-          </button>
+          <Button variant="destructive-ghost" size="sm" onClick={() => updateItem(item.id, { video: undefined })} className="h-8 px-2 text-xs">
+            <Trash2 className="size-3.5" /> Убрать видео
+          </Button>
         </div>
       )}
       <div className="flex gap-2">
-        <input
-          value={videoUrl}
-          onChange={(e) => setVideoUrl(e.target.value)}
-          inputMode="url"
-          placeholder={item.video ? "Другое видео: ссылка YouTube" : "Видео: ссылка YouTube (можно с таймкодом)"}
-          className="h-11 min-w-0 flex-1 rounded-2xl border border-line bg-surface-2 px-4 text-sm"
-        />
-        <button
-          type="button"
+        <div className="relative min-w-0 flex-1">
+          <Video className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted" />
+          <Input
+            value={videoUrl}
+            onChange={(e) => setVideoUrl(e.target.value)}
+            inputMode="url"
+            placeholder={item.video ? "Другое видео: ссылка YouTube" : "Видео: ссылка YouTube (можно с таймкодом)"}
+            className="h-11 pl-10 text-sm"
+          />
+        </div>
+        <Button
+          variant="secondary"
+          size="icon"
+          aria-label="Добавить видео"
           onClick={() => {
             const v = parseYouTube(videoUrl);
             if (!v) return setError("Не похоже на ссылку YouTube");
@@ -161,15 +186,14 @@ export function MediaCard({ item }: { item: Item }) {
             updateItem(item.id, { video: v, links: item.links.includes(videoUrl.trim()) ? item.links : [...item.links, videoUrl.trim()] });
             setVideoUrl("");
           }}
-          className="h-11 rounded-2xl bg-surface-2 px-4 font-semibold"
         >
-          +
-        </button>
+          <Plus />
+        </Button>
       </div>
 
       {(item.tab || file) && mediaReady && (
         <>
-          <Suspense fallback={<div className="h-72 rounded-3xl border border-line bg-surface" />}>
+          <Suspense fallback={<div className="h-72 animate-pulse rounded-3xl border border-line bg-surface" />}>
             <TabPlayer
               tex={file ? undefined : item.tab}
               file={file ?? undefined}
@@ -185,26 +209,39 @@ export function MediaCard({ item }: { item: Item }) {
             />
           </Suspense>
           <TabViewSwitch />
-          {file && audioData && <SourceSwitch recording={useRecording} onChange={(v) => { setPlaying(false); setUseRecording(v); }} />}
+          {file && audioData && (
+            <SourceSwitch
+              recording={useRecording}
+              onChange={(v) => {
+                setPlaying(false);
+                setUseRecording(v);
+              }}
+            />
+          )}
           <div className="flex items-center gap-2">
-            <button
-              type="button"
+            <Button
               onClick={() => {
                 audio();
                 setPlaying(!playing);
               }}
-              className="h-12 flex-1 rounded-2xl bg-accent font-bold text-on-accent"
+              className="flex-1"
             >
-              {playing ? "❚❚ Пауза" : "▶ Прослушать"}
-            </button>
+              {playing ? <Pause fill="currentColor" /> : <Play fill="currentColor" />}
+              {playing ? "Пауза" : "Прослушать"}
+            </Button>
             {score && score.tracks.length > 1 && (
-              <select value={track} onChange={(e) => setTrack(Number(e.target.value))} className="h-12 max-w-[50%] rounded-2xl border border-line bg-surface-2 px-3 text-sm">
-                {score.tracks.map((t, i) => (
-                  <option key={i} value={i}>
-                    {t}
-                  </option>
-                ))}
-              </select>
+              <Select value={String(track)} onValueChange={(v) => setTrack(Number(v))}>
+                <SelectTrigger className="max-w-[50%]" aria-label="Дорожка">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {score.tracks.map((t, i) => (
+                    <SelectItem key={i} value={String(i)}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
           </div>
         </>
@@ -213,42 +250,53 @@ export function MediaCard({ item }: { item: Item }) {
       {item.tabFile && !missing.tab ? (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2 text-sm">
-            <span className="min-w-0 truncate">📄 {item.tabFile.name}</span>
-            <button type="button" onClick={removeFile} className="shrink-0 text-xs text-guide">
-              Удалить файл
-            </button>
+            <span className="flex min-w-0 items-center gap-2">
+              <FileMusic className="size-4 shrink-0 text-accent" />
+              <span className="truncate">{item.tabFile.name}</span>
+            </span>
+            <Button variant="destructive-ghost" size="sm" onClick={removeFile} className="h-8 px-2 text-xs">
+              <Trash2 className="size-3.5" /> Удалить файл
+            </Button>
           </div>
           {score && score.sections.length > 0 && (
-            <button type="button" onClick={sectionsFromFile} className="h-11 w-full rounded-2xl bg-surface-2 text-sm font-semibold">
-              Разделы из меток файла ({score.sections.map((s) => s.title).join(", ")})
-            </button>
+            <Button variant="secondary" onClick={sectionsFromFile} className="h-auto min-h-11 w-full whitespace-normal py-2">
+              <ListTree /> Разделы из меток файла ({score.sections.map((s) => s.title).join(", ")})
+            </Button>
           )}
           {item.audioFile && audioData && file ? (
-            <div className="space-y-2 rounded-2xl bg-surface-2 p-3">
+            <div className="space-y-2 rounded-2xl bg-surface-2/60 p-3">
               <div className="flex items-center justify-between gap-2 text-sm">
-                <span className="min-w-0 truncate">🎧 {item.audioFile.name}</span>
-                <button type="button" onClick={removeAudio} className="shrink-0 text-xs text-guide">
-                  Удалить запись
-                </button>
+                <span className="flex min-w-0 items-center gap-2">
+                  <Headphones className="size-4 shrink-0 text-accent" />
+                  <span className="truncate">{item.audioFile.name}</span>
+                </span>
+                <Button variant="destructive-ghost" size="sm" onClick={removeAudio} className="h-8 px-2 text-xs">
+                  <Trash2 className="size-3.5" /> Удалить запись
+                </Button>
               </div>
               <AudioSync item={item} audio={audioData} tab={file!} sections={score?.sections ?? []} bars={score?.bars ?? 1} />
             </div>
           ) : (
-            <label className="flex h-12 cursor-pointer items-center justify-center rounded-2xl border border-dashed border-line px-3 text-center text-sm font-semibold">
-              {missing.audio ? `🎧 Загрузи «${item.audioFile?.name}» на этом устройстве (отметки сохранятся)` : "🎧 Загрузить запись, по которой написан таб (mp3, m4a, wav)"}
-              <input type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg,.flac" hidden onChange={(e) => e.target.files?.[0] && void uploadAudio(e.target.files[0])} />
-            </label>
+            <FilePick accept="audio/*,.mp3,.m4a,.wav,.ogg,.flac" onFile={(f) => void uploadAudio(f)}>
+              {missing.audio
+                ? `Загрузи «${item.audioFile?.name}» на этом устройстве (отметки сохранятся)`
+                : "Загрузить запись, по которой написан таб (mp3, m4a, wav)"}
+            </FilePick>
           )}
           <p className="text-xs text-muted">Файлы хранятся на этом устройстве. На другом устройстве их нужно загрузить ещё раз.</p>
         </div>
       ) : (
-        <label className="flex h-12 cursor-pointer items-center justify-center rounded-2xl border border-dashed border-line text-sm font-semibold">
-          {missing.tab ? `📄 Загрузи «${item.tabFile?.name}» на этом устройстве` : "📄 Загрузить Guitar Pro файл (.gp, .gp5, .gpx…)"}
-          <input type="file" accept=".gp,.gp3,.gp4,.gp5,.gpx,.gp7,.xml,.musicxml" hidden onChange={(e) => e.target.files?.[0] && void upload(e.target.files[0])} />
-        </label>
+        <FilePick accept=".gp,.gp3,.gp4,.gp5,.gpx,.gp7,.xml,.musicxml" onFile={(f) => void upload(f)}>
+          {missing.tab ? `Загрузи «${item.tabFile?.name}» на этом устройстве` : "Загрузить Guitar Pro файл (.gp, .gp5, .gpx…)"}
+        </FilePick>
       )}
 
-      <NumberField label="Длительность в занятии, мин (0 — поровну с остальными)" min={0} value={item.minutes ?? 0} onChange={(v) => updateItem(item.id, { minutes: v || undefined })} />
+      <NumberField
+        label="Длительность в занятии, мин (0 — поровну с остальными)"
+        min={0}
+        value={item.minutes ?? 0}
+        onChange={(v) => updateItem(item.id, { minutes: v || undefined })}
+      />
       {error && <p className="text-sm text-guide">{error}</p>}
     </Card>
   );

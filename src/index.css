@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "@fontsource-variable/inter";
 
 /* Design tokens. Dark is the default (phone on a music stand); inside Telegram they follow its theme. */
 :root {
@@ -58,7 +59,27 @@
   --color-guide: var(--guide);
   --color-chord: var(--chord);
   --color-good: var(--good);
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* shadcn/ui names, so components added with `npx shadcn add` pick up the same theme.
+     Our own names win where they clash: `text-muted` is a text color, `accent` is the orange. */
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--text);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--text);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--on-accent);
+  --color-secondary: var(--surface-2);
+  --color-secondary-foreground: var(--text);
+  --color-muted-foreground: var(--muted);
+  --color-destructive: var(--guide);
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--accent);
+
+  --radius-4xl: 2rem;
 }
 
 html,
@@ -74,6 +95,13 @@ body {
   font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01";
+}
+
+/* Soft glow behind primary actions */
+.glow-accent {
+  box-shadow: 0 8px 24px -8px color-mix(in oklab, var(--accent) 60%, transparent);
 }
 
 .no-scrollbar::-webkit-scrollbar {

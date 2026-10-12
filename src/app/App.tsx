@@ -1,17 +1,24 @@
-import { useEffect } from "react";
+import { Suspense, lazy, useEffect, type ComponentType } from "react";
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { LazyMotion, MotionConfig, m } from "motion/react";
+import { ChevronLeft } from "lucide-react";
 import { tg } from "./telegram";
 import { BeatFlash } from "@/components/metronome/MetronomePanel";
+import { Button } from "@/components/ui";
+import { Toaster } from "@/components/ui/sonner";
 import { TodayPage } from "@/features/today/TodayPage";
-import { LibraryPage } from "@/features/library/LibraryPage";
-import { ItemPage } from "@/features/library/ItemPage";
-import { NewItemPage } from "@/features/library/NewItemPage";
-import { TheoryPage } from "@/features/theory/TheoryPage";
-import { ProgressPage } from "@/features/progress/ProgressPage";
-import { SettingsPage } from "@/features/settings/SettingsPage";
-import { MetronomePage } from "@/features/metronome/MetronomePage";
-import { ImprovPage } from "@/features/improv/ImprovPage";
-import { SessionPage } from "@/features/session/SessionPage";
+
+// Everything but the home screen loads on first visit, so the app opens fast inside Telegram.
+const page = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) => lazy(() => load().then((m) => ({ default: m[name] })));
+const LibraryPage = page(() => import("@/features/library/LibraryPage"), "LibraryPage");
+const ItemPage = page(() => import("@/features/library/ItemPage"), "ItemPage");
+const NewItemPage = page(() => import("@/features/library/NewItemPage"), "NewItemPage");
+const TheoryPage = page(() => import("@/features/theory/TheoryPage"), "TheoryPage");
+const ProgressPage = page(() => import("@/features/progress/ProgressPage"), "ProgressPage");
+const SettingsPage = page(() => import("@/features/settings/SettingsPage"), "SettingsPage");
+const MetronomePage = page(() => import("@/features/metronome/MetronomePage"), "MetronomePage");
+const ImprovPage = page(() => import("@/features/improv/ImprovPage"), "ImprovPage");
+const SessionPage = page(() => import("@/features/session/SessionPage"), "SessionPage");
 
 // One main screen for now; the others stay reachable from settings and from plan entries.
 const TAB_ROOTS = ["/"];
@@ -39,13 +46,10 @@ function BackButton() {
   // Opened by a direct link there is no history to go back to — go home instead.
   const back = () => (location.key === "default" ? navigate("/") : navigate(-1));
   return (
-    <button
-      type="button"
-      onClick={back}
-      className="-ml-1 mb-1 flex h-10 items-center gap-1 rounded-xl px-2 text-sm font-semibold text-muted active:bg-surface-2"
-    >
-      ← Назад
-    </button>
+    <Button variant="ghost" size="sm" onClick={back} className="-ml-2 mb-1 gap-0.5 pl-1.5">
+      <ChevronLeft />
+      Назад
+    </Button>
   );
 }
 
@@ -55,28 +59,39 @@ function StartPage() {
   return page && TAB_ROOTS.includes(`/${page}`) ? <Navigate to={`/${page}`} replace /> : <TodayPage />;
 }
 
+const motionFeatures = () => import("./motionFeatures").then((r) => r.default);
+
 function Shell() {
+  const location = useLocation();
   return (
-    <>
-      <TelegramBack />
-      <main className="mx-auto max-w-3xl px-4 pb-10 pt-[max(env(safe-area-inset-top),0.5rem)]">
-        <BackButton />
-        <Routes>
-          <Route path="/" element={<StartPage />} />
-          <Route path="/library" element={<LibraryPage />} />
-          <Route path="/library/new" element={<NewItemPage />} />
-          <Route path="/library/:id" element={<ItemPage />} />
-          <Route path="/theory" element={<TheoryPage />} />
-          <Route path="/progress" element={<ProgressPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/metronome" element={<MetronomePage />} />
-          <Route path="/improv" element={<ImprovPage />} />
-          <Route path="/session" element={<SessionPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </main>
-      <BeatFlash />
-    </>
+    <LazyMotion features={motionFeatures} strict>
+      <MotionConfig reducedMotion="user">
+        <TelegramBack />
+        <main className="mx-auto max-w-3xl px-4 pb-10 pt-[max(env(safe-area-inset-top),0.5rem)]">
+          <BackButton />
+          {/* Opacity only: a transform here would break position: fixed inside the pages. */}
+          <m.div key={location.pathname} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2, ease: "easeOut" }}>
+            <Suspense fallback={null}>
+              <Routes location={location}>
+                <Route path="/" element={<StartPage />} />
+                <Route path="/library" element={<LibraryPage />} />
+                <Route path="/library/new" element={<NewItemPage />} />
+                <Route path="/library/:id" element={<ItemPage />} />
+                <Route path="/theory" element={<TheoryPage />} />
+                <Route path="/progress" element={<ProgressPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/metronome" element={<MetronomePage />} />
+                <Route path="/improv" element={<ImprovPage />} />
+                <Route path="/session" element={<SessionPage />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
+          </m.div>
+        </main>
+        <BeatFlash />
+        <Toaster />
+      </MotionConfig>
+    </LazyMotion>
   );
 }
 

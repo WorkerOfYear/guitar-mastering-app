@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { Card } from "@/components/ui";
+import { toast } from "sonner";
+import { Bot, CircleAlert, CircleCheck, CircleDashed, ExternalLink, LoaderCircle, RefreshCw, Send } from "lucide-react";
+import { Badge, Button, Card, Input } from "@/components/ui";
 import { tg } from "@/app/telegram";
 import { api, syncEnabled, syncNow, useSync } from "@/store/sync";
 
@@ -9,7 +11,7 @@ export function SyncCard() {
   const [key, setKey] = useState(sync.key);
   const [bot, setBot] = useState<{ bot: string; linked: boolean } | null>(null);
   const [link, setLink] = useState("");
-  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
   const enabled = syncEnabled();
 
   useEffect(() => {
@@ -20,11 +22,13 @@ export function SyncCard() {
   }, [enabled, sync.key]);
 
   const run = async (fn: () => Promise<string>) => {
-    setMessage("…");
+    setBusy(true);
     try {
-      setMessage(await fn());
+      toast.success(await fn());
     } catch (e) {
-      setMessage((e as Error).message);
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -34,7 +38,7 @@ export function SyncCard() {
       await syncNow();
       const err = useSync.getState().error;
       if (err) throw new Error(err);
-      return "✅ Синхронизация подключена";
+      return "Синхронизация подключена";
     });
 
   const setupBot = () =>
@@ -47,74 +51,79 @@ export function SyncCard() {
   const test = () =>
     run(async () => {
       await api("/api/remind?test=1", { method: "POST" });
-      return "📨 Сообщение отправлено — проверь Telegram";
+      return "Сообщение отправлено — проверь Telegram";
     });
 
   const status = !enabled
-    ? location.protocol === "file:"
-      ? "Работает только на сайте в Vercel"
-      : "Не подключено"
+    ? { icon: CircleDashed, tone: "text-muted", text: location.protocol === "file:" ? "Работает только на сайте в Vercel" : "Не подключено" }
     : sync.error
-      ? `⚠️ ${sync.error}`
+      ? { icon: CircleAlert, tone: "text-guide", text: sync.error }
       : sync.busy
-        ? "Синхронизация…"
+        ? { icon: LoaderCircle, tone: "text-muted animate-spin", text: "Синхронизация…" }
         : sync.lastOk
-          ? `✅ Синхронизировано ${new Date(sync.lastOk).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`
-          : "Подключено";
+          ? {
+              icon: CircleCheck,
+              tone: "text-good",
+              text: `Синхронизировано ${new Date(sync.lastOk).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`,
+            }
+          : { icon: CircleCheck, tone: "text-good", text: "Подключено" };
 
   return (
     <Card className="space-y-3">
-      <p className="text-sm text-muted">
-        Данные одни и те же на телефоне, компьютере и в Telegram. Бот в дни занятий напоминает позаниматься.
-      </p>
-      <div className="text-sm font-semibold">{status}</div>
+      <p className="text-sm text-muted">Данные одни и те же на телефоне, компьютере и в Telegram. Бот в дни занятий напоминает позаниматься.</p>
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <status.icon className={`size-4 shrink-0 ${status.tone}`} />
+        {status.text}
+      </div>
 
       {!tg && (
         <div className="flex gap-2">
-          <input
+          <Input
             value={key}
             onChange={(e) => setKey(e.target.value)}
             type="password"
             autoComplete="off"
             placeholder="SYNC_KEY из настроек Vercel"
-            className="h-12 min-w-0 flex-1 rounded-2xl border border-line bg-surface-2 px-4 text-base"
+            className="flex-1"
           />
-          <button type="button" onClick={connect} disabled={!key.trim()} className="h-12 rounded-2xl bg-accent px-4 text-sm font-bold text-on-accent disabled:opacity-40">
+          <Button onClick={connect} disabled={!key.trim() || busy}>
             Подключить
-          </button>
+          </Button>
         </div>
       )}
 
       {enabled && (
         <div className="grid grid-cols-2 gap-2">
-          <button type="button" onClick={() => void syncNow()} className="h-12 rounded-2xl bg-surface-2 text-sm font-semibold">
-            🔄 Синхронизировать
-          </button>
+          <Button variant="secondary" onClick={() => void syncNow()} disabled={sync.busy}>
+            <RefreshCw className={`size-4 ${sync.busy ? "animate-spin" : ""}`} /> Синхронизировать
+          </Button>
           {sync.key ? (
-            <button type="button" onClick={setupBot} className="h-12 rounded-2xl bg-surface-2 text-sm font-semibold">
-              🤖 {bot?.linked ? "Перепривязать бота" : "Подключить бота"}
-            </button>
+            <Button variant="secondary" onClick={setupBot} disabled={busy}>
+              <Bot className="size-4" /> {bot?.linked ? "Перепривязать бота" : "Подключить бота"}
+            </Button>
           ) : (
             <div />
           )}
           {bot?.linked && (
-            <button type="button" onClick={test} className="col-span-2 h-12 rounded-2xl bg-surface-2 text-sm font-semibold">
-              📨 Проверить напоминание
-            </button>
+            <Button variant="secondary" onClick={test} disabled={busy} className="col-span-2">
+              <Send className="size-4" /> Проверить напоминание
+            </Button>
           )}
         </div>
       )}
       {bot && (
-        <p className="text-xs text-muted">
-          Бот @{bot.bot}: {bot.linked ? "привязан ✅" : "ещё не привязан"}
+        <p className="flex items-center gap-2 text-xs text-muted">
+          <Bot className="size-4" /> @{bot.bot}
+          <Badge variant={bot.linked ? "good" : "outline"}>{bot.linked ? "привязан" : "ещё не привязан"}</Badge>
         </p>
       )}
       {link && (
-        <a href={link} target="_blank" rel="noreferrer" className="flex h-12 items-center justify-center rounded-2xl bg-accent text-sm font-bold text-on-accent">
-          Открыть в Telegram ↗
-        </a>
+        <Button asChild className="w-full">
+          <a href={link} target="_blank" rel="noreferrer">
+            Открыть в Telegram <ExternalLink className="size-4" />
+          </a>
+        </Button>
       )}
-      {message && <p className="text-sm">{message}</p>}
     </Card>
   );
 }

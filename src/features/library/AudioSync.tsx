@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { IconButton } from "@/components/ui";
+import { Eye, EyeOff, LoaderCircle, Minus, Plus, Timer, TriangleAlert, WandSparkles } from "lucide-react";
+import { Button, IconButton, Input } from "@/components/ui";
 import { formatClockMs, parseClock } from "@/lib/clock";
 import { useData } from "@/store/data";
 import type { Item, SyncPoint } from "@/shared/types";
@@ -67,21 +68,20 @@ export function AudioSync({ item, audio, tab, sections, bars }: Props) {
   return (
     <div className="space-y-2">
       {url && <audio ref={player} src={url} controls preload="metadata" className="w-full" />}
-      <button
-        type="button"
-        disabled={auto.busy}
-        onClick={() => void detect()}
-        className="h-12 w-full rounded-2xl bg-accent text-sm font-bold text-on-accent disabled:opacity-60"
-      >
-        {auto.busy ? "⏳ Определяю…" : "🪄 Определить автоматически"}
-      </button>
+      <Button disabled={auto.busy} onClick={() => void detect()} className="w-full">
+        {auto.busy ? <LoaderCircle className="animate-spin" /> : <WandSparkles />}
+        {auto.busy ? "Определяю…" : "Определить автоматически"}
+      </Button>
       {auto.message && <p className="text-sm">{auto.message}</p>}
       {outdated && !auto.message && (
-        <p className="rounded-xl bg-guide/15 p-2 text-sm">⚠️ Отметки посчитаны старой версией — из-за этого после повтора такты расходятся с записью. Нажми «🪄 Определить автоматически» ещё раз.</p>
+        <p className="flex gap-2 rounded-xl bg-guide/15 p-2.5 text-sm">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-guide" />
+          <span>Отметки посчитаны старой версией — из-за этого после повтора такты расходятся с записью. Нажми «Определить автоматически» ещё раз.</span>
+        </p>
       )}
       <p className="text-xs text-muted">
-        Или вручную: включи запись и нажми ⏱ в тот момент, когда начинается такт. Если запись в ровном темпе, хватит такта 1. Для живой записи
-        отметь начало каждого раздела — между отметками ноты подстроятся под запись.
+        Или вручную: включи запись и нажми ⏱ в тот момент, когда начинается такт. Если запись в ровном темпе, хватит такта 1. Для живой записи отметь начало
+        каждого раздела — между отметками ноты подстроятся под запись.
       </p>
       {candidates.map((bar) => {
         const p = points.find((x) => x.bar === bar && !x.occurrence);
@@ -97,44 +97,45 @@ export function AudioSync({ item, audio, tab, sections, bars }: Props) {
               placeholder="—"
               inputMode="decimal"
               onBlur={(e) => setPoint(bar, e.target.value.trim() ? parseClock(e.target.value) : null)}
-              className="h-11 w-20 rounded-xl border border-line bg-surface-2 px-2 text-center text-sm tabular-nums"
+              className="h-11 w-20 rounded-xl border border-line bg-surface px-2 text-center text-sm tabular-nums outline-none focus:border-accent"
             />
             <IconButton label="−0,1 с" onClick={() => p && setPoint(bar, Math.max(0, p.ms - 100))} disabled={!p}>
-              −
+              <Minus />
             </IconButton>
             <IconButton label="+0,1 с" onClick={() => p && setPoint(bar, p.ms + 100)} disabled={!p}>
-              +
+              <Plus />
             </IconButton>
-            <IconButton label="Отметить сейчас" onClick={() => setPoint(bar, now())}>
-              ⏱
+            <IconButton label="Отметить сейчас" onClick={() => setPoint(bar, now())} className="bg-accent/15 text-accent">
+              <Timer />
             </IconButton>
           </div>
         );
       })}
       {hidden > 0 && (
-        <button type="button" onClick={() => setShowAll(!showAll)} className="h-10 w-full rounded-xl bg-surface text-xs font-semibold text-muted">
+        <Button variant="ghost" size="sm" onClick={() => setShowAll(!showAll)} className="w-full text-xs">
+          {showAll ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           {showAll ? "Скрыть промежуточные отметки" : `Показать все отметки (ещё ${hidden})`}
-        </button>
+        </Button>
       )}
       <div className="flex items-center gap-2">
-        <input
+        <Input
           value={newBar}
           onChange={(e) => setNewBar(e.target.value)}
           inputMode="numeric"
           placeholder={`Ещё такт (1–${bars})`}
-          className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-surface-2 px-3 text-sm"
+          className="h-11 flex-1 rounded-xl bg-surface text-sm"
         />
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           onClick={() => {
             const bar = Number(newBar);
             if (bar >= 1 && bar <= bars) setPoint(bar, now());
             setNewBar("");
           }}
-          className="h-11 rounded-xl bg-surface-2 px-3 text-sm font-semibold"
+          className="h-11 rounded-xl bg-surface px-3"
         >
-          ⏱ Отметить
-        </button>
+          <Timer className="size-4" /> Отметить
+        </Button>
       </div>
     </div>
   );

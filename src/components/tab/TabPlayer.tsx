@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import * as alphaTab from "@coderline/alphatab";
+import { CircleAlert, LoaderCircle } from "lucide-react";
 import { useSettings, type TabView } from "@/store/settings";
 import { applyBackingTrack } from "@/lib/backingTrack";
 import type { SyncPoint } from "@/shared/types";
@@ -18,7 +19,6 @@ function applyView(score: alphaTab.model.Score, view: TabView) {
     }
   }
 }
-
 
 // Songsterr-style tab player on alphaTab: renders the tab, plays it with a guitar sound font,
 // moves a cursor and scrolls along. Playback is controlled from outside (`playing`), so a session
@@ -66,7 +66,25 @@ interface Props {
   control?: RefObject<PlayerControl | null>;
 }
 
-export default function TabPlayer({ tex, file, audio, sync, unrepeat, bpm, speed, playing, loopBars, track = 0, countIn = false, metronome = false, height = "50vh", onScore, onBlocked, onProgress, control }: Props) {
+export default function TabPlayer({
+  tex,
+  file,
+  audio,
+  sync,
+  unrepeat,
+  bpm,
+  speed,
+  playing,
+  loopBars,
+  track = 0,
+  countIn = false,
+  metronome = false,
+  height = "50vh",
+  onScore,
+  onBlocked,
+  onProgress,
+  control,
+}: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<alphaTab.AlphaTabApi | null>(null);
@@ -93,8 +111,12 @@ export default function TabPlayer({ tex, file, audio, sync, unrepeat, bpm, speed
     settings.core.fontDirectory = "/font/";
     settings.display.staveProfile = alphaTab.StaveProfile.Default;
     settings.display.scale = 1;
-    settings.display.resources.mainGlyphColor = alphaTab.model.Color.fromJson(getComputedStyle(document.documentElement).getPropertyValue("--text").trim() || "#000")!;
-    settings.display.resources.staffLineColor = alphaTab.model.Color.fromJson(getComputedStyle(document.documentElement).getPropertyValue("--muted").trim() || "#888")!;
+    settings.display.resources.mainGlyphColor = alphaTab.model.Color.fromJson(
+      getComputedStyle(document.documentElement).getPropertyValue("--text").trim() || "#000",
+    )!;
+    settings.display.resources.staffLineColor = alphaTab.model.Color.fromJson(
+      getComputedStyle(document.documentElement).getPropertyValue("--muted").trim() || "#888",
+    )!;
     settings.display.resources.barSeparatorColor = settings.display.resources.staffLineColor;
     settings.display.resources.barNumberColor = settings.display.resources.staffLineColor;
     settings.display.resources.scoreInfoColor = settings.display.resources.mainGlyphColor;
@@ -236,11 +258,18 @@ export default function TabPlayer({ tex, file, audio, sync, unrepeat, bpm, speed
         <div ref={host} className="at-host px-2" />
       </div>
       {(loading || (!ready && !error)) && (
-        <div className="pointer-events-none absolute inset-x-0 top-2 text-center text-xs text-muted">
-          {loading ? "Загружаю таб…" : "Загружаю звук гитары…"}
+        <div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center">
+          <span className="flex items-center gap-1.5 rounded-full bg-surface-2/90 px-3 py-1 text-xs text-muted shadow-sm backdrop-blur">
+            <LoaderCircle className="size-3.5 animate-spin" />
+            {loading ? "Загружаю таб…" : "Загружаю звук гитары…"}
+          </span>
         </div>
       )}
-      {error && <div className="absolute inset-x-0 top-2 px-3 text-center text-xs text-guide">Не удалось открыть таб: {error}</div>}
+      {error && (
+        <div className="absolute inset-x-3 top-2 flex items-center justify-center gap-1.5 rounded-xl bg-guide/15 px-3 py-1.5 text-center text-xs text-guide">
+          <CircleAlert className="size-4 shrink-0" /> Не удалось открыть таб: {error}
+        </div>
+      )}
     </div>
   );
 }

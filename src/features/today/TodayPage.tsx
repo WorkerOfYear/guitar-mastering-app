@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Card } from "@/components/ui";
+import { m } from "motion/react";
+import { ChevronRight, Clock, Dices, Music, Play, PlayCircle, Video } from "lucide-react";
+import { Badge, Button, Card } from "@/components/ui";
+import { BLOCK_ICON, IconTile } from "@/components/ui/icons";
 import { PageHeader, SettingsLink } from "@/components/ui/Placeholder";
 import { audio } from "@/audio/player";
 import { buildPlan } from "@/features/session/plan";
@@ -11,7 +14,21 @@ import { useSession } from "@/store/session";
 import { BLOCK_META, type Item } from "@/shared/types";
 
 /** What plays for an entry, shown next to it in the plan. */
-const mediaLabel = (item?: Item) => (item?.video ? "▶ видео" : item?.tab || item?.tabFile ? "♪ таб" : "");
+function MediaBadge({ item }: { item?: Item }) {
+  if (item?.video)
+    return (
+      <Badge variant="soft">
+        <Video /> видео
+      </Badge>
+    );
+  if (item?.tab || item?.tabFile)
+    return (
+      <Badge variant="soft">
+        <Music /> таб
+      </Badge>
+    );
+  return null;
+}
 
 export function TodayPage() {
   const data = useData();
@@ -31,52 +48,71 @@ export function TodayPage() {
 
   return (
     <div>
-      <PageHeader title="Главная" action={<SettingsLink />} />
+      <PageHeader
+        title="Главная"
+        subtitle={new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
+        action={<SettingsLink />}
+      />
       {active ? (
-        <Link to="/session" className="flex h-14 w-full items-center justify-center rounded-2xl bg-accent text-base font-bold text-on-accent">
-          ▶ Вернуться к занятию
-        </Link>
+        <Button asChild size="xl" className="w-full">
+          <Link to="/session">
+            <PlayCircle className="size-6" />
+            Вернуться к занятию
+          </Link>
+        </Button>
       ) : (
         <>
-          <div className="flex items-baseline justify-between px-1 pb-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">План занятия</h2>
-            <span className="text-xs text-muted">{total} мин</span>
+          <div className="flex items-center justify-between px-1 pb-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted">План занятия</h2>
+            <Badge variant="secondary">
+              <Clock /> {total} мин
+            </Badge>
           </div>
-          <div className="space-y-2">
-            {plan.map((b) => (
-              <Card key={b.kind}>
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">{BLOCK_META[b.kind].icon}</span>
-                  <div className="min-w-0 flex-1 font-semibold">{BLOCK_META[b.kind].title}</div>
-                  <span className="text-sm font-semibold text-muted">{b.minutes} мин</span>
-                </div>
-                <div className="mt-1.5 pl-10 text-sm text-muted">
-                  {b.improv ? (
-                    <ImprovLine improv={b.improv} onReroll={() => setSeed(seed + 1)} />
-                  ) : b.entries.length ? (
-                    <ul className="space-y-1">
-                      {b.entries.map((e) => {
-                        const item = data.items.find((i) => i.id === e.itemId);
-                        return (
-                          <li key={`${e.itemId}#${e.sectionId ?? ""}`}>
-                            <Link to={`/library/${e.itemId}`} className="flex items-center gap-2">
-                              <span className="min-w-0 flex-1 truncate">· {unitTitle(item, e.sectionId)}</span>
-                              <span className="shrink-0 text-xs text-accent">{mediaLabel(item)}</span>
-                            </Link>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  ) : (
-                    <span>Пусто</span>
-                  )}
-                </div>
-              </Card>
+          <div className="space-y-2.5">
+            {plan.map((b, i) => (
+              <m.div key={b.kind} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05, duration: 0.25 }}>
+                <Card>
+                  <div className="flex items-center gap-3">
+                    <IconTile icon={BLOCK_ICON[b.kind]} />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold leading-tight">{BLOCK_META[b.kind].title}</div>
+                      <div className="truncate text-xs text-muted">{BLOCK_META[b.kind].hint}</div>
+                    </div>
+                    <span className="shrink-0 text-sm font-semibold tabular-nums text-muted">{b.minutes} мин</span>
+                  </div>
+                  <div className="mt-3 text-sm">
+                    {b.improv ? (
+                      <ImprovLine improv={b.improv} onReroll={() => setSeed(seed + 1)} />
+                    ) : b.entries.length ? (
+                      <ul className="-mx-2">
+                        {b.entries.map((e) => {
+                          const item = data.items.find((i) => i.id === e.itemId);
+                          return (
+                            <li key={`${e.itemId}#${e.sectionId ?? ""}`}>
+                              <Link
+                                to={`/library/${e.itemId}`}
+                                className="flex min-h-10 items-center gap-2 rounded-xl px-2 py-1.5 transition-colors active:bg-surface-2"
+                              >
+                                <span className="min-w-0 flex-1 truncate">{unitTitle(item, e.sectionId)}</span>
+                                <MediaBadge item={item} />
+                                <ChevronRight className="size-4 shrink-0 text-muted" />
+                              </Link>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <span className="text-muted">Пусто</span>
+                    )}
+                  </div>
+                </Card>
+              </m.div>
             ))}
           </div>
-          <button type="button" onClick={begin} className="mt-4 h-16 w-full rounded-2xl bg-accent text-lg font-bold text-on-accent">
-            ▶ Старт
-          </button>
+          <Button size="xl" onClick={begin} className="mt-5 w-full text-lg">
+            <Play className="size-6" fill="currentColor" />
+            Старт
+          </Button>
           <p className="mt-2 text-center text-xs text-muted">Дальше всё само: отсчёт, упражнения и блоки переключаются по таймеру</p>
         </>
       )}
@@ -87,16 +123,21 @@ export function TodayPage() {
 function ImprovLine({ improv, onReroll }: { improv: { key: string; progressionId: string; challenge: string }; onReroll: () => void }) {
   const r = resolveProgression(improv.key, improv.progressionId);
   return (
-    <div className="flex items-start gap-2">
+    <div className="flex items-start gap-3 rounded-2xl bg-surface-2/60 p-3">
       <div className="min-w-0 flex-1">
-        <div>
-          {r.keyName}: {r.chords.map((c) => c.symbol).join(" – ")}
+        <div className="font-semibold">{r.keyName}</div>
+        <div className="mt-1 flex flex-wrap gap-1">
+          {r.chords.map((c, i) => (
+            <Badge key={i} variant="outline" className="font-mono">
+              {c.symbol}
+            </Badge>
+          ))}
         </div>
-        <div className="text-xs">{improv.challenge}</div>
+        <div className="mt-1.5 text-xs text-muted">{improv.challenge}</div>
       </div>
-      <button type="button" onClick={onReroll} className="shrink-0 rounded-lg bg-surface-2 px-2 py-1 text-base" aria-label="Другое задание">
-        🎲
-      </button>
+      <Button variant="secondary" size="icon" onClick={onReroll} aria-label="Другое задание" className="bg-surface">
+        <Dices />
+      </Button>
     </div>
   );
 }

@@ -1,7 +1,11 @@
 import { Suspense, lazy, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Navigate } from "react-router-dom";
+import { AnimatePresence, m } from "motion/react";
+import { Check, ChevronsRight, Metronome, Minus, Pause, Play, Plus, SkipBack, SkipForward, Volume2, X } from "lucide-react";
 import { CompactMetronome } from "@/components/metronome/MetronomePanel";
-import { IconButton } from "@/components/ui";
+import { Button, IconButton, Progress } from "@/components/ui";
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+import { BLOCK_ICON } from "@/components/ui/icons";
 import { YouTubePlayer } from "@/components/video/YouTubePlayer";
 import type { PlayerControl } from "@/components/tab/TabPlayer";
 import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
@@ -128,7 +132,10 @@ export function SessionPage() {
     stopMetronome();
     const log = session.finish();
     if (!log) return;
-    data.markPlayed(log.blocks.filter((b) => !b.skipped).flatMap((b) => b.entries), log.date);
+    data.markPlayed(
+      log.blocks.filter((b) => !b.skipped).flatMap((b) => b.entries),
+      log.date,
+    );
     data.addSession(log);
   }
 
@@ -161,14 +168,17 @@ export function SessionPage() {
   const playing = phase === "play";
   const nextTitle =
     slot.index < block.entries.length - 1
-      ? unitTitle(data.items.find((i) => i.id === block.entries[slot.index + 1].itemId), block.entries[slot.index + 1].sectionId)
+      ? unitTitle(
+          data.items.find((i) => i.id === block.entries[slot.index + 1].itemId),
+          block.entries[slot.index + 1].sectionId,
+        )
       : !isLast
         ? BLOCK_META[active.blocks[active.block + 1].kind].title
         : "Конец занятия";
   // Section first: "Intro — Technical Difficulties" stays readable when truncated.
   const section = findSection(item, entry?.sectionId);
-  const title =
-    block.kind === "improv" ? "Импровизация" : section ? `${section.title} — ${item?.title}` : item ? item.title : BLOCK_META[block.kind].title;
+  const BlockIcon = BLOCK_ICON[block.kind];
+  const title = block.kind === "improv" ? "Импровизация" : section ? `${section.title} — ${item?.title}` : item ? item.title : BLOCK_META[block.kind].title;
 
   return (
     <div className="pb-28">
@@ -176,29 +186,31 @@ export function SessionPage() {
       <div className="sticky top-0 z-10 -mx-4 bg-bg/95 px-4 pb-3 pt-2 backdrop-blur">
         <div className="flex gap-1.5">
           {active.blocks.map((b, i) => (
-            <div key={b.kind} className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
-              <div
-                className={`h-full ${i === active.block ? "bg-accent" : "bg-muted"}`}
-                style={{ width: `${Math.min(1, blockSeconds(active, i, now) / plannedSeconds(active, i)) * 100}%` }}
-              />
-            </div>
+            <Progress
+              key={b.kind}
+              aria-label={BLOCK_META[b.kind].title}
+              className="h-1.5 flex-1"
+              indicatorClassName={i === active.block ? "bg-accent" : "bg-muted"}
+              value={Math.min(1, blockSeconds(active, i, now) / plannedSeconds(active, i)) * 100}
+            />
           ))}
         </div>
-        <div className="mt-2 flex items-end gap-3">
+        <div className="mt-3 flex items-end gap-3">
           <div className="min-w-0 flex-1">
-            <div className="truncate text-xs text-muted">
-              {BLOCK_META[block.kind].icon} {BLOCK_META[block.kind].title}
-              {block.entries.length > 1 && ` · ${slot.index + 1} из ${block.entries.length}`} · блок {formatClock(planned - spent)}
+            <div className="flex items-center gap-1.5 truncate text-xs text-muted">
+              <BlockIcon className="size-3.5 shrink-0 text-accent" />
+              <span className="truncate">
+                {BLOCK_META[block.kind].title}
+                {block.entries.length > 1 && ` · ${slot.index + 1} из ${block.entries.length}`} · блок {formatClock(planned - spent)}
+              </span>
             </div>
-            <div className="truncate text-lg font-bold leading-tight">{title}</div>
+            <div className="mt-0.5 truncate text-lg font-bold leading-tight">{title}</div>
           </div>
-          <div className="text-right tabular-nums">
-            <div className="text-4xl font-bold leading-none">{formatClock(slot.end - spent)}</div>
+          <div className={`text-right text-4xl font-bold leading-none tabular-nums tracking-tight ${phase === "paused" ? "text-muted" : ""}`}>
+            {formatClock(slot.end - spent)}
           </div>
         </div>
-        <div className="mt-2 h-1 overflow-hidden rounded-full bg-surface-2">
-          <div className="h-full bg-accent" style={{ width: `${Math.min(1, (spent - slot.start) / (slot.end - slot.start || 1)) * 100}%` }} />
-        </div>
+        <Progress className="mt-2.5 h-1" value={Math.min(1, (spent - slot.start) / (slot.end - slot.start || 1)) * 100} />
       </div>
 
       <Stage block={block.kind} entry={entry} item={item} playing={playing} control={control} onBlocked={setBlocked} />
@@ -209,89 +221,137 @@ export function SessionPage() {
         </div>
       )}
 
-      <div className="mt-3 px-1 text-xs text-muted">Дальше: {nextTitle}</div>
+      <div className="mt-3 flex items-center gap-1.5 px-1 text-xs text-muted">
+        <ChevronsRight className="size-4 shrink-0" />
+        <span className="truncate">Дальше: {nextTitle}</span>
+      </div>
 
       {/* transport */}
-      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center gap-2 px-4 py-2">
+      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-line/70 bg-surface/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl">
+        <div className="mx-auto flex max-w-3xl items-center gap-2 px-4 py-2.5">
           <IconButton label="Завершить" onClick={() => setConfirmEnd(true)}>
-            ✕
+            <X />
           </IconButton>
           <IconButton label="Назад" onClick={back}>
-            ⏮
+            <SkipBack />
           </IconButton>
-          <button
-            type="button"
-            onClick={togglePause}
-            aria-label={phase === "paused" ? "Продолжить" : "Пауза"}
-            className="h-14 flex-1 rounded-2xl bg-accent text-2xl font-bold text-on-accent"
-          >
-            {phase === "paused" ? "▶" : "❚❚"}
-          </button>
+          <Button size="lg" onClick={togglePause} aria-label={phase === "paused" ? "Продолжить" : "Пауза"} className="flex-1">
+            {phase === "paused" ? <Play className="size-7" fill="currentColor" /> : <Pause className="size-7" fill="currentColor" />}
+          </Button>
           <IconButton label="Пропустить" onClick={skip}>
-            ⏭
+            <SkipForward />
           </IconButton>
           {entry && (
-            <IconButton label="Записать результат" onClick={() => setSheet(true)}>
-              ✓
+            <IconButton label="Записать результат" onClick={() => setSheet(true)} className="bg-good/15 text-good">
+              <Check />
             </IconButton>
           )}
         </div>
       </div>
 
-      {phase === "countdown" && (
-        <div className="fixed inset-0 z-30 flex flex-col items-center justify-center bg-bg/85 backdrop-blur-sm" onClick={togglePause}>
-          <div className="text-sm text-muted">{isFirstOfBlock ? `${BLOCK_META[block.kind].icon} ${BLOCK_META[block.kind].title}` : "Следующее упражнение"}</div>
-          <div className="mt-1 max-w-[90%] text-center text-2xl font-bold">{title}</div>
-          <div className="mt-6 text-8xl font-bold tabular-nums text-accent">{Math.max(1, count)}</div>
-          <div className="mt-6 text-xs text-muted">Нажми, чтобы поставить на паузу</div>
-        </div>
-      )}
+      <AnimatePresence>
+        {phase === "countdown" && (
+          <m.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-30 flex flex-col items-center justify-center bg-bg/85 backdrop-blur-md"
+            onClick={togglePause}
+          >
+            <div className="flex items-center gap-1.5 text-sm text-muted">
+              {isFirstOfBlock ? (
+                <>
+                  <BlockIcon className="size-4 text-accent" /> {BLOCK_META[block.kind].title}
+                </>
+              ) : (
+                "Следующее упражнение"
+              )}
+            </div>
+            <div className="mt-1 max-w-[90%] text-center text-2xl font-bold">{title}</div>
+            <div className="relative mt-8 flex size-40 items-center justify-center">
+              <m.div
+                key={`ring-${countKey}-${count}`}
+                className="absolute inset-0 rounded-full border-4 border-accent"
+                initial={{ scale: 0.7, opacity: 0.7 }}
+                animate={{ scale: 1.25, opacity: 0 }}
+                transition={{ duration: 0.9, ease: "easeOut" }}
+              />
+              <AnimatePresence mode="popLayout">
+                <m.div
+                  key={count}
+                  initial={{ scale: 1.6, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.6, opacity: 0 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                  className="text-9xl font-bold tabular-nums text-accent"
+                >
+                  {Math.max(1, count)}
+                </m.div>
+              </AnimatePresence>
+            </div>
+            <div className="mt-8 flex items-center gap-1.5 text-xs text-muted">
+              <Pause className="size-3.5" /> Нажми, чтобы поставить на паузу
+            </div>
+          </m.div>
+        )}
+      </AnimatePresence>
 
-      {blocked && playing && (
-        <button
-          type="button"
-          onClick={() => {
-            control.current?.resume();
-            setBlocked(false);
-          }}
-          className="fixed inset-x-4 bottom-24 z-20 h-16 rounded-2xl bg-guide text-base font-bold text-on-accent shadow-lg"
-        >
-          ▶ Нажми, чтобы включить звук
-        </button>
-      )}
+      <AnimatePresence>
+        {blocked && playing && (
+          <m.button
+            type="button"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            onClick={() => {
+              control.current?.resume();
+              setBlocked(false);
+            }}
+            className="fixed inset-x-4 bottom-24 z-20 flex h-16 items-center justify-center gap-2 rounded-2xl bg-guide text-base font-bold text-on-accent shadow-lg"
+          >
+            <Volume2 className="size-6" /> Нажми, чтобы включить звук
+          </m.button>
+        )}
+      </AnimatePresence>
 
-      {sheet && entry && (
-        <ResultSheet
-          entry={entry}
-          bpm={useMetronome.getState().bpm}
-          onClose={() => setSheet(false)}
-        />
-      )}
+      {entry && <ResultSheet open={sheet} entry={entry} bpm={useMetronome.getState().bpm} onClose={() => setSheet(false)} />}
 
-      {confirmEnd && (
-        <div className="fixed inset-0 z-40 flex items-end bg-black/50" onClick={() => setConfirmEnd(false)}>
-          <div className="mx-auto w-full max-w-3xl space-y-2 rounded-t-3xl bg-surface p-4 pb-[max(env(safe-area-inset-bottom),1rem)]" onClick={(e) => e.stopPropagation()}>
-            <div className="pb-1 font-bold">Завершить занятие?</div>
-            <button type="button" onClick={finish} className="h-12 w-full rounded-2xl bg-accent font-bold text-on-accent">
-              Сохранить и завершить
-            </button>
-            <button
-              type="button"
+      <Drawer open={confirmEnd} onOpenChange={setConfirmEnd}>
+        <DrawerContent>
+          <DrawerHeader>
+            <DrawerTitle>Завершить занятие?</DrawerTitle>
+            <DrawerDescription>Прошло {formatClock(active.blocks.reduce((sum, _, i) => sum + blockSeconds(active, i, now), 0))}</DrawerDescription>
+          </DrawerHeader>
+          <div className="space-y-2">
+            <Button
+              size="lg"
               onClick={() => {
+                setConfirmEnd(false);
+                finish();
+              }}
+              className="w-full"
+            >
+              <Check /> Сохранить и завершить
+            </Button>
+            <Button
+              size="lg"
+              variant="secondary"
+              onClick={() => {
+                setConfirmEnd(false);
                 stopMetronome();
                 session.cancel();
               }}
-              className="h-12 w-full rounded-2xl bg-surface-2 font-semibold text-guide"
+              className="w-full text-guide"
             >
               Отменить без сохранения
-            </button>
-            <button type="button" onClick={() => setConfirmEnd(false)} className="h-12 w-full rounded-2xl font-semibold text-muted">
+            </Button>
+            <Button size="lg" variant="ghost" onClick={() => setConfirmEnd(false)} className="w-full">
               Продолжить занятие
-            </button>
+            </Button>
           </div>
-        </div>
-      )}
+        </DrawerContent>
+      </Drawer>
     </div>
   );
 }
@@ -318,7 +378,8 @@ function Stage({ block, entry, item, playing, control, onBlocked }: StageProps) 
     );
   }
   if (item.tab) return <TabStage key={item.id} item={item} playing={playing} control={control} onBlocked={onBlocked} />;
-  if (item.tabFile) return <SongStage key={`${item.id}#${entry.sectionId ?? ""}`} item={item} entry={entry} playing={playing} control={control} onBlocked={onBlocked} />;
+  if (item.tabFile)
+    return <SongStage key={`${item.id}#${entry.sectionId ?? ""}`} item={item} entry={entry} playing={playing} control={control} onBlocked={onBlocked} />;
   return (
     <div className="space-y-3">
       <EntryCard entry={entry} />
@@ -331,11 +392,11 @@ function TempoBar({ label, onMinus, onPlus, extra }: { label: string; onMinus: (
   return (
     <div className="mt-2 flex items-center gap-2">
       <IconButton label="Медленнее" onClick={onMinus}>
-        −
+        <Minus />
       </IconButton>
-      <div className="flex-1 text-center text-lg font-bold tabular-nums">{label}</div>
+      <div className="flex h-11 flex-1 items-center justify-center rounded-2xl bg-surface-2/50 text-lg font-bold tabular-nums">{label}</div>
       <IconButton label="Быстрее" onClick={onPlus}>
-        +
+        <Plus />
       </IconButton>
       {extra}
     </div>
@@ -344,13 +405,9 @@ function TempoBar({ label, onMinus, onPlus, extra }: { label: string; onMinus: (
 
 function MetronomeToggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
   return (
-    <button
-      type="button"
-      onClick={() => onChange(!on)}
-      className={`h-11 rounded-2xl px-3 text-sm font-semibold ${on ? "bg-accent text-on-accent" : "bg-surface-2 text-muted"}`}
-    >
-      ♩ клик
-    </button>
+    <Button variant={on ? "default" : "secondary"} onClick={() => onChange(!on)} aria-pressed={on} className={`h-11 px-3 ${on ? "" : "text-muted"}`}>
+      <Metronome /> клик
+    </Button>
   );
 }
 
@@ -359,7 +416,7 @@ function TabStage({ item, playing, control, onBlocked }: { item: Item; playing: 
   const [click, setClick] = useState(true);
   return (
     <div>
-      <Suspense fallback={<div className="rounded-3xl border border-line bg-surface" style={{ height: TAB_HEIGHT }} />}>
+      <Suspense fallback={<div className="animate-pulse rounded-3xl border border-line bg-surface" style={{ height: TAB_HEIGHT }} />}>
         <TabPlayer tex={item.tab} height={TAB_HEIGHT} bpm={bpm} playing={playing} metronome={click} control={control} onBlocked={onBlocked} />
       </Suspense>
       <TempoBar
@@ -375,7 +432,19 @@ function TabStage({ item, playing, control, onBlocked }: { item: Item; playing: 
   );
 }
 
-function SongStage({ item, entry, playing, control, onBlocked }: { item: Item; entry: PlanEntry; playing: boolean; control: StageProps["control"]; onBlocked: (b: boolean) => void }) {
+function SongStage({
+  item,
+  entry,
+  playing,
+  control,
+  onBlocked,
+}: {
+  item: Item;
+  entry: PlanEntry;
+  playing: boolean;
+  control: StageProps["control"];
+  onBlocked: (b: boolean) => void;
+}) {
   const [file, setFile] = useState<ArrayBuffer | null | undefined>(undefined);
   const [audio, setAudio] = useState<ArrayBuffer | null>(null);
   const [audioLoaded, setAudioLoaded] = useState(false);
@@ -402,7 +471,7 @@ function SongStage({ item, entry, playing, control, onBlocked }: { item: Item; e
   return (
     <div>
       {ready && (
-        <Suspense fallback={<div className="rounded-3xl border border-line bg-surface" style={{ height: TAB_HEIGHT }} />}>
+        <Suspense fallback={<div className="animate-pulse rounded-3xl border border-line bg-surface" style={{ height: TAB_HEIGHT }} />}>
           <TabPlayer
             file={file!}
             audio={useRecording ? audio : null}
@@ -429,7 +498,9 @@ function SongStage({ item, entry, playing, control, onBlocked }: { item: Item; e
         <TabViewSwitch />
         {audio && <SourceSwitch recording={useRecording} onChange={setUseRecording} />}
       </div>
-      {section && !section.bars && <p className="mt-2 px-1 text-xs text-muted">Раздел не привязан к тактам — играет весь файл. Привязать можно в карточке песни.</p>}
+      {section && !section.bars && (
+        <p className="mt-2 px-1 text-xs text-muted">Раздел не привязан к тактам — играет весь файл. Привязать можно в карточке песни.</p>
+      )}
     </div>
   );
 }

@@ -1,5 +1,8 @@
 import { Link } from "react-router-dom";
+import { m } from "motion/react";
+import { CalendarCheck, Clock, Flame, Timer, Trophy, type LucideIcon } from "lucide-react";
 import { Card, SectionTitle } from "@/components/ui";
+import { BLOCK_ICON } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/Placeholder";
 import { addDays, formatDay, localDate, weekStart } from "@/lib/date";
 import { cleanBpm, unitTitle } from "@/lib/progress";
@@ -23,10 +26,10 @@ export function ProgressPage() {
     <div className="space-y-3">
       <PageHeader title="Прогресс" />
       <div className="grid grid-cols-2 gap-2">
-        <Tile value={weekStreak(sessions, practice, today)} label="недель подряд без пропусков" />
-        <Tile value={sessionStreak(sessions, practice, today)} label="занятий подряд" />
-        <Tile value={minutesBetween(sessions, monday, today)} label="минут на этой неделе" />
-        <Tile value={minutesBetween(sessions, monthStart, today)} label="минут в этом месяце" />
+        <Tile icon={CalendarCheck} value={weekStreak(sessions, practice, today)} label="недель подряд без пропусков" />
+        <Tile icon={Flame} value={sessionStreak(sessions, practice, today)} label="занятий подряд" />
+        <Tile icon={Timer} value={minutesBetween(sessions, monday, today)} label="минут на этой неделе" />
+        <Tile icon={Clock} value={minutesBetween(sessions, monthStart, today)} label="минут в этом месяце" />
       </div>
 
       <SectionTitle>Цели</SectionTitle>
@@ -49,9 +52,11 @@ export function ProgressPage() {
                   return (
                     <div key={s.id} className="min-w-0 flex-1" title={`${s.title}: ${clean ?? "—"}/${s.targetBpm ?? "—"}`}>
                       <div className="h-2.5 overflow-hidden rounded-full bg-surface-2">
-                        <div
+                        <m.div
                           className={`h-full rounded-full ${s.status === "rotation" ? "bg-good" : "bg-accent"}`}
-                          style={{ width: `${s.status === "rotation" ? 100 : pct * 100}%` }}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${s.status === "rotation" ? 100 : pct * 100}%` }}
+                          transition={{ duration: 0.6, ease: "easeOut" }}
                         />
                       </div>
                       <div className="mt-1 truncate text-[10px] text-muted">{s.title}</div>
@@ -71,27 +76,46 @@ export function ProgressPage() {
 
       <SectionTitle>Время по блокам в этом месяце</SectionTitle>
       <Card className="space-y-2">
-        {(Object.keys(byBlock) as BlockKind[]).map((k) => (
-          <div key={k} className="flex items-center gap-2 text-sm">
-            <span className="w-32 shrink-0 truncate">
-              {BLOCK_META[k].icon} {BLOCK_META[k].title}
-            </span>
-            <div className="h-3 flex-1 overflow-hidden rounded-r bg-surface-2">
-              <div className="h-full rounded-r bg-accent" style={{ width: `${(byBlock[k] / maxBlock) * 100}%` }} />
+        {(Object.keys(byBlock) as BlockKind[]).map((k) => {
+          const Icon = BLOCK_ICON[k];
+          return (
+            <div key={k} className="flex items-center gap-2 text-sm">
+              <span className="flex w-36 shrink-0 items-center gap-1.5 truncate">
+                <Icon className="size-4 shrink-0 text-accent" /> {BLOCK_META[k].title}
+              </span>
+              <div className="h-3 flex-1 overflow-hidden rounded-full bg-surface-2">
+                <m.div
+                  className="h-full rounded-full bg-accent"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(byBlock[k] / maxBlock) * 100}%` }}
+                  transition={{ duration: 0.6, ease: "easeOut" }}
+                />
+              </div>
+              <span className="w-14 shrink-0 text-right tabular-nums text-muted">{byBlock[k]} мин</span>
             </div>
-            <span className="w-14 shrink-0 text-right tabular-nums text-muted">{byBlock[k]} мин</span>
-          </div>
-        ))}
+          );
+        })}
       </Card>
 
       <SectionTitle>Рекорды за 2 недели</SectionTitle>
       <Card>
         {records.length === 0 ? (
-          <p className="text-sm text-muted">Рекорды появятся, когда ты сыграешь что-то чисто быстрее, чем раньше.</p>
+          <div className="flex items-center gap-3 text-sm text-muted">
+            <Trophy className="size-8 shrink-0 opacity-40" />
+            Рекорды появятся, когда ты сыграешь что-то чисто быстрее, чем раньше.
+          </div>
         ) : (
           records.map((r) => (
             <div key={r.at} className="flex items-center justify-between gap-2 py-1.5 text-sm">
-              <span className="min-w-0 truncate">{unitTitle(items.find((i) => i.id === r.itemId), r.sectionId)}</span>
+              <span className="flex min-w-0 items-center gap-2">
+                <Trophy className="size-4 shrink-0 text-accent" />
+                <span className="truncate">
+                  {unitTitle(
+                    items.find((i) => i.id === r.itemId),
+                    r.sectionId,
+                  )}
+                </span>
+              </span>
               <span className="shrink-0 tabular-nums">
                 <span className="text-muted">{r.note} → </span>
                 <b>{r.bpm}</b>
@@ -105,11 +129,13 @@ export function ProgressPage() {
   );
 }
 
-function Tile({ value, label }: { value: number; label: string }) {
+function Tile({ icon: Icon, value, label }: { icon: LucideIcon; value: number; label: string }) {
   return (
-    <Card>
-      <div className="text-3xl font-bold tabular-nums">{value}</div>
-      <div className="text-xs leading-tight text-muted">{label}</div>
+    <Card className="relative overflow-hidden">
+      <Icon className="absolute -right-2 -top-2 size-16 text-accent opacity-10" />
+      <Icon className="size-5 text-accent" />
+      <div className="mt-2 text-3xl font-bold tabular-nums leading-none tracking-tight">{value}</div>
+      <div className="mt-1 text-xs leading-tight text-muted">{label}</div>
     </Card>
   );
 }

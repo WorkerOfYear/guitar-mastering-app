@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { ScaleBoard, highlightOf } from "@/components/fretboard/ScaleBoard";
-import { Card, Chip, ScrollRow, SectionTitle } from "@/components/ui";
+import { Dices, ExternalLink, Lock, LockOpen, Play, Target } from "lucide-react";
+import { Button, Card, Chip, ScrollRow, SectionTitle } from "@/components/ui";
 import { strum } from "@/audio/player";
 import { chordTones, voicings } from "@/music/chords";
 import { buildPatterns, STANDARD_TUNING } from "@/music/fretboard";
@@ -29,10 +30,7 @@ export function ImprovPanel({ task, onChange }: Props) {
   const def = scaleById(scale.scaleId);
   const tones = scaleTones(scale.rootId, scale.scaleId);
   const base = def.patternBase ? scaleTones(scale.rootId, def.patternBase) : tones;
-  const patterns = useMemo(
-    () => buildPatterns(base, STANDARD_TUNING, { extra: def.patternBase ? tones : undefined }),
-    [scale.rootId, scale.scaleId],
-  );
+  const patterns = useMemo(() => buildPatterns(base, STANDARD_TUNING, { extra: def.patternBase ? tones : undefined }), [scale.rootId, scale.scaleId]);
   const chordSet = highlightOf(chordTones(chord.rootId, chord.type));
   const chordVoicings = voicings(chord.rootId, chord.type, STANDARD_TUNING).slice(0, 2);
 
@@ -63,20 +61,23 @@ export function ImprovPanel({ task, onChange }: Props) {
       <Card>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-2xl font-bold">{r.keyName}</div>
+            <div className="text-2xl font-bold tracking-tight">{r.keyName}</div>
             <div className="text-sm text-muted">{r.progression.name}</div>
           </div>
-          <button type="button" onClick={regenerate} className="h-12 shrink-0 rounded-2xl bg-accent px-4 font-bold text-on-accent">
-            🎲 Новое
-          </button>
+          <Button onClick={regenerate}>
+            <Dices /> Новое
+          </Button>
         </div>
         <div className="mt-3 flex gap-2 text-xs">
           <LockChip label="тональность" locked={lockKey} onToggle={() => setLockKey(!lockKey)} />
           <LockChip label="прогрессия" locked={lockProgression} onToggle={() => setLockProgression(!lockProgression)} />
         </div>
-        <div className="mt-3 rounded-2xl bg-surface-2 p-3 text-sm">
-          <span className="text-muted">Задание: </span>
-          <b>{task.challenge}</b>
+        <div className="mt-3 flex gap-2.5 rounded-2xl bg-accent/10 p-3 text-sm">
+          <Target className="mt-0.5 size-4 shrink-0 text-accent" />
+          <span>
+            <span className="text-muted">Задание: </span>
+            <b>{task.challenge}</b>
+          </span>
         </div>
       </Card>
 
@@ -102,9 +103,9 @@ export function ImprovPanel({ task, onChange }: Props) {
           {chord.scales
             .filter((s) => !r.overall.some((o) => o.rootId === s.rootId && o.scaleId === s.scaleId))
             .map((s) => (
-            <Chip key={s.scaleId} active={isPicked(s)} sub={`под ${chord.symbol}`} onClick={() => setScalePick(s)}>
-              {s.name}
-            </Chip>
+              <Chip key={s.scaleId} active={isPicked(s)} sub={`под ${chord.symbol}`} onClick={() => setScalePick(s)}>
+                {s.name}
+              </Chip>
             ))}
         </ScrollRow>
       </div>
@@ -124,26 +125,23 @@ export function ImprovPanel({ task, onChange }: Props) {
           <div className="text-sm">
             Проиграй аккорды по кругу, чтобы услышать гармонию.
             <div className="mt-2 flex flex-wrap gap-2">
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => {
                   r.chords.forEach((c, i) => {
                     const v = voicings(c.rootId, c.type, STANDARD_TUNING)[0];
                     if (v) setTimeout(() => strum(v.notes.map((n) => n.midi)), i * 900);
                   });
                 }}
-                className="h-10 rounded-xl bg-surface-2 px-3 font-semibold"
               >
-                ▶ Прослушать прогрессию
-              </button>
-              <a
-                href={youtubeBackingUrl(r.overall[0].rootId, r.overall[0].scaleId)}
-                target="_blank"
-                rel="noreferrer"
-                className="flex h-10 items-center rounded-xl bg-surface-2 px-3 font-semibold"
-              >
-                Бэкинг на YouTube ↗
-              </a>
+                <Play className="size-4" fill="currentColor" /> Прослушать прогрессию
+              </Button>
+              <Button asChild variant="secondary" size="sm">
+                <a href={youtubeBackingUrl(r.overall[0].rootId, r.overall[0].scaleId)} target="_blank" rel="noreferrer">
+                  Бэкинг на YouTube <ExternalLink className="size-4 text-muted" />
+                </a>
+              </Button>
             </div>
           </div>
         </Card>
@@ -157,9 +155,10 @@ function LockChip({ label, locked, onToggle }: { label: string; locked: boolean;
     <button
       type="button"
       onClick={onToggle}
-      className={`rounded-xl border px-2.5 py-1.5 font-medium ${locked ? "border-accent text-accent" : "border-line text-muted"}`}
+      aria-pressed={locked}
+      className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 font-medium transition-colors ${locked ? "border-accent bg-accent/10 text-accent" : "border-line text-muted"}`}
     >
-      {locked ? "🔒" : "🔓"} {label}
+      {locked ? <Lock className="size-3.5" /> : <LockOpen className="size-3.5" />} {label}
     </button>
   );
 }

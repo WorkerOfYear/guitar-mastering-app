@@ -1,22 +1,36 @@
-import { Chip, IconButton, ScrollRow, Toggle } from "@/components/ui";
+import { m as motion } from "motion/react";
+import { Hand, Minus, Play, Plus, Square, Volume2 } from "lucide-react";
+import { Card, Chip, IconButton, ScrollRow, Slider, Toggle, NumberField } from "@/components/ui";
+import { haptic } from "@/app/telegram";
 import { tapTempo, toggleMetronome } from "@/audio/metronome";
+import { cn } from "@/lib/utils";
 import { BPM_MAX, BPM_MIN, clampBpm, useMetronome } from "@/store/metronome";
 import { SUBDIVISION_META, type Subdivision } from "@/shared/types";
+
+export { NumberField } from "@/components/ui";
 
 const SUBDIVISIONS: Subdivision[] = [1, 2, 3, 4, 6];
 const SUB_SHORT: Record<Subdivision, string> = { 1: "♩", 2: "♫", 3: "3", 4: "16", 6: "6" };
 
-function BeatDots() {
+function BeatDots({ size = "md" }: { size?: "sm" | "md" }) {
   const { beats, beat, accent } = useMetronome();
   return (
     <div className="flex justify-center gap-2" aria-hidden>
-      {Array.from({ length: beats }, (_, i) => (
-        <span
-          key={i}
-          className="h-3.5 w-3.5 rounded-full transition-colors duration-75"
-          style={{ background: beat === i ? (i === 0 && accent ? "var(--root)" : "var(--chord)") : "var(--surface-2)" }}
-        />
-      ))}
+      {Array.from({ length: beats }, (_, i) => {
+        const on = beat === i;
+        return (
+          <motion.span
+            key={i}
+            className={cn("rounded-full", size === "sm" ? "size-3" : "size-4")}
+            animate={{ scale: on ? 1.35 : 1 }}
+            transition={{ type: "spring", stiffness: 700, damping: 22 }}
+            style={{
+              background: on ? (i === 0 && accent ? "var(--root)" : "var(--chord)") : "var(--surface-2)",
+              boxShadow: on ? `0 0 12px ${i === 0 && accent ? "var(--root)" : "var(--chord)"}` : undefined,
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -24,16 +38,41 @@ function BeatDots() {
 function PlayButton({ big }: { big?: boolean }) {
   const running = useMetronome((s) => s.running);
   return (
-    <button
+    <motion.button
       type="button"
-      onClick={toggleMetronome}
+      whileTap={{ scale: 0.92 }}
+      onClick={() => {
+        haptic();
+        toggleMetronome();
+      }}
       aria-label={running ? "Остановить метроном" : "Запустить метроном"}
-      className={`flex items-center justify-center rounded-full font-bold ${big ? "h-20 w-20 text-3xl" : "h-14 w-14 text-xl"} ${
-        running ? "bg-guide text-on-accent" : "bg-accent text-on-accent"
-      }`}
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-full text-on-accent outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/60",
+        big ? "size-20" : "size-14",
+        running ? "bg-guide shadow-[0_8px_24px_-8px_var(--guide)]" : "bg-accent glow-accent",
+      )}
     >
-      {running ? "■" : "▶"}
-    </button>
+      {running ? (
+        <Square className={big ? "size-7" : "size-5"} fill="currentColor" />
+      ) : (
+        <Play className={cn(big ? "size-8" : "size-6", "translate-x-0.5")} fill="currentColor" />
+      )}
+    </motion.button>
+  );
+}
+
+/** Tempo that pops a little on every change. */
+function BpmNumber({ bpm, className }: { bpm: number; className?: string }) {
+  return (
+    <motion.div
+      key={bpm}
+      initial={{ scale: 0.94, opacity: 0.6 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ duration: 0.15 }}
+      className={cn("font-bold tabular-nums leading-none tracking-tight", className)}
+    >
+      {bpm}
+    </motion.div>
   );
 }
 
@@ -42,44 +81,55 @@ export function MetronomePanel() {
   const m = useMetronome();
   const nudge = (d: number) => m.set({ bpm: clampBpm(m.bpm + d) });
   return (
-    <div className="space-y-5">
-      <div className="text-center">
-        <div className="text-7xl font-bold tabular-nums leading-none">{m.bpm}</div>
-        <div className="mt-1 text-sm text-muted">bpm · {SUBDIVISION_META[m.subdivision]}</div>
-      </div>
-      <BeatDots />
-      <div className="flex items-center justify-center gap-2">
-        <IconButton label="−5" onClick={() => nudge(-5)}>−5</IconButton>
-        <IconButton label="−1" onClick={() => nudge(-1)}>−1</IconButton>
-        <PlayButton big />
-        <IconButton label="+1" onClick={() => nudge(1)}>+1</IconButton>
-        <IconButton label="+5" onClick={() => nudge(5)}>+5</IconButton>
-      </div>
-      <input
-        type="range"
-        min={BPM_MIN}
-        max={BPM_MAX}
-        value={m.bpm}
-        onChange={(e) => m.set({ bpm: Number(e.target.value) })}
-        className="w-full accent-[var(--accent)]"
-        aria-label="Темп"
-      />
-      <button type="button" onClick={tapTempo} className="h-14 w-full rounded-2xl bg-surface-2 text-base font-semibold active:scale-[0.98]">
-        Tap — отстучи темп
-      </button>
+    <div className="space-y-4">
+      <Card className="space-y-5 py-6">
+        <div className="text-center">
+          <BpmNumber bpm={m.bpm} className="text-8xl" />
+          <div className="mt-2 text-sm text-muted">bpm · {SUBDIVISION_META[m.subdivision]}</div>
+        </div>
+        <BeatDots />
+        <div className="flex items-center justify-center gap-2">
+          <IconButton label="−5" onClick={() => nudge(-5)}>
+            −5
+          </IconButton>
+          <IconButton label="−1" onClick={() => nudge(-1)}>
+            <Minus />
+          </IconButton>
+          <PlayButton big />
+          <IconButton label="+1" onClick={() => nudge(1)}>
+            <Plus />
+          </IconButton>
+          <IconButton label="+5" onClick={() => nudge(5)}>
+            +5
+          </IconButton>
+        </div>
+        <Slider min={BPM_MIN} max={BPM_MAX} value={[m.bpm]} onValueChange={([bpm]) => m.set({ bpm })} aria-label="Темп" />
+        <motion.button
+          type="button"
+          whileTap={{ scale: 0.97 }}
+          onClick={() => {
+            haptic();
+            tapTempo();
+          }}
+          className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-line bg-surface-2/50 text-base font-semibold"
+        >
+          <Hand className="size-5 text-muted" />
+          Tap — отстучи темп
+        </motion.button>
+      </Card>
 
       <div>
-        <div className="pb-2 text-xs font-semibold uppercase tracking-wide text-muted">Доли в такте</div>
+        <div className="px-1 pb-2 text-xs font-semibold uppercase tracking-wider text-muted">Доли в такте</div>
         <ScrollRow>
           {[2, 3, 4, 5, 6, 7].map((b) => (
-            <Chip key={b} active={m.beats === b} onClick={() => m.set({ beats: b })}>
+            <Chip key={b} active={m.beats === b} onClick={() => m.set({ beats: b })} className="min-w-12">
               {b}
             </Chip>
           ))}
         </ScrollRow>
       </div>
       <div>
-        <div className="pb-2 text-xs font-semibold uppercase tracking-wide text-muted">Деление доли</div>
+        <div className="px-1 pb-2 text-xs font-semibold uppercase tracking-wider text-muted">Деление доли</div>
         <ScrollRow>
           {SUBDIVISIONS.map((s) => (
             <Chip key={s} active={m.subdivision === s} sub={SUBDIVISION_META[s]} onClick={() => m.set({ subdivision: s })}>
@@ -89,50 +139,31 @@ export function MetronomePanel() {
         </ScrollRow>
       </div>
 
-      <div className="rounded-3xl border border-line bg-surface px-3 py-1">
+      <Card className="divide-y divide-line/60 py-1">
         <Toggle label="Акцент на первую долю" checked={m.accent} onChange={(accent) => m.set({ accent })} />
         <Toggle label="Вспышка экрана на долю" checked={m.flash} onChange={(flash) => m.set({ flash })} />
-        <Toggle label="Speed trainer" checked={m.trainer.enabled} onChange={(enabled) => m.set({ trainer: { ...m.trainer, enabled } })} />
-        {m.trainer.enabled && (
-          <div className="grid grid-cols-3 gap-2 pb-3">
-            <NumberField label="+bpm" value={m.trainer.step} onChange={(step) => m.set({ trainer: { ...m.trainer, step } })} />
-            <NumberField label="каждые N тактов" value={m.trainer.everyBars} onChange={(everyBars) => m.set({ trainer: { ...m.trainer, everyBars } })} />
-            <NumberField label="до bpm" value={m.trainer.target} onChange={(target) => m.set({ trainer: { ...m.trainer, target } })} />
-          </div>
-        )}
-        <label className="flex items-center gap-3 py-2.5 text-sm">
-          Громкость
-          <input
-            type="range"
-            min={0.1}
-            max={1}
-            step={0.05}
-            value={m.volume}
-            onChange={(e) => m.set({ volume: Number(e.target.value) })}
-            className="flex-1 accent-[var(--accent)]"
+        <div>
+          <Toggle
+            label="Speed trainer"
+            hint="Темп растёт сам каждые N тактов"
+            checked={m.trainer.enabled}
+            onChange={(enabled) => m.set({ trainer: { ...m.trainer, enabled } })}
           />
-        </label>
-      </div>
+          {m.trainer.enabled && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="grid grid-cols-3 gap-2 overflow-hidden pb-3">
+              <NumberField label="+bpm" value={m.trainer.step} onChange={(step) => m.set({ trainer: { ...m.trainer, step } })} />
+              <NumberField label="каждые N тактов" value={m.trainer.everyBars} onChange={(everyBars) => m.set({ trainer: { ...m.trainer, everyBars } })} />
+              <NumberField label="до bpm" value={m.trainer.target} onChange={(target) => m.set({ trainer: { ...m.trainer, target } })} />
+            </motion.div>
+          )}
+        </div>
+        <div className="flex items-center gap-3 py-3 text-sm">
+          <Volume2 className="size-5 shrink-0 text-muted" aria-hidden />
+          <span className="shrink-0">Громкость</span>
+          <Slider min={0.1} max={1} step={0.05} value={[m.volume]} onValueChange={([volume]) => m.set({ volume })} aria-label="Громкость" />
+        </div>
+      </Card>
     </div>
-  );
-}
-
-export function NumberField({ label, value, onChange, min = 1 }: { label: string; value: number; onChange: (v: number) => void; min?: number }) {
-  return (
-    <label className="flex flex-col gap-1 text-[11px] text-muted">
-      {label}
-      <input
-        type="number"
-        inputMode="numeric"
-        min={min}
-        value={value}
-        onChange={(e) => {
-          const v = Number(e.target.value);
-          if (Number.isFinite(v) && v >= min) onChange(v);
-        }}
-        className="h-11 rounded-xl border border-line bg-surface-2 px-3 text-base text-fg"
-      />
-    </label>
   );
 }
 
@@ -141,34 +172,49 @@ export function CompactMetronome() {
   const m = useMetronome();
   const nudge = (d: number) => m.set({ bpm: clampBpm(m.bpm + d) });
   return (
-    <div className="rounded-3xl border border-line bg-surface p-3">
+    <Card className="p-3">
       <div className="flex items-center gap-2">
-        <IconButton label="−5" onClick={() => nudge(-5)}>−5</IconButton>
-        <IconButton label="−1" onClick={() => nudge(-1)}>−</IconButton>
+        <IconButton label="−5" onClick={() => nudge(-5)}>
+          −5
+        </IconButton>
+        <IconButton label="−1" onClick={() => nudge(-1)}>
+          <Minus />
+        </IconButton>
         <div className="flex-1 text-center">
-          <div className="text-3xl font-bold tabular-nums leading-none">{m.bpm}</div>
-          <div className="text-[11px] text-muted">{SUBDIVISION_META[m.subdivision]}</div>
+          <BpmNumber bpm={m.bpm} className="text-3xl" />
+          <div className="mt-0.5 text-[11px] text-muted">{SUBDIVISION_META[m.subdivision]}</div>
         </div>
-        <IconButton label="+1" onClick={() => nudge(1)}>+</IconButton>
-        <IconButton label="+5" onClick={() => nudge(5)}>+5</IconButton>
+        <IconButton label="+1" onClick={() => nudge(1)}>
+          <Plus />
+        </IconButton>
+        <IconButton label="+5" onClick={() => nudge(5)}>
+          +5
+        </IconButton>
         <PlayButton />
       </div>
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <BeatDots />
-        <div className="flex gap-1">
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <BeatDots size="sm" />
+        <div className="flex gap-1 rounded-xl bg-surface-2 p-0.5">
           {SUBDIVISIONS.map((s) => (
             <button
               key={s}
               type="button"
-              onClick={() => m.set({ subdivision: s })}
-              className={`h-8 min-w-8 rounded-lg px-1.5 text-xs font-semibold ${m.subdivision === s ? "bg-accent text-on-accent" : "bg-surface-2 text-muted"}`}
+              aria-label={SUBDIVISION_META[s]}
+              onClick={() => {
+                haptic();
+                m.set({ subdivision: s });
+              }}
+              className={cn(
+                "h-8 min-w-8 rounded-lg px-1.5 text-xs font-semibold transition-colors",
+                m.subdivision === s ? "bg-accent text-on-accent" : "text-muted",
+              )}
             >
               {SUB_SHORT[s]}
             </button>
           ))}
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 

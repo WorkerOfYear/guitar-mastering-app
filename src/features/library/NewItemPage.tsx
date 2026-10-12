@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, Chip, ScrollRow } from "@/components/ui";
+import { Plus } from "lucide-react";
+import { Button, Card, Chip, Input, Segmented, Textarea } from "@/components/ui";
+import { TYPE_ICON } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/Placeholder";
 import { useData } from "@/store/data";
 import { TYPE_META, type ItemStatus, type ItemType } from "@/shared/types";
@@ -40,46 +42,41 @@ export function NewItemPage() {
     <div className="space-y-3">
       <PageHeader title="Новый элемент" />
       <Card className="space-y-3">
-        <input
-          autoFocus
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Название, например «Лик из соло Mr. Big»"
-          className="h-12 w-full rounded-2xl border border-line bg-surface-2 px-4 text-base"
-        />
-        <ScrollRow>
-          {TYPES.map((t) => (
-            <Chip key={t} active={t === type} onClick={() => setType(t)}>
-              {TYPE_META[t].icon} {TYPE_META[t].title}
-            </Chip>
-          ))}
-        </ScrollRow>
+        <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Название, например «Лик из соло Mr. Big»" />
+        <div className="grid grid-cols-4 gap-2">
+          {TYPES.map((t) => {
+            const Icon = TYPE_ICON[t];
+            return (
+              <Chip key={t} active={t === type} onClick={() => setType(t)} className="h-auto px-1 py-2.5">
+                <span className="flex flex-col items-center gap-1 text-xs">
+                  <Icon className="!size-5" />
+                  {TYPE_META[t].title}
+                </span>
+              </Chip>
+            );
+          })}
+        </div>
         {type === "song" && (
-          <textarea
+          <Textarea
             value={sections}
             onChange={(e) => setSections(e.target.value)}
             rows={4}
             placeholder={"Разделы, по одному в строке:\nИнтро\nРифф\nСоло"}
-            className="w-full rounded-2xl border border-line bg-surface-2 p-4 text-base"
+            className="text-base"
           />
         )}
-        <ScrollRow>
-          <Chip active={status === "queue"} onClick={() => setStatus("queue")}>
-            В очередь
-          </Chip>
-          <Chip active={status === "active"} onClick={() => setStatus("active")}>
-            Сразу в работу
-          </Chip>
-        </ScrollRow>
+        <Segmented
+          value={status}
+          onChange={setStatus}
+          options={[
+            { value: "queue", label: "В очередь" },
+            { value: "active", label: "Сразу в работу" },
+          ]}
+        />
       </Card>
-      <button
-        type="button"
-        disabled={!title.trim()}
-        onClick={create}
-        className="h-14 w-full rounded-2xl bg-accent text-base font-bold text-on-accent disabled:opacity-40"
-      >
-        Создать
-      </button>
+      <Button size="lg" disabled={!title.trim()} onClick={create} className="w-full">
+        <Plus /> Создать
+      </Button>
     </div>
   );
 }

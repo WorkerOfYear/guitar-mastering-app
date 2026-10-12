@@ -1,10 +1,15 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { Settings } from "lucide-react";
+import { Button } from "./button";
 
-export function PageHeader({ title, action }: { title: string; action?: ReactNode }) {
+export function PageHeader({ title, subtitle, action }: { title: ReactNode; subtitle?: ReactNode; action?: ReactNode }) {
   return (
-    <header className="flex items-center justify-between gap-3 pb-3 pt-2">
-      <h1 className="text-2xl font-bold">{title}</h1>
+    <header className="flex items-center justify-between gap-3 pb-4 pt-2">
+      <div className="min-w-0">
+        <h1 className="truncate text-[1.75rem] font-bold leading-tight tracking-tight">{title}</h1>
+        {subtitle && <div className="text-sm text-muted">{subtitle}</div>}
+      </div>
       {action}
     </header>
   );
@@ -12,8 +17,10 @@ export function PageHeader({ title, action }: { title: string; action?: ReactNod
 
 export function SettingsLink() {
   return (
-    <Link to="/settings" aria-label="Настройки" className="flex h-11 w-11 items-center justify-center rounded-2xl bg-surface-2 text-xl">
-      ⚙️
-    </Link>
+    <Button asChild variant="secondary" size="icon" aria-label="Настройки">
+      <Link to="/settings">
+        <Settings />
+      </Link>
+    </Button>
   );
 }

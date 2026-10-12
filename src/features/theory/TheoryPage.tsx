@@ -51,7 +51,7 @@ export function TheoryPage() {
   return (
     <div className="space-y-3">
       <header className="flex items-center justify-between gap-3 pt-2">
-        <h1 className="text-2xl font-bold">Теория</h1>
+        <h1 className="text-[1.75rem] font-bold tracking-tight">Теория</h1>
         <div className="w-52">
           <Segmented
             value={tab}

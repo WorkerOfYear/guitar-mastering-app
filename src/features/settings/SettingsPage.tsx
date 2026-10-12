@@ -1,7 +1,11 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { Link } from "react-router-dom";
-import { NumberField } from "@/components/metronome/MetronomePanel";
-import { Card, Chip, ScrollRow, Segmented, SectionTitle, Toggle } from "@/components/ui";
+import { toast } from "sonner";
+import { BookOpen, ChevronRight, Download, Guitar, GraduationCap, Metronome, TrendingUp, Upload, type LucideIcon } from "lucide-react";
+import { Button, Card, NumberField, Segmented, SectionTitle, Toggle } from "@/components/ui";
+import { BLOCK_ICON } from "@/components/ui/icons";
+import { haptic } from "@/app/telegram";
+import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/Placeholder";
 import { localDate } from "@/lib/date";
 import { exportData, useData, type DataState } from "@/store/data";
@@ -10,12 +14,18 @@ import { BLOCK_META, type BlockKind } from "@/shared/types";
 import { SyncCard } from "./SyncCard";
 
 const DAY_LABELS = ["ВС", "ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ"];
+const SECTIONS: [string, string, LucideIcon][] = [
+  ["/library", "Библиотека", BookOpen],
+  ["/theory", "Теория", GraduationCap],
+  ["/progress", "Прогресс", TrendingUp],
+  ["/metronome", "Метроном", Metronome],
+  ["/improv", "Импровизация", Guitar],
+];
 
 export function SettingsPage() {
   const { fretboard, setFretboard } = useSettings();
   const { practice, setPractice, replaceAll } = useData();
   const file = useRef<HTMLInputElement>(null);
-  const [message, setMessage] = useState("");
 
   const download = () => {
     const blob = new Blob([JSON.stringify(exportData(), null, 2)], { type: "application/json" });
@@ -31,9 +41,9 @@ export function SettingsPage() {
       const data = JSON.parse(await f.text()) as DataState;
       if (!Array.isArray(data.items) || !Array.isArray(data.log)) throw new Error("bad");
       replaceAll(data);
-      setMessage(`Загружено: ${data.items.length} элементов, ${data.sessions?.length ?? 0} занятий`);
+      toast.success("Бэкап загружен", { description: `${data.items.length} элементов, ${data.sessions?.length ?? 0} занятий` });
     } catch {
-      setMessage("Не удалось прочитать файл — это точно бэкап этого приложения?");
+      toast.error("Не удалось прочитать файл", { description: "Это точно бэкап этого приложения?" });
     }
   };
 
@@ -42,16 +52,14 @@ export function SettingsPage() {
       <PageHeader title="Настройки" />
 
       <SectionTitle>Разделы</SectionTitle>
-      <Card className="grid grid-cols-2 gap-2">
-        {[
-          ["/library", "📚 Библиотека"],
-          ["/theory", "🎼 Теория"],
-          ["/progress", "📈 Прогресс"],
-          ["/metronome", "♩ Метроном"],
-          ["/improv", "🎶 Импровизация"],
-        ].map(([to, label]) => (
-          <Link key={to} to={to} className="flex h-12 items-center justify-center rounded-2xl bg-surface-2 text-sm font-semibold">
-            {label}
+      <Card className="divide-y divide-line/60 px-2 py-1">
+        {SECTIONS.map(([to, label, Icon]) => (
+          <Link key={to} to={to} onClick={haptic} className="flex h-14 items-center gap-3 rounded-xl px-2 transition-colors active:bg-surface-2">
+            <span className="flex size-9 items-center justify-center rounded-xl bg-accent/12 text-accent">
+              <Icon className="size-5" />
+            </span>
+            <span className="flex-1 font-semibold">{label}</span>
+            <ChevronRight className="size-4 text-muted" />
           </Link>
         ))}
       </Card>
@@ -59,34 +67,54 @@ export function SettingsPage() {
       <SectionTitle>Занятие</SectionTitle>
       <Card className="space-y-3">
         <div className="grid grid-cols-2 gap-2">
-          {(Object.keys(practice.blocks) as BlockKind[]).map((k) => (
-            <NumberField
-              key={k}
-              label={`${BLOCK_META[k].icon} ${BLOCK_META[k].title}, мин`}
-              value={practice.blocks[k]}
-              onChange={(v) => setPractice({ blocks: { ...practice.blocks, [k]: v } })}
-            />
-          ))}
+          {(Object.keys(practice.blocks) as BlockKind[]).map((k) => {
+            const Icon = BLOCK_ICON[k];
+            return (
+              <NumberField
+                key={k}
+                label={
+                  <span className="flex items-center gap-1">
+                    <Icon className="size-3.5 text-accent" /> {BLOCK_META[k].title}, мин
+                  </span>
+                }
+                value={practice.blocks[k]}
+                onChange={(v) => setPractice({ blocks: { ...practice.blocks, [k]: v } })}
+              />
+            );
+          })}
         </div>
         <div>
           <div className="pb-2 text-sm">Дни занятий</div>
-          <ScrollRow>
-            {[1, 2, 3, 4, 5, 6, 0].map((d) => (
-              <Chip
-                key={d}
-                active={practice.days.includes(d)}
-                onClick={() =>
-                  setPractice({ days: practice.days.includes(d) ? practice.days.filter((x) => x !== d) : [...practice.days, d].sort() })
-                }
-              >
-                {DAY_LABELS[d]}
-              </Chip>
-            ))}
-          </ScrollRow>
+          <div className="grid grid-cols-7 gap-1.5">
+            {[1, 2, 3, 4, 5, 6, 0].map((d) => {
+              const on = practice.days.includes(d);
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => {
+                    haptic();
+                    setPractice({ days: on ? practice.days.filter((x) => x !== d) : [...practice.days, d].sort() });
+                  }}
+                  className={cn(
+                    "aspect-square rounded-full text-xs font-bold transition-[background-color,color,transform] active:scale-90",
+                    on ? "bg-accent text-on-accent" : "bg-surface-2 text-muted",
+                  )}
+                >
+                  {DAY_LABELS[d]}
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <NumberField label="Нового за занятие" value={practice.maxNew} onChange={(maxNew) => setPractice({ maxNew })} />
-          <NumberField label="Минут на повторение элемента" value={practice.minutesPerReview} onChange={(minutesPerReview) => setPractice({ minutesPerReview })} />
+          <NumberField
+            label="Минут на повторение элемента"
+            value={practice.minutesPerReview}
+            onChange={(minutesPerReview) => setPractice({ minutesPerReview })}
+          />
         </div>
       </Card>
 
@@ -108,15 +136,14 @@ export function SettingsPage() {
       <SectionTitle>Бэкап</SectionTitle>
       <Card className="space-y-2">
         <div className="grid grid-cols-2 gap-2">
-          <button type="button" onClick={download} className="h-12 rounded-2xl bg-surface-2 text-sm font-semibold">
-            💾 Сохранить в файл
-          </button>
-          <button type="button" onClick={() => file.current?.click()} className="h-12 rounded-2xl bg-surface-2 text-sm font-semibold">
-            📂 Загрузить из файла
-          </button>
+          <Button variant="secondary" onClick={download}>
+            <Download className="size-4" /> Сохранить в файл
+          </Button>
+          <Button variant="secondary" onClick={() => file.current?.click()}>
+            <Upload className="size-4" /> Загрузить
+          </Button>
         </div>
         <input ref={file} type="file" accept="application/json,.json" hidden onChange={(e) => e.target.files?.[0] && restore(e.target.files[0])} />
-        {message && <p className="text-sm">{message}</p>}
       </Card>
     </div>
   );

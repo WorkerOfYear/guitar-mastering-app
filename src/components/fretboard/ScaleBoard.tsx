@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { Fretboard } from "./Fretboard";
 import { FullscreenBoard } from "./FullscreenBoard";
-import { Card, IconButton, Segmented } from "@/components/ui";
+import { ChevronLeft, ChevronRight, Maximize2, ZoomIn, ZoomOut } from "lucide-react";
+import { Button, Card, IconButton, Segmented } from "@/components/ui";
 import { playNote } from "@/audio/player";
 import { isGuideTone } from "@/music/chords";
 import { fretNotes, STRING_NAMES, type ChordHighlight, type FretNote, type Pattern } from "@/music/fretboard";
@@ -86,30 +87,30 @@ export function ScaleBoard({ title, subtitle, tones, chord, patterns, position: 
   }
 
   return (
-    <Card className="px-0 pb-2">
-      <div className="flex items-start justify-between gap-2 px-3">
+    <Card className="px-0 pb-3">
+      <div className="flex items-start justify-between gap-2 px-4">
         <div className="min-w-0">
           <div className="truncate text-lg font-bold">{title}</div>
           {subtitle && <div className="text-xs text-muted">{subtitle}</div>}
         </div>
         <div className="flex shrink-0 gap-1.5">
           <IconButton label="Во весь экран" onClick={() => setFullscreen(true)}>
-            ⤢
+            <Maximize2 className="size-4" />
           </IconButton>
           <IconButton label="Уменьшить" onClick={() => setFretboard({ zoom: Math.max(0.6, +(fretboard.zoom - 0.15).toFixed(2)) })}>
-            −
+            <ZoomOut className="size-4" />
           </IconButton>
           <IconButton label="Увеличить" onClick={() => setFretboard({ zoom: Math.min(1.6, +(fretboard.zoom + 0.15).toFixed(2)) })}>
-            +
+            <ZoomIn className="size-4" />
           </IconButton>
         </div>
       </div>
 
-      <div className="mt-2 flex flex-wrap gap-1.5 px-3">
+      <div className="mt-3 flex flex-wrap gap-1.5 px-4">
         {tones.map((t) => (
           <span
             key={t.name + t.interval.label}
-            className="rounded-lg px-2 py-1 text-xs font-semibold"
+            className="rounded-full px-2.5 py-1 text-xs font-semibold"
             style={{
               background: t.chroma === rootChroma ? "var(--root)" : "var(--surface-2)",
               color: t.chroma === rootChroma ? "var(--on-note)" : "var(--text)",
@@ -124,7 +125,7 @@ export function ScaleBoard({ title, subtitle, tones, chord, patterns, position: 
         <Fretboard {...boardProps} zoom={fretboard.zoom} />
       </div>
 
-      <div className="mt-1 min-h-6 px-3 text-sm">
+      <div className="mt-1 min-h-6 px-4 text-sm">
         {selected ? (
           <span>
             <b>{selected.name}</b>
@@ -140,19 +141,19 @@ export function ScaleBoard({ title, subtitle, tones, chord, patterns, position: 
         )}
       </div>
 
-      <div className="mt-2 flex items-center gap-2 px-3">
+      <div className="mt-2 flex items-center gap-2 px-4">
         <IconButton label="Предыдущая позиция" onClick={() => step(-1)}>
-          ‹
+          <ChevronLeft />
         </IconButton>
-        <button type="button" onClick={togglePosition} className="h-11 flex-1 rounded-2xl bg-surface-2 text-sm font-semibold">
+        <Button variant="secondary" onClick={togglePosition} className="h-11 flex-1">
           {positionLabel}
-        </button>
+        </Button>
         <IconButton label="Следующая позиция" onClick={() => step(1)}>
-          ›
+          <ChevronRight />
         </IconButton>
       </div>
 
-      <div className="mt-2 px-3">
+      <div className="mt-2 px-4">
         <Segmented size="sm" value={labelMode} onChange={(v) => setFretboard({ labelMode: v })} options={labelOptions} />
       </div>
 
@@ -173,7 +174,7 @@ function Legend({ hasChord, chordOnly }: { hasChord: boolean; chordOnly: boolean
     ...(chordOnly ? [] : [{ color: "transparent", label: "Лад", outline: true }]),
   ];
   return (
-    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 px-3 text-xs text-muted">
+    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 px-4 text-xs text-muted">
       {items.map((i) => (
         <span key={i.label} className="flex items-center gap-1.5">
           <span
