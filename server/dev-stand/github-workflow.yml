@@ -28,6 +28,7 @@ jobs:
       - run: npx tsc --noEmit
       - run: npm test
       - run: npm run build
+      - run: npm run build:stand-api
 
       - name: Copy the build to the server
         env:
@@ -45,4 +46,9 @@ jobs:
           $SSH "$USER@$HOST" "mkdir -p '$TARGET.new' && rm -rf '$TARGET.new'/*"
           rsync -az --delete -e "$SSH" dist/ "$USER@$HOST:$TARGET.new/"
           $SSH "$USER@$HOST" "rm -rf '$TARGET.old' && { [ ! -d '$TARGET' ] || mv '$TARGET' '$TARGET.old'; } && mv '$TARGET.new' '$TARGET'"
+          # Tab search for the stand: the bundled function next to dist, then restart its container.
+          API="${TARGET%/*}/api"
+          $SSH "$USER@$HOST" "mkdir -p '$API'"
+          rsync -az --delete -e "$SSH" dist-api/ "$USER@$HOST:$API/"
+          $SSH "$USER@$HOST" "docker restart guitar-dev-api >/dev/null" || echo "::warning::guitar-dev-api не перезапущен — на сервере: cd server/dev-stand && docker compose up -d"
           echo "Deployed $(git rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"

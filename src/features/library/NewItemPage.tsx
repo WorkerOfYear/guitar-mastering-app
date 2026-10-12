@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { FileMusic, Headphones, LoaderCircle, Plus, Upload, Video, X } from "lucide-react";
+import { FileMusic, Globe, Headphones, LoaderCircle, Plus, Upload, Video, X } from "lucide-react";
 import { Button, Card, Chip, Input } from "@/components/ui";
 import { haptic } from "@/app/telegram";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,7 @@ export function NewItemPage() {
   const [title, setTitle] = useState("");
   const [type, setType] = useState<ItemType>("technique");
   const [source, setSource] = useState<"video" | "audio">("video");
+  const [tabMode, setTabMode] = useState<"file" | "search">("search");
   const [videoUrl, setVideoUrl] = useState("");
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [tabFile, setTabFile] = useState<File | null>(null);
@@ -151,34 +152,44 @@ export function NewItemPage() {
           </FileField>
         )}
 
-        <div className="pt-2 font-semibold">Табы или ноты</div>
-        <FileField
-          icon={<FileMusic />}
-          file={tabFile}
-          accept={TAB_ACCEPT}
-          onFile={pick(
-            TAB_MAX,
-            (f) => {
-              setTabFile(f);
-              setType("song"); // its markers become the sections
-            },
-            "Файл больше 5 МБ — это точно таб?",
-          )}
-          onClear={() => setTabFile(null)}
-        >
-          Guitar Pro или MusicXML (.gp, .gp5, .gpx, .musicxml, .mxl)
-        </FileField>
+      </Card>
 
-        <div className="pt-2">
-          <div className="font-semibold">Найти в интернете</div>
-          <div className="text-xs text-muted">Табы с Songsterr и Ultimate Guitar, ноты на MuseScore. Отмеченные ссылки прикрепятся к элементу</div>
+      <Card className="space-y-3">
+        <div>
+          <div className="font-semibold">Табы или ноты</div>
+          <div className="text-xs text-muted">Свой файл или ссылки с сайтов табов</div>
         </div>
-        <TabSearch
-          query={videoQuery || finalTitle}
-          auto={!!videoQuery}
-          picked={tabLinks}
-          onToggle={(url) => setTabLinks((l) => (l.includes(url) ? l.filter((u) => u !== url) : [...l, url]))}
-        />
+        <div role="radiogroup" aria-label="Табы или ноты" className="grid grid-cols-2 gap-2">
+          <SourceTile active={tabMode === "file"} onClick={() => setTabMode("file")} icon={<Upload />} title="Загрузить" sub="Guitar Pro, MusicXML" />
+          <SourceTile active={tabMode === "search"} onClick={() => setTabMode("search")} icon={<Globe />} title="Найти в интернете" sub="Songsterr, UG, MuseScore" />
+        </div>
+        {/* Both stay mounted: switching back keeps the found results and the chosen file. */}
+        <div hidden={tabMode !== "file"}>
+          <FileField
+            icon={<FileMusic />}
+            file={tabFile}
+            accept={TAB_ACCEPT}
+            onFile={pick(
+              TAB_MAX,
+              (f) => {
+                setTabFile(f);
+                setType("song"); // its markers become the sections
+              },
+              "Файл больше 5 МБ — это точно таб?",
+            )}
+            onClear={() => setTabFile(null)}
+          >
+            Выбрать файл (.gp, .gp5, .gpx, .musicxml, .mxl)
+          </FileField>
+        </div>
+        <div hidden={tabMode !== "search"}>
+          <TabSearch
+            query={videoQuery || finalTitle}
+            auto={!!videoQuery}
+            picked={tabLinks}
+            onToggle={(url) => setTabLinks((l) => (l.includes(url) ? l.filter((u) => u !== url) : [...l, url]))}
+          />
+        </div>
       </Card>
 
       <Button size="lg" disabled={!finalTitle || videoError || busy} onClick={() => void create()} className="w-full">
@@ -188,7 +199,7 @@ export function NewItemPage() {
   );
 }
 
-/** One of the two play-along sources, picked like a radio button. */
+/** One of two options (play-along source, where the tab comes from), picked like a radio button. */
 function SourceTile({ active, onClick, icon, title, sub }: { active: boolean; onClick: () => void; icon: ReactNode; title: string; sub: string }) {
   return (
     <button
