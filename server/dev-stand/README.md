@@ -1,7 +1,7 @@
 # Тестовый стенд из ветки dev
 
-Пуш в `dev` → GitHub Actions (`.github/workflows/dev-stand.yml`, копия — `github-workflow.yml` рядом) проверяет код (tsc, тесты, сборка) и по SSH
-кладёт сборку в `/srv/guitar-dev/dist` на сервере. Caddy отдаёт её, туннель Cloudflare даёт https-адрес.
+Пуш в `dev` → GitHub Actions (`.github/workflows/dev-stand.yml`, копия — `github-workflow.yml` рядом) проверяет код (tsc, тесты),
+а `deploy.sh` собирает и по SSH кладёт сборку в `/srv/guitar-dev/dist` на сервере. Caddy отдаёт её, туннель Cloudflare даёт https-адрес.
 Рядом крутится контейнер `api` (`api.ts`): та же функция поиска табов `api/tabs.ts`, собранная в `dist-api/api.js`
 и выложенная в `/srv/guitar-dev/api`; Caddy отдаёт ему `/api/tabs`. Синхронизации и бота на стенде нет
 (им нужны хранилище и бот Vercel) — данные живут в браузере.
