@@ -1,4 +1,6 @@
 import type { SyncPoint } from "@/shared/types";
+import { CHROMA_FPS, scoreChroma, type ScoreNote } from "./chroma";
+import { refineBars } from "./beats";
 
 // The number crunching of auto-sync, kept free of alphaTab and the DOM so it can run in a Web Worker
 // (on a laptop it takes 10–20 s, which would freeze the page).
@@ -11,6 +13,10 @@ export interface ScoreTimeline {
   onsets: { ms: number; w: number }[];
   /** Start of each played bar (repeats included), in playback order */
   bars: { bar: number; occurrence: number; ms: number }[];
+  /** Every beat (tab ms, playback order), for the beat-by-beat refinement (beats.ts) */
+  beats?: number[];
+  /** Pitched notes, to compare by harmony (chroma.ts) */
+  notes?: ScoreNote[];
   /** Bars where the tab changes tempo: a recording may not change there, or by another amount */
   tempoBars?: number[];
   durationMs: number;
@@ -142,7 +148,7 @@ export interface AutoSyncResult {
  * Align the tab with the recording. `anchors` are bars to place sync points at (e.g. section starts);
  * by default every 4 bars.
  */
-export function align(timeline: ScoreTimeline, env: Float32Array, anchors?: number[]): AutoSyncResult {
+export function align(timeline: ScoreTimeline, env: Float32Array, anchors?: number[], chroma?: Float32Array): AutoSyncResult {
   const { onsets, bars } = timeline;
   const audioMs = (env.length / FPS) * 1000;
 
@@ -309,6 +315,60 @@ export function align(timeline: ScoreTimeline, env: Float32Array, anchors?: numb
   // Where every played bar (repeats included) lands in the recording.
   const mapped = bars.map((b) => ({ ...b, at: mapAt(b.ms) }));
 
+  // 3. Beat by beat (beats.ts): the recording's beats are found and paired with the tab's, by rhythm and
+  //    harmony, around the mapping above. A tempo model can't follow a band that plays a solo a couple of
+  //    bars shorter than the tab; this does, and gives every bar its own mark.
+  const byBeat = refineBars(timeline, env, FPS, mapAt, chroma);
+  // Kept only when the notes then meet the recording clearly better (by 5 %, attacks and harmony together)
+  // than with the mapping above: a recording with no steady pulse can throw the beat tracking off, and a
+  // near tie isn't worth it. Harmony matters: on a steady beat a section two bars off looks just as good by
+  // attacks alone.
+  const fit = (at: (k: number) => number) => {
+    let s = 0;
+    for (let k = 0; k + 1 < bars.length; k++) {
+      const a = bars[k];
+      const b = bars[k + 1];
+      const from = onsets.findIndex((o) => o.ms >= a.ms);
+      const to = onsets.findIndex((o) => o.ms >= b.ms);
+      if (from < 0 || b.ms <= a.ms) continue;
+      const r = (at(k + 1) - at(k)) / (b.ms - a.ms);
+      s += score_(env, onsets, at(k) - a.ms * r, r, from, to < 0 ? onsets.length : to);
+    }
+    return s;
+  };
+  const before = fit((k) => mapped[k].at);
+  const after = byBeat.every((t) => Number.isFinite(t)) ? fit((k) => byBeat[k]) : -1;
+  // And by harmony: how alike the tab's and the recording's pitch classes are along each mapping.
+  const sc = chroma && timeline.notes?.length ? scoreChroma(timeline.notes, timeline.durationMs) : null;
+  const harmony = (at: (k: number) => number) => {
+    if (!sc || !chroma) return 1;
+    let s = 0;
+    let n = 0;
+    for (let k = 0; k + 1 < bars.length; k++) {
+      const a = bars[k];
+      const b = bars[k + 1];
+      for (let t = a.ms; t < b.ms; t += 1000 / CHROMA_FPS) {
+        const f = Math.round((t / 1000) * CHROMA_FPS);
+        const g = Math.round(((at(k) + ((at(k + 1) - at(k)) * (t - a.ms)) / (b.ms - a.ms)) / 1000) * CHROMA_FPS);
+        if (f < 0 || f * 12 >= sc.length || g < 0 || g * 12 >= chroma.length) continue;
+        let d = 0;
+        let e = 0;
+        for (let c = 0; c < 12; c++) {
+          d += sc[f * 12 + c] * chroma[g * 12 + c];
+          e += sc[f * 12 + c];
+        }
+        if (e === 0) continue; // nothing pitched in the tab here (drums only, a rest)
+        s += d;
+        n++;
+      }
+    }
+    return n ? s / n : 1;
+  };
+  const hBefore = harmony((k) => mapped[k].at);
+  const hAfter = after >= 0 ? harmony((k) => byBeat[k]) : 0;
+  const beatByBeat = after > 0 && (after / before) * (hAfter / hBefore) > 1.05;
+  if (beatByBeat) mapped.forEach((b, k) => (b.at = byBeat[k]));
+
   // A repeat the recording doesn't play (the intro once instead of twice) shows up as bars before 0:00.
   // Then the first pass gets the recording's times, the pass it lacks is dropped, and the repeat is
   // switched off for playback with the recording (`unrepeat`), so the notes follow the band's order.
@@ -330,7 +390,7 @@ export function align(timeline: ScoreTimeline, env: Float32Array, anchors?: numb
   const isAnchor = new Set(anchorBars);
   const points: SyncPoint[] = [];
   played.forEach((b, i) => {
-    if (i >= keep && !isAnchor.has(b.bar)) return;
+    if (i >= keep && !beatByBeat && !isAnchor.has(b.bar)) return;
     const ms = Math.round(b.at);
     if (ms < 0 || ms >= audioMs || (points.length && ms <= points[points.length - 1].ms)) return;
     points.push(b.occurrence ? { bar: b.bar, occurrence: b.occurrence, ms } : { bar: b.bar, ms });

@@ -1,5 +1,6 @@
 import * as alphaTab from "@coderline/alphatab";
 import { FPS, type AutoSyncResult, type ScoreTimeline } from "./align";
+import type { ScoreNote } from "./chroma";
 
 // Automatic alignment of a recording with its tab.
 //  1. Where should notes sound? Note-on times from the score's MIDI (all tracks, drums weighted most).
@@ -7,6 +8,8 @@ import { FPS, type AutoSyncResult, type ScoreTimeline } from "./align";
 //  3. Find candidate offsets and tempo factors that line both up, then follow the recording piece by piece
 //     (every 4 bars and at the tab's tempo changes), each piece with a tempo of its own, so a live performance
 //     that drifts, or a band that plays a tempo change differently from the tab, still matches.
+//  4. Beat by beat (beats.ts): track the recording's beats and pair them with the tab's by rhythm and
+//     harmony, so a section the band plays shorter or longer than the tab is followed too; every bar gets a mark.
 
 export function scoreTimeline(score: alphaTab.model.Score): ScoreTimeline {
   const midi = new alphaTab.midi.MidiFile();
@@ -43,6 +46,26 @@ export function scoreTimeline(score: alphaTab.model.Score): ScoreTimeline {
     .sort((a, b) => a[0] - b[0])
     .map(([tick, w]) => ({ ms: toMs(tick), w: Math.log1p(w) }));
 
+  // Pitched notes with their length (drums only count as onsets).
+  ti = 0;
+  const notes: ScoreNote[] = [];
+  const ringing = new Map<number, number[]>(); // channel·key → start ticks
+  for (const e of midi.events) {
+    if (e.type !== alphaTab.midi.MidiEventType.NoteOn && e.type !== alphaTab.midi.MidiEventType.NoteOff) continue;
+    const n = e as alphaTab.midi.NoteOnEvent;
+    if (n.channel === 9) continue;
+    const id = n.channel * 128 + n.noteKey;
+    if (e.type === alphaTab.midi.MidiEventType.NoteOn && n.noteVelocity > 0) ringing.set(id, [...(ringing.get(id) ?? []), e.tick]);
+    else {
+      const start = ringing.get(id)?.shift();
+      if (start !== undefined) notes.push({ ms: start, end: e.tick, key: n.noteKey });
+    }
+  }
+  notes.sort((a, b) => a.ms - b.ms);
+  for (const n of notes) n.ms = toMs(n.ms);
+  ti = 0;
+  for (const n of [...notes].sort((a, b) => a.end - b.end)) n.end = toMs(n.end);
+
   ti = 0;
   const seen = new Map<number, number>();
   const bars = generator.tickLookup.masterBars.map((m) => {
@@ -51,6 +74,15 @@ export function scoreTimeline(score: alphaTab.model.Score): ScoreTimeline {
     seen.set(bar, occurrence + 1);
     return { bar, occurrence, ms: toMs(m.start) };
   });
+  // Every beat in playback order: quarter notes (or dotted quarters in 6/8, 9/8, 12/8).
+  ti = 0;
+  const beats: number[] = [];
+  for (const m of generator.tickLookup.masterBars) {
+    const { timeSignatureNumerator: num, timeSignatureDenominator: den } = m.masterBar;
+    const count = den === 8 && num % 3 === 0 ? num / 3 : den === 8 ? num / 2 : num;
+    const n = Math.max(1, Math.round(count));
+    for (let k = 0; k < n; k++) beats.push(toMs(m.start + ((m.end - m.start) * k) / n));
+  }
   const lastBar = generator.tickLookup.masterBars.at(-1);
   // Bars the tab changes tempo in (each bar once, at its first pass).
   const tempoBars = [
@@ -63,7 +95,7 @@ export function scoreTimeline(score: alphaTab.model.Score): ScoreTimeline {
     ),
   ];
   ti = 0;
-  return { onsets, bars, tempoBars, durationMs: lastBar ? toMs(lastBar.end) : (onsets.at(-1)?.ms ?? 0) };
+  return { onsets, notes, beats, bars, tempoBars, durationMs: lastBar ? toMs(lastBar.end) : (onsets.at(-1)?.ms ?? 0) };
 }
 
 /**
