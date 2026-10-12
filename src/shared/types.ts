@@ -17,6 +17,8 @@ export interface Section {
 
 export interface SyncPoint {
   bar: number;
+  /** Which pass through a repeated bar (0 = first, omitted for 0) */
+  occurrence?: number;
   ms: number;
 }
 

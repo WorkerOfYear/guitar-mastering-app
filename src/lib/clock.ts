@@ -8,6 +8,6 @@ export function parseClock(text: string): number | null {
 }
 
 export const formatClockMs = (ms: number) => {
-  const s = ms / 1000;
-  return `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
+  const s = Math.abs(ms) / 1000;
+  return `${ms < 0 ? "−" : ""}${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 };

@@ -15,13 +15,13 @@ export function applyBackingTrack(score: alphaTab.model.Score, audio: Uint8Array
   for (const bar of score.masterBars) bar.syncPoints = undefined;
   const valid = [...(points.length ? points : [{ bar: 1, ms: 0 }])]
     .filter((p) => p.bar >= 1 && p.bar <= score.masterBars.length && p.ms >= 0)
-    .sort((a, b) => a.bar - b.bar);
+    .sort((a, b) => a.bar - b.bar || (a.occurrence ?? 0) - (b.occurrence ?? 0));
   for (const p of valid) {
     const a = new alphaTab.model.Automation();
     a.type = alphaTab.model.AutomationType.SyncPoint;
     a.ratioPosition = 0;
     const data = new alphaTab.model.SyncPointData();
-    data.barOccurence = 0;
+    data.barOccurence = p.occurrence ?? 0;
     data.millisecondOffset = p.ms;
     a.syncPointValue = data;
     score.masterBars[p.bar - 1].addSyncPoint(a);

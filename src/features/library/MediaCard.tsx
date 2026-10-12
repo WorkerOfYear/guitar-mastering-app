@@ -205,7 +205,7 @@ export function MediaCard({ item }: { item: Item }) {
               Разделы из меток файла ({score.sections.map((s) => s.title).join(", ")})
             </button>
           )}
-          {item.audioFile && audioData ? (
+          {item.audioFile && audioData && file ? (
             <div className="space-y-2 rounded-2xl bg-surface-2 p-3">
               <div className="flex items-center justify-between gap-2 text-sm">
                 <span className="min-w-0 truncate">🎧 {item.audioFile.name}</span>
@@ -213,7 +213,7 @@ export function MediaCard({ item }: { item: Item }) {
                   Удалить запись
                 </button>
               </div>
-              <AudioSync item={item} audio={audioData} sections={score?.sections ?? []} bars={score?.bars ?? 1} />
+              <AudioSync item={item} audio={audioData} tab={file!} sections={score?.sections ?? []} bars={score?.bars ?? 1} />
             </div>
           ) : (
             <label className="flex h-12 cursor-pointer items-center justify-center rounded-2xl border border-dashed border-line px-3 text-center text-sm font-semibold">
