@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { FileMusic, Headphones, LoaderCircle, Plus, Upload, Video, X } from "lucide-react";
@@ -7,6 +7,7 @@ import { TYPE_ICON } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/Placeholder";
 import { parseYouTube, AUDIO_ACCEPT, AUDIO_MAX, TAB_ACCEPT, TAB_MAX } from "./MediaCard";
 import { saveAudioFile, saveTabFile } from "@/lib/tabFiles";
+import { fileTitle, youtubeTitle } from "@/lib/titles";
 import { useData } from "@/store/data";
 import { TYPE_META, type ItemStatus, type ItemType } from "@/shared/types";
 
@@ -23,17 +24,35 @@ export function NewItemPage() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [tabFile, setTabFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  // Once the user types a title, suggestions no longer overwrite it.
+  const [titleTouched, setTitleTouched] = useState(false);
+  const [videoTitle, setVideoTitle] = useState<string | null>(null);
 
   const video = videoUrl.trim() ? parseYouTube(videoUrl) : null;
   const videoError = !!videoUrl.trim() && !video;
   const itemType = type;
 
+  // No title typed: take the video's title, else the recording's or the tab's file name.
+  useEffect(() => {
+    setVideoTitle(null);
+    if (!video || source !== "video") return;
+    const ctl = new AbortController();
+    void youtubeTitle(videoUrl.trim(), ctl.signal).then((t) => !ctl.signal.aborted && setVideoTitle(t));
+    return () => ctl.abort();
+  }, [video?.youtubeId, source]);
+  const suggestion =
+    (source === "video" && videoTitle) || (source === "audio" && audioFile && fileTitle(audioFile.name)) || (tabFile && fileTitle(tabFile.name)) || "";
+  useEffect(() => {
+    if (!titleTouched) setTitle(suggestion);
+  }, [suggestion]);
+  const finalTitle = title.trim() || suggestion;
+
   const create = async () => {
-    if (!title.trim() || videoError) return;
+    if (!finalTitle || videoError) return;
     setBusy(true);
     try {
       const id = addItem({
-        title: title.trim(),
+        title: finalTitle,
         type: itemType,
         status,
         links: video && source === "video" ? [videoUrl.trim()] : [],
@@ -62,7 +81,15 @@ export function NewItemPage() {
     <div className="space-y-3">
       <PageHeader title="Новый элемент" />
       <Card className="space-y-3">
-        <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Название, например «Лик из соло Mr. Big»" />
+        <Input
+          autoFocus
+          value={title}
+          onChange={(e) => {
+            setTitle(e.target.value);
+            setTitleTouched(!!e.target.value);
+          }}
+          placeholder={suggestion || "Название — или возьмётся из видео либо файла"}
+        />
         <div className="grid grid-cols-4 gap-2">
           {TYPES.map((t) => {
             const Icon = TYPE_ICON[t];
@@ -156,7 +183,7 @@ export function NewItemPage() {
           { value: "active", label: "Сразу в работу" },
         ]}
       />
-      <Button size="lg" disabled={!title.trim() || videoError || busy} onClick={() => void create()} className="w-full">
+      <Button size="lg" disabled={!finalTitle || videoError || busy} onClick={() => void create()} className="w-full">
         {busy ? <LoaderCircle className="animate-spin" /> : <Plus />} Создать
       </Button>
     </div>
