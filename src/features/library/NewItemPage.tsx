@@ -9,7 +9,7 @@ import { parseYouTube, AUDIO_ACCEPT, AUDIO_MAX, TAB_ACCEPT, TAB_MAX } from "./Me
 import { saveAudioFile, saveTabFile } from "@/lib/tabFiles";
 import { fileTitle, youtubeTitle } from "@/lib/titles";
 import { useData } from "@/store/data";
-import { TYPE_META, type ItemStatus, type ItemType } from "@/shared/types";
+import { TYPE_META, type ItemType } from "@/shared/types";
 
 const TYPES: ItemType[] = ["technique", "song", "lick", "theory"];
 
@@ -18,7 +18,6 @@ export function NewItemPage() {
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [type, setType] = useState<ItemType>("technique");
-  const [status, setStatus] = useState<ItemStatus>("queue");
   const [source, setSource] = useState<"video" | "audio">("video");
   const [videoUrl, setVideoUrl] = useState("");
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -54,7 +53,8 @@ export function NewItemPage() {
       const id = addItem({
         title: finalTitle,
         type: itemType,
-        status,
+        // No queue/active choice any more: what gets played is set in the plan builder.
+        status: "active",
         links: video && source === "video" ? [videoUrl.trim()] : [],
         ...(itemType === "technique" || itemType === "lick" ? { startBpm: 60, targetBpm: 120, subdivision: 4 as const } : {}),
         ...(itemType === "song" ? { sections: [] } : {}),
@@ -175,14 +175,6 @@ export function NewItemPage() {
         {tabFile && <p className="px-1 text-xs text-muted">Разделы песни возьмутся из меток файла — их можно будет переименовать или удалить.</p>}
       </Card>
 
-      <Segmented
-        value={status}
-        onChange={setStatus}
-        options={[
-          { value: "queue", label: "В очередь" },
-          { value: "active", label: "Сразу в работу" },
-        ]}
-      />
       <Button size="lg" disabled={!finalTitle || videoError || busy} onClick={() => void create()} className="w-full">
         {busy ? <LoaderCircle className="animate-spin" /> : <Plus />} Создать
       </Button>
