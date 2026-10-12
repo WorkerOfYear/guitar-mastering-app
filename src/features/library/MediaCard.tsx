@@ -175,6 +175,7 @@ export function MediaCard({ item }: { item: Item }) {
               file={file ?? undefined}
               audio={file && useRecording ? audioData : null}
               sync={item.audioSync}
+              unrepeat={item.audioUnrepeat}
               bpm={file ? undefined : (item.startBpm ?? undefined)}
               playing={playing}
               track={track}

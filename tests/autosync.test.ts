@@ -55,7 +55,7 @@ describe("auto sync", () => {
     expect(Math.abs(r.offsetMs - offset)).toBeLessThan(40);
     expect(Math.abs(r.scale - scale)).toBeLessThan(0.004);
     const errs = r.points.map((p) => {
-      const bar = timeline.bars.find((b) => b.bar === p.bar && b.occurrence === 0)!;
+      const bar = timeline.bars.find((b) => b.bar === p.bar && b.occurrence === (p.occurrence ?? 0))!;
       return Math.abs(p.ms - (offset + bar.ms * scale + driftAt(bar.ms, half, drift, timeline.durationMs)));
     });
     expect(Math.max(...errs)).toBeLessThan(60);
@@ -73,7 +73,7 @@ describe("auto sync", () => {
     expect(Math.abs(r.scale - 1.02)).toBeLessThan(0.004);
     // every point should land where the bar really is in the fake recording
     for (const p of r.points) {
-      const bar = timeline.bars.find((b) => b.bar === p.bar && b.occurrence === 0)!;
+      const bar = timeline.bars.find((b) => b.bar === p.bar && b.occurrence === (p.occurrence ?? 0))!;
       const truth = 3500 + bar.ms * 1.02 + driftAt(bar.ms, half, 300, timeline.durationMs);
       expect(Math.abs(p.ms - truth), `bar ${p.bar}`).toBeLessThan(60);
     }
@@ -104,18 +104,19 @@ describe("a repeat the recording plays once", () => {
     const r = align(timeline, env);
 
     expect(r.skippedRepeat).toBe(true);
+    expect(r.unrepeat).toEqual([2]);
+    expect(r.points.some((p) => p.occurrence)).toBe(false);
     expect(Math.abs((r.bar1Ms ?? 0) - 1500)).toBeLessThan(60);
-    // After applying the points, alphaTab should reach bar 3 when the recording does.
-    applyBackingTrack(score, null, r.points);
+
+    // With the repeat switched off, alphaTab plays 1, 2, 3… and every bar lands where the band plays it.
+    applyBackingTrack(score, null, r.points, r.unrepeat);
     const synced = alphaTab.midi.MidiFileGenerator.generateSyncPoints(score);
-    const at = (index: number, occurrence: number) => synced.find((p) => p.masterBarIndex === index && p.masterBarOccurence === occurrence)?.syncTime ?? NaN;
-    const bar3InRecording = 1500 + (timeline.bars[4].ms - passMs);
-    expect(Math.abs(at(4, 0) - (1500 + (timeline.bars[6].ms - passMs)))).toBeLessThan(80); // bar 5 lines up
-    expect(at(0, 0)).toBeCloseTo(r.bar1Ms!, -1); // first pass of bar 1 = the intro in the recording
-    expect(bar3InRecording - at(0, 1)).toBeLessThan(20); // the missing second pass is squashed right before bar 3
-    // …and bar 3 has its own mark, so bars 3–4 keep the recording's tempo instead of absorbing the squash
-    expect(Math.abs(at(2, 0) - bar3InRecording)).toBeLessThan(80);
-    const bar3 = synced.find((p) => p.masterBarIndex === 2 && p.masterBarOccurence === 0)!;
+    expect(synced.some((p) => p.masterBarOccurence > 0 && p.masterBarIndex < 2)).toBe(false);
+    const at = (index: number) => synced.find((p) => p.masterBarIndex === index && p.masterBarOccurence === 0)?.syncTime ?? NaN;
+    const inRecording = (playedIndex: number) => 1500 + (timeline.bars[playedIndex].ms - passMs); // bars after the dropped pass
+    expect(Math.abs(at(2) - inRecording(4))).toBeLessThan(80); // bar 3
+    expect(Math.abs(at(4) - inRecording(6))).toBeLessThan(80); // bar 5
+    const bar3 = synced.find((p) => p.masterBarIndex === 2)!;
     expect(Math.abs(bar3.syncBpm - 130)).toBeLessThan(5);
   });
 });

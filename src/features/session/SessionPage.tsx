@@ -407,6 +407,7 @@ function SongStage({ item, entry, playing, control, onBlocked }: { item: Item; e
             file={file!}
             audio={useRecording ? audio : null}
             sync={item.audioSync}
+            unrepeat={item.audioUnrepeat}
             height={TAB_HEIGHT}
             speed={speed}
             playing={playing}

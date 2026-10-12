@@ -6,7 +6,12 @@ import type { SyncPoint } from "@/shared/types";
  * alphaTab stretches its time axis, so a live recording that speeds up or slows down still lines up.
  * Without points, bar 1 is assumed to start at 0 ms.
  */
-export function applyBackingTrack(score: alphaTab.model.Score, audio: Uint8Array | null, points: SyncPoint[]) {
+export function applyBackingTrack(score: alphaTab.model.Score, audio: Uint8Array | null, points: SyncPoint[], unrepeat: number[] = []) {
+  // Repeats the band plays once: play them once too, so bars follow the recording's order.
+  for (const bar of unrepeat) {
+    const m = score.masterBars[bar - 1];
+    if (m && m.repeatCount > 1) m.repeatCount = 0;
+  }
   if (audio) {
     const track = new alphaTab.model.BackingTrack();
     track.rawAudioFile = audio;

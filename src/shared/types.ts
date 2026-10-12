@@ -64,6 +64,8 @@ export interface Item {
   audioFile?: { name: string; size: number };
   /** Where bars start in the recording: bar (1-based) → milliseconds. Sorted by bar. */
   audioSync?: SyncPoint[];
+  /** Repeats (by closing bar) the recording plays only once — switched off when playing along with it */
+  audioUnrepeat?: number[];
   /** How long this item takes in a session; otherwise the block time is split evenly */
   minutes?: number;
   notes?: string;

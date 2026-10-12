@@ -28,9 +28,9 @@ export function AudioSync({ item, audio, tab, sections, bars }: Props) {
     try {
       const { autoSync } = await import("@/lib/autoSync");
       const r = await autoSync(tab, audio);
-      updateItem(item.id, { audioSync: r.points });
+      updateItem(item.id, { audioSync: r.points, audioUnrepeat: r.unrepeat.length ? r.unrepeat : undefined });
       const shift = r.scale === 1 ? "" : `, запись ${r.scale > 1 ? "медленнее" : "быстрее"} таба на ${Math.abs(Math.round((r.scale - 1) * 1000) / 10)}%`;
-      const repeat = r.skippedRepeat ? " Повтор в начале таба в записи звучит один раз — второй проход пропускается." : "";
+      const repeat = r.skippedRepeat ? " В записи повтор в начале звучит один раз — с записью он тоже играется один раз." : "";
       const start = r.bar1Ms === null ? "" : `такт 1 на ${formatClockMs(r.bar1Ms)}`;
       setAuto({
         busy: false,
@@ -52,6 +52,8 @@ export function AudioSync({ item, audio, tab, sections, bars }: Props) {
   const points = item.audioSync ?? [];
   // Manual rows: bar 1, section starts and existing marks (auto marks every 4 bars can be many — show them compactly).
   const marked = points.filter((p) => !p.occurrence).map((p) => p.bar);
+  // Marks from the older detection squashed a skipped repeat into a few ms (points a few ms apart).
+  const outdated = points.some((p, i) => p.occurrence && points[i + 1] && Math.abs(points[i + 1].ms - p.ms) < 50);
   const main = [1, ...sections.map((s) => s.bar)];
   const candidates = [...new Set([...main, ...(showAll ? marked : [])])].sort((a, b) => a - b);
   const hidden = new Set(marked.filter((b) => !main.includes(b))).size;
@@ -74,6 +76,9 @@ export function AudioSync({ item, audio, tab, sections, bars }: Props) {
         {auto.busy ? "⏳ Определяю…" : "🪄 Определить автоматически"}
       </button>
       {auto.message && <p className="text-sm">{auto.message}</p>}
+      {outdated && !auto.message && (
+        <p className="rounded-xl bg-guide/15 p-2 text-sm">⚠️ Отметки посчитаны старой версией — из-за этого после повтора такты расходятся с записью. Нажми «🪄 Определить автоматически» ещё раз.</p>
+      )}
       <p className="text-xs text-muted">
         Или вручную: включи запись и нажми ⏱ в тот момент, когда начинается такт. Если запись в ровном темпе, хватит такта 1. Для живой записи
         отметь начало каждого раздела — между отметками ноты подстроятся под запись.

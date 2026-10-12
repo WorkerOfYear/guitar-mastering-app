@@ -45,6 +45,8 @@ interface Props {
   audio?: ArrayBuffer | null;
   /** Where bars start in the recording */
   sync?: SyncPoint[];
+  /** Repeats the recording plays once (closing bars) */
+  unrepeat?: number[];
   /** Desired tempo in bpm; playback speed = bpm / tempo written in the tab */
   bpm?: number;
   /** Or a speed factor directly (1 = original) */
@@ -64,7 +66,7 @@ interface Props {
   control?: RefObject<PlayerControl | null>;
 }
 
-export default function TabPlayer({ tex, file, audio, sync, bpm, speed, playing, loopBars, track = 0, countIn = false, metronome = false, height = "50vh", onScore, onBlocked, onProgress, control }: Props) {
+export default function TabPlayer({ tex, file, audio, sync, unrepeat, bpm, speed, playing, loopBars, track = 0, countIn = false, metronome = false, height = "50vh", onScore, onBlocked, onProgress, control }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<alphaTab.AlphaTabApi | null>(null);
@@ -79,6 +81,8 @@ export default function TabPlayer({ tex, file, audio, sync, bpm, speed, playing,
   trackRef.current = track;
   const syncRef = useRef(sync);
   syncRef.current = sync;
+  const unrepeatRef = useRef(unrepeat);
+  unrepeatRef.current = unrepeat;
   const cb = useRef({ onScore, onBlocked, onProgress });
   cb.current = { onScore, onBlocked, onProgress };
 
@@ -138,6 +142,11 @@ export default function TabPlayer({ tex, file, audio, sync, bpm, speed, playing,
       const bars = score.current?.masterBars ?? [];
       let bar = 0;
       while (bar + 1 < bars.length && bars[bar + 1].start <= t) bar++;
+      // Current bar and pass, readable from outside (tests, debugging): data-bar="3" data-time="5123"
+      if (host.current) {
+        host.current.dataset.bar = String(bar + 1);
+        host.current.dataset.time = String(Math.round(a.timePosition));
+      }
       cb.current.onProgress?.(bar + 1);
     });
     a.isLooping = true;
@@ -147,7 +156,7 @@ export default function TabPlayer({ tex, file, audio, sync, bpm, speed, playing,
       try {
         // Parse here so the recording and its sync points can be attached before alphaTab loads the score.
         const parsed = alphaTab.importer.ScoreLoader.loadScoreFromBytes(new Uint8Array(file), settings);
-        if (audio) applyBackingTrack(parsed, new Uint8Array(audio), syncRef.current ?? []);
+        if (audio) applyBackingTrack(parsed, new Uint8Array(audio), syncRef.current ?? [], unrepeatRef.current ?? []);
         a.renderScore(parsed, [Math.min(trackRef.current, parsed.tracks.length - 1)]);
       } catch (e) {
         setError((e as Error).message);
@@ -160,14 +169,14 @@ export default function TabPlayer({ tex, file, audio, sync, bpm, speed, playing,
       setReady(false);
       setLoading(true);
     };
-  }, [tex, file, audio]);
+  }, [tex, file, audio, (unrepeat ?? []).join(",")]);
 
   // Moving a sync point doesn't need a reload.
   const syncKey = JSON.stringify(sync ?? []);
   useEffect(() => {
     const a = api.current;
     if (!a || !score.current || !audio) return;
-    applyBackingTrack(score.current, null, sync ?? []);
+    applyBackingTrack(score.current, null, sync ?? [], unrepeat ?? []);
     a.updateSyncPoints();
   }, [syncKey, ready]);
 

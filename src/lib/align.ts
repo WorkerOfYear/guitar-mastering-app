@@ -125,8 +125,10 @@ export interface AutoSyncResult {
   points: SyncPoint[];
   /** Where bar 1 starts in the recording */
   bar1Ms: number | null;
-  /** The tab repeats a part the recording plays once; that pass is skipped */
+  /** The tab repeats a part the recording plays once */
   skippedRepeat: boolean;
+  /** Bars closing such repeats: play them once when following the recording */
+  unrepeat: number[];
   offsetMs: number;
   scale: number;
   /** How much the best match stands out (≥ 1.5 is a confident match) */
@@ -233,25 +235,27 @@ export function align(timeline: ScoreTimeline, env: Float32Array, anchors?: numb
   const mapped = bars.map((b) => ({ ...b, at: best.offset + b.ms * best.scale + corrAt(b.ms) }));
 
   // A repeat the recording doesn't play (the intro once instead of twice) shows up as bars before 0:00.
-  // Then the first pass gets the recording's times and the pass it lacks is squashed to a blink.
+  // Then the first pass gets the recording's times, the pass it lacks is dropped, and the repeat is
+  // switched off for playback with the recording (`unrepeat`), so the notes follow the band's order.
   const lead = mapped.findIndex((b) => b.at >= -50);
-  let fixed = 0;
+  let played = mapped;
+  let keep = 0; // leading entries that must get a mark (the first pass and the bar after it)
+  const unrepeat: number[] = [];
   if (lead > 0) {
     const pass = mapped.slice(0, lead);
     const again = mapped.slice(lead, lead * 2);
     if (again.length === lead && again.every((b, i) => b.bar === pass[i].bar)) {
-      const nextAt = mapped[lead * 2]?.at ?? audioMs;
       pass.forEach((b, i) => (b.at = again[i].at));
-      again.forEach((b, i) => (b.at = nextAt - (lead - i) * 2));
-      fixed = lead * 2;
+      played = [...pass, ...mapped.slice(lead * 2)];
+      keep = lead + 1;
+      unrepeat.push(pass[lead - 1].bar);
     }
   }
 
   const isAnchor = new Set(anchorBars);
   const points: SyncPoint[] = [];
-  mapped.forEach((b, i) => {
-    // the bar right after a squashed pass needs its own mark, or the squash would stretch over it
-    if (i > fixed && !isAnchor.has(b.bar)) return;
+  played.forEach((b, i) => {
+    if (i >= keep && !isAnchor.has(b.bar)) return;
     const ms = Math.round(b.at);
     if (ms < 0 || ms >= audioMs || (points.length && ms <= points[points.length - 1].ms)) return;
     points.push(b.occurrence ? { bar: b.bar, occurrence: b.occurrence, ms } : { bar: b.bar, ms });
@@ -260,7 +264,8 @@ export function align(timeline: ScoreTimeline, env: Float32Array, anchors?: numb
   return {
     points,
     bar1Ms: bar1?.ms ?? null,
-    skippedRepeat: fixed > 0,
+    skippedRepeat: unrepeat.length > 0,
+    unrepeat,
     offsetMs: Math.round(best.offset),
     scale: +best.scale.toFixed(3),
     confidence: +confidence.toFixed(2),
