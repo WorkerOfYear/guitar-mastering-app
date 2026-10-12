@@ -113,5 +113,9 @@ describe("a repeat the recording plays once", () => {
     expect(Math.abs(at(4, 0) - (1500 + (timeline.bars[6].ms - passMs)))).toBeLessThan(80); // bar 5 lines up
     expect(at(0, 0)).toBeCloseTo(r.bar1Ms!, -1); // first pass of bar 1 = the intro in the recording
     expect(bar3InRecording - at(0, 1)).toBeLessThan(20); // the missing second pass is squashed right before bar 3
+    // …and bar 3 has its own mark, so bars 3–4 keep the recording's tempo instead of absorbing the squash
+    expect(Math.abs(at(2, 0) - bar3InRecording)).toBeLessThan(80);
+    const bar3 = synced.find((p) => p.masterBarIndex === 2 && p.masterBarOccurence === 0)!;
+    expect(Math.abs(bar3.syncBpm - 130)).toBeLessThan(5);
   });
 });

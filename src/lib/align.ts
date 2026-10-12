@@ -250,7 +250,8 @@ export function align(timeline: ScoreTimeline, env: Float32Array, anchors?: numb
   const isAnchor = new Set(anchorBars);
   const points: SyncPoint[] = [];
   mapped.forEach((b, i) => {
-    if (i >= fixed && !isAnchor.has(b.bar)) return;
+    // the bar right after a squashed pass needs its own mark, or the squash would stretch over it
+    if (i > fixed && !isAnchor.has(b.bar)) return;
     const ms = Math.round(b.at);
     if (ms < 0 || ms >= audioMs || (points.length && ms <= points[points.length - 1].ms)) return;
     points.push(b.occurrence ? { bar: b.bar, occurrence: b.occurrence, ms } : { bar: b.bar, ms });
