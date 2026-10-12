@@ -9,6 +9,8 @@
   прогони проверки и только потом пушь.
 - Перед заливкой должны проходить: `npx tsc --noEmit`, `npm test`, `npm run build`. Сломанное в `main` не лей.
 - Никогда не делай force-push в `main`.
+- Автор коммитов — владелец репозитория: `git config user.name "WorkerOfYear"`, `git config user.email "artyomlufirenko@gmail.com"`.
+  Vercel (тариф Hobby) не деплоит коммиты авторов не из команды. Строку `Co-Authored-By` в сообщении коммита оставляй.
 - Рабочие ветки `claude/**` Vercel не собирает (`git.deploymentEnabled` в `vercel.json`): иначе тот же коммит, пришедший
   сначала в рабочую ветку, деплоился как preview, а не production. Деплой идёт только из `main`.
 
