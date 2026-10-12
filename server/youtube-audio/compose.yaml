@@ -1,12 +1,18 @@
-# docker compose up -d --build   (KEY and DOMAIN come from .env next to this file)
+# Default: the service listens on 127.0.0.1:8787 only; HTTPS comes from outside
+# (Tailscale Funnel, your own reverse proxy…). See README.md.
+#   docker compose up -d --build
+# With ports 80/443 free, Caddy can serve HTTPS itself (DOMAIN in .env):
+#   docker compose --profile caddy up -d --build
 services:
   audio:
     build: .
     restart: unless-stopped
     environment:
       KEY: ${KEY:?задай KEY в .env}
+    ports: ["127.0.0.1:${PORT:-8787}:8080"]
   caddy:
     image: caddy:2
+    profiles: [caddy]
     restart: unless-stopped
     ports: ["80:80", "443:443"]
     environment:
