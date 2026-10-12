@@ -1,0 +1,9 @@
+# Static test copy of the app (built by GitHub Actions from dev). No /api here: sync and the bot live on Vercel.
+:80 {
+	root * /srv/dist
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	header / Cache-Control "no-cache"
+	try_files {path} /index.html
+	file_server
+}

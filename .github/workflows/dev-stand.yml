@@ -1,0 +1,48 @@
+# Push to dev → check, build and copy the app to the test stand on the owner's server.
+# Secrets (Settings → Secrets and variables → Actions): STAND_HOST, STAND_USER, STAND_SSH_KEY,
+# optional STAND_PORT (default 22) and STAND_PATH (default /srv/guitar-dev/dist).
+name: dev → test stand
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+concurrency:
+  group: dev-stand
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+      - run: npm run build
+
+      - name: Copy the build to the server
+        env:
+          HOST: ${{ secrets.STAND_HOST }}
+          USER: ${{ secrets.STAND_USER }}
+          PORT: ${{ secrets.STAND_PORT || '22' }}
+          TARGET: ${{ secrets.STAND_PATH || '/srv/guitar-dev/dist' }}
+          KEY: ${{ secrets.STAND_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/stand && chmod 600 ~/.ssh/stand
+          ssh-keyscan -p "$PORT" "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          SSH="ssh -i ~/.ssh/stand -p $PORT"
+          # Upload next to the live copy, then swap, so the stand never serves a half-copied build.
+          $SSH "$USER@$HOST" "mkdir -p '$TARGET.new' && rm -rf '$TARGET.new'/*"
+          rsync -az --delete -e "$SSH" dist/ "$USER@$HOST:$TARGET.new/"
+          $SSH "$USER@$HOST" "rm -rf '$TARGET.old' && { [ ! -d '$TARGET' ] || mv '$TARGET' '$TARGET.old'; } && mv '$TARGET.new' '$TARGET'"
+          echo "Deployed $(git rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"

@@ -5,7 +5,8 @@
   "outputDirectory": "dist",
   "git": {
     "deploymentEnabled": {
-      "claude/**": false
+      "claude/**": false,
+      "dev": false
     }
   },
   "headers": [
