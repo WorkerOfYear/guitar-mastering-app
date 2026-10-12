@@ -16,7 +16,7 @@ services:
     restart: unless-stopped
     ports: ["80:80", "443:443"]
     environment:
-      DOMAIN: ${DOMAIN:?задай DOMAIN в .env}
+      DOMAIN: ${DOMAIN:-}  # needed only with --profile caddy
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
