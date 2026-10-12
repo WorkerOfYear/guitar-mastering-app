@@ -125,6 +125,7 @@ export function MediaCard({ item }: { item: Item }) {
   // The recording taken from the item's YouTube video by the user's server; a tab then gets synced to it.
   const audioServer = useSettings((s) => s.audioServer);
   const [grabbing, setGrabbing] = useState(false);
+  const [grabAttempt, setGrabAttempt] = useState(1);
   const [justGrabbed, setJustGrabbed] = useState(false);
   const grabAudio = async () => {
     if (!item.video) return;
@@ -132,7 +133,7 @@ export function MediaCard({ item }: { item: Item }) {
     setGrabbing(true);
     setError("");
     try {
-      const { data, name } = await fetchYoutubeAudio(item.video.youtubeId, audioServer);
+      const { data, name } = await fetchYoutubeAudio(item.video.youtubeId, audioServer, setGrabAttempt);
       await saveAudioFile(item.id, data);
       setAudioData(data);
       setMissing((m) => ({ ...m, audio: false }));
@@ -157,7 +158,7 @@ export function MediaCard({ item }: { item: Item }) {
   const grabButton = item.video && (
     <Button onClick={() => void grabAudio()} disabled={grabbing} className="h-auto min-h-12 w-full whitespace-normal py-2">
       {grabbing ? <LoaderCircle className="animate-spin" /> : <WandSparkles />}
-      {grabbing ? "Скачиваю звук из видео…" : "Взять звук из видео"}
+      {grabbing ? `Скачиваю звук из видео…${grabAttempt > 1 ? ` (попытка ${grabAttempt})` : ""}` : "Взять звук из видео"}
     </Button>
   );
 

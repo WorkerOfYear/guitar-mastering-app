@@ -32,6 +32,22 @@ def update_forever():
         time.sleep(24 * 3600)
 
 
+def download(video, folder):
+    return subprocess.run(
+        [
+            YTDLP, "--no-playlist", "--quiet", "--no-warnings",
+            "--retries", "5", "--fragment-retries", "5", "--extractor-retries", "3",
+            "-f", "bestaudio[ext=m4a]/bestaudio",
+            "--match-filter", f"duration <= {MAX_MINUTES * 60}",
+            "--max-filesize", "80M",
+            "--print", "after_move:%(title)s",
+            "-o", os.path.join(folder, "audio.%(ext)s"),
+            f"https://www.youtube.com/watch?v={video}",
+        ],
+        capture_output=True, text=True, timeout=240,
+    )
+
+
 class Handler(BaseHTTPRequestHandler):
     def cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -73,18 +89,14 @@ class Handler(BaseHTTPRequestHandler):
             return self.fail(503, "Сервер занят, попробуй через минуту")
         tmp = tempfile.mkdtemp()
         try:
-            r = subprocess.run(
-                [
-                    YTDLP, "--no-playlist", "--quiet", "--no-warnings",
-                    "-f", "bestaudio[ext=m4a]/bestaudio",
-                    "--match-filter", f"duration <= {MAX_MINUTES * 60}",
-                    "--max-filesize", "80M",
-                    "--print", "after_move:%(title)s",
-                    "-o", os.path.join(tmp, "audio.%(ext)s"),
-                    f"https://www.youtube.com/watch?v={video}",
-                ],
-                capture_output=True, text=True, timeout=300,
-            )
+            r = None
+            for attempt in range(2):  # YouTube sometimes refuses once; a second run usually goes through
+                shutil.rmtree(tmp, ignore_errors=True)
+                os.makedirs(tmp, exist_ok=True)
+                r = download(video, tmp)
+                if r.returncode == 0 and os.listdir(tmp):
+                    break
+                time.sleep(2)
             files = os.listdir(tmp)
             if r.returncode != 0 or not files:
                 reason = (r.stderr.strip().splitlines() or ["видео длиннее лимита или недоступно"])[-1]
