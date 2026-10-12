@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   Check,
   ChevronDown,
+  Download,
   FileMusic,
   Headphones,
   Link2,
@@ -27,6 +28,7 @@ import type { ScoreInfo } from "@/components/tab/TabPlayer";
 import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
 import { audio } from "@/audio/player";
 import { deleteAudioFile, deleteTabFile, loadAudioFile, loadTabFile, saveAudioFile, saveTabFile } from "@/lib/tabFiles";
+import { audioBlob, downloadAudio } from "@/lib/audioType";
 import { AudioSync, detectSync } from "./AudioSync";
 import { fetchYoutubeAudio, serverReady } from "@/lib/youtubeAudio";
 import { useSettings } from "@/store/settings";
@@ -414,6 +416,11 @@ export function MediaCard({ item }: { item: Item }) {
             .join(" · ")}
           actions={
             <>
+              {audioData && (
+                <IconAction label="Скачать запись" onClick={() => downloadAudio(audioData, item.audioFile!.name)}>
+                  <Download className="size-4" />
+                </IconAction>
+              )}
               <FileAction label="Заменить запись" accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)} />
               <IconAction label="Удалить запись" onClick={() => void removeAudio()}>
                 <Trash2 className="size-4" />
@@ -571,7 +578,7 @@ export function MediaCard({ item }: { item: Item }) {
 function AudioPreview({ data }: { data: ArrayBuffer }) {
   const [url, setUrl] = useState("");
   useEffect(() => {
-    const u = URL.createObjectURL(new Blob([data]));
+    const u = URL.createObjectURL(audioBlob(data));
     setUrl(u);
     return () => URL.revokeObjectURL(u);
   }, [data]);
