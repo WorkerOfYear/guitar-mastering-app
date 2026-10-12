@@ -2,7 +2,9 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { FileMusic, Headphones, LoaderCircle, Plus, Upload, Video, X } from "lucide-react";
-import { Button, Card, Chip, Input, Segmented } from "@/components/ui";
+import { Button, Card, Chip, Input } from "@/components/ui";
+import { haptic } from "@/app/telegram";
+import { cn } from "@/lib/utils";
 import { TYPE_ICON } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/Placeholder";
 import { parseYouTube, AUDIO_ACCEPT, AUDIO_MAX, TAB_ACCEPT, TAB_MAX } from "./MediaCard";
@@ -106,29 +108,14 @@ export function NewItemPage() {
       </Card>
 
       <Card className="space-y-3">
-        <div className="text-sm font-semibold">Что играть вместе</div>
-        <Segmented
-          value={source}
-          onChange={setSource}
-          options={[
-            {
-              value: "video",
-              label: (
-                <>
-                  <Video /> Видео YouTube
-                </>
-              ),
-            },
-            {
-              value: "audio",
-              label: (
-                <>
-                  <Headphones /> Аудиофайл
-                </>
-              ),
-            },
-          ]}
-        />
+        <div>
+          <div className="font-semibold">Под что играть</div>
+          <div className="text-xs text-muted">Видео или запись, которая будет звучать на занятии</div>
+        </div>
+        <div role="radiogroup" aria-label="Под что играть" className="grid grid-cols-2 gap-2">
+          <SourceTile active={source === "video"} onClick={() => setSource("video")} icon={<Video />} title="YouTube" sub="ссылка на видео" />
+          <SourceTile active={source === "audio"} onClick={() => setSource("audio")} icon={<Headphones />} title="Аудиофайл" sub="mp3, m4a, wav" />
+        </div>
         {source === "video" ? (
           <div className="space-y-1.5">
             <div className="relative">
@@ -155,7 +142,10 @@ export function NewItemPage() {
           </FileField>
         )}
 
-        <div className="pt-1 text-sm font-semibold">Таб или ноты, если есть</div>
+        <div className="pt-2">
+          <span className="font-semibold">Таб или ноты</span>
+          <span className="text-xs text-muted"> · необязательно</span>
+        </div>
         <FileField
           icon={<FileMusic />}
           file={tabFile}
@@ -179,6 +169,29 @@ export function NewItemPage() {
         {busy ? <LoaderCircle className="animate-spin" /> : <Plus />} Создать
       </Button>
     </div>
+  );
+}
+
+/** One of the two play-along sources, picked like a radio button. */
+function SourceTile({ active, onClick, icon, title, sub }: { active: boolean; onClick: () => void; icon: ReactNode; title: string; sub: string }) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      onClick={() => {
+        haptic();
+        onClick();
+      }}
+      className={cn(
+        "flex flex-col items-center gap-1 rounded-2xl border px-2 py-3 text-center transition-[background-color,border-color,transform] active:scale-[0.98] [&_svg]:size-6",
+        active ? "border-accent bg-accent/10 text-fg" : "border-line text-muted",
+      )}
+    >
+      <span className={active ? "text-accent" : ""}>{icon}</span>
+      <span className="text-sm font-semibold text-fg">{title}</span>
+      <span className="text-[11px] leading-tight">{sub}</span>
+    </button>
   );
 }
 
