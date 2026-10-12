@@ -127,7 +127,12 @@ export function SettingsPage() {
           options={["12", "15", "17", "24"].map((v) => ({ value: v, label: v }))}
         />
         <Toggle label="Для левши" checked={fretboard.leftHanded} onChange={(v) => setFretboard({ leftHanded: v })} />
-        <Toggle label="Показывать ноты вне позиции (приглушённо)" checked={fretboard.showOutside} onChange={(v) => setFretboard({ showOutside: v })} />
+        <Toggle
+          label="Ноты лада за пределами позиции"
+          hint="Показывать их на грифе бледным цветом, чтобы видеть, как позиции соединяются"
+          checked={fretboard.showOutside}
+          onChange={(v) => setFretboard({ showOutside: v })}
+        />
       </Card>
 
       <SectionTitle>Синхронизация и Telegram</SectionTitle>

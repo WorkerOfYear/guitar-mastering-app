@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { m } from "motion/react";
-import { ChevronRight, Clock, Dices, Music, Play, PlayCircle, Video } from "lucide-react";
+import { ChevronRight, Dices, Music, Play, PlayCircle, Video } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { BLOCK_ICON, IconTile } from "@/components/ui/icons";
 import { PageHeader, SettingsLink } from "@/components/ui/Placeholder";
@@ -36,7 +36,6 @@ export function TodayPage() {
   const navigate = useNavigate();
   const [seed, setSeed] = useState(0);
   const plan = useMemo(() => buildPlan(data), [data.items, data.lastPlayed, data.practice, seed]);
-  const total = plan.reduce((sum, b) => sum + b.minutes, 0);
 
   const begin = () => {
     audio(); // unlock sound inside the tap
@@ -49,7 +48,7 @@ export function TodayPage() {
   return (
     <div>
       <PageHeader
-        title="Главная"
+        title="План занятия"
         subtitle={new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
         action={<SettingsLink />}
       />
@@ -62,12 +61,6 @@ export function TodayPage() {
         </Button>
       ) : (
         <>
-          <div className="flex items-center justify-between px-1 pb-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted">План занятия</h2>
-            <Badge variant="secondary">
-              <Clock /> {total} мин
-            </Badge>
-          </div>
           <div className="space-y-2.5">
             {plan.map((b, i) => (
               <m.div key={b.kind} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05, duration: 0.25 }}>
@@ -113,7 +106,6 @@ export function TodayPage() {
             <Play className="size-6" fill="currentColor" />
             Старт
           </Button>
-          <p className="mt-2 text-center text-xs text-muted">Дальше всё само: отсчёт, упражнения и блоки переключаются по таймеру</p>
         </>
       )}
     </div>

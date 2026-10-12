@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from "react";
 import { FileMusic, Headphones, ListTree, Pause, Piano, Play, Plus, Trash2, Upload, Video } from "lucide-react";
 import { Button, Card, Input, NumberField, Segmented } from "@/components/ui";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -57,6 +57,12 @@ export function SourceSwitch({ recording, onChange }: { recording: boolean; onCh
   );
 }
 
+/** Tabs and scores alphaTab opens: Guitar Pro, MusicXML (MuseScore exports it), compressed MusicXML, Capella. */
+export const TAB_ACCEPT = ".gp,.gp3,.gp4,.gp5,.gpx,.gp7,.xml,.musicxml,.mxl,.capx";
+export const TAB_MAX = 5_000_000;
+export const AUDIO_ACCEPT = "audio/*,.mp3,.m4a,.wav,.ogg,.flac";
+export const AUDIO_MAX = 40_000_000;
+
 /** Dashed drop-zone-like button that opens a file picker. */
 function FilePick({ children, accept, onFile }: { children: ReactNode; accept: string; onFile: (f: File) => void }) {
   return (
@@ -104,7 +110,7 @@ export function MediaCard({ item }: { item: Item }) {
 
   const uploadAudio = async (f: File) => {
     setError("");
-    if (f.size > 40_000_000) return setError("Аудио больше 40 МБ — сожми его в mp3");
+    if (f.size > AUDIO_MAX) return setError("Аудио больше 40 МБ — сожми его в mp3");
     const data = await f.arrayBuffer();
     await saveAudioFile(item.id, data);
     setAudioData(data);
@@ -121,7 +127,7 @@ export function MediaCard({ item }: { item: Item }) {
 
   const upload = async (f: File) => {
     setError("");
-    if (f.size > 5_000_000) return setError("Файл больше 5 МБ — это точно таб?");
+    if (f.size > TAB_MAX) return setError("Файл больше 5 МБ — это точно таб?");
     const data = await f.arrayBuffer();
     await saveTabFile(item.id, data);
     setFile(data);
@@ -153,6 +159,16 @@ export function MediaCard({ item }: { item: Item }) {
     if (!sections.some((s) => s.status === "active")) sections[0].status = "active";
     updateItem(item.id, { sections, type: "song" });
   };
+
+  // A song without sections takes them from the file's markers as soon as the file is read
+  // (once per file, so deleting them all doesn't bring them back).
+  const noSections = !item.sections?.length;
+  const autoSections = useRef("");
+  useEffect(() => {
+    if (!score?.sections.length || !noSections || autoSections.current === item.tabFile?.name) return;
+    autoSections.current = item.tabFile?.name ?? "";
+    sectionsFromFile();
+  }, [score, noSections]);
 
   return (
     <Card className="space-y-3">
@@ -258,9 +274,9 @@ export function MediaCard({ item }: { item: Item }) {
               <Trash2 className="size-3.5" /> Удалить файл
             </Button>
           </div>
-          {score && score.sections.length > 0 && (
-            <Button variant="secondary" onClick={sectionsFromFile} className="h-auto min-h-11 w-full whitespace-normal py-2">
-              <ListTree /> Разделы из меток файла ({score.sections.map((s) => s.title).join(", ")})
+          {score && score.sections.length > 0 && !noSections && (
+            <Button variant="ghost" size="sm" onClick={sectionsFromFile} className="w-full">
+              <ListTree className="size-4" /> Заново взять разделы из меток файла
             </Button>
           )}
           {item.audioFile && audioData && file ? (
@@ -277,7 +293,7 @@ export function MediaCard({ item }: { item: Item }) {
               <AudioSync item={item} audio={audioData} tab={file!} sections={score?.sections ?? []} bars={score?.bars ?? 1} />
             </div>
           ) : (
-            <FilePick accept="audio/*,.mp3,.m4a,.wav,.ogg,.flac" onFile={(f) => void uploadAudio(f)}>
+            <FilePick accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)}>
               {missing.audio
                 ? `Загрузи «${item.audioFile?.name}» на этом устройстве (отметки сохранятся)`
                 : "Загрузить запись, по которой написан таб (mp3, m4a, wav)"}
@@ -286,10 +302,31 @@ export function MediaCard({ item }: { item: Item }) {
           <p className="text-xs text-muted">Файлы хранятся на этом устройстве. На другом устройстве их нужно загрузить ещё раз.</p>
         </div>
       ) : (
-        <FilePick accept=".gp,.gp3,.gp4,.gp5,.gpx,.gp7,.xml,.musicxml" onFile={(f) => void upload(f)}>
-          {missing.tab ? `Загрузи «${item.tabFile?.name}» на этом устройстве` : "Загрузить Guitar Pro файл (.gp, .gp5, .gpx…)"}
+        <FilePick accept={TAB_ACCEPT} onFile={(f) => void upload(f)}>
+          {missing.tab ? `Загрузи «${item.tabFile?.name}» на этом устройстве` : "Загрузить таб: Guitar Pro или MusicXML (.gp, .gp5, .gpx, .musicxml, .mxl)"}
         </FilePick>
       )}
+
+      {/* A recording without a tab: just play along with it. */}
+      {!item.tabFile &&
+        (item.audioFile && audioData ? (
+          <div className="space-y-2 rounded-2xl bg-surface-2/60 p-3">
+            <div className="flex items-center justify-between gap-2 text-sm">
+              <span className="flex min-w-0 items-center gap-2">
+                <Headphones className="size-4 shrink-0 text-accent" />
+                <span className="truncate">{item.audioFile.name}</span>
+              </span>
+              <Button variant="destructive-ghost" size="sm" onClick={removeAudio} className="h-8 px-2 text-xs">
+                <Trash2 className="size-3.5" /> Удалить запись
+              </Button>
+            </div>
+            <AudioPreview data={audioData} />
+          </div>
+        ) : (
+          <FilePick accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)}>
+            {missing.audio ? `Загрузи «${item.audioFile?.name}» на этом устройстве` : "Загрузить аудиозапись (mp3, m4a, wav)"}
+          </FilePick>
+        ))}
 
       <NumberField
         label="Длительность в занятии, мин (0 — поровну с остальными)"
@@ -300,4 +337,14 @@ export function MediaCard({ item }: { item: Item }) {
       {error && <p className="text-sm text-guide">{error}</p>}
     </Card>
   );
+}
+
+function AudioPreview({ data }: { data: ArrayBuffer }) {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    const u = URL.createObjectURL(new Blob([data]));
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [data]);
+  return url ? <audio src={url} controls preload="metadata" className="w-full" /> : null;
 }

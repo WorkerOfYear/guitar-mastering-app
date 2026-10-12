@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { TempoChart } from "@/components/charts/TempoChart";
-import { ExternalLink, GraduationCap, Plus, SearchX, Trash2, X } from "lucide-react";
+import { ExternalLink, GraduationCap, Pencil, Plus, SearchX, Trash2, X } from "lucide-react";
 import { Badge, Button, Card, Chip, Input, NumberField, ScrollRow, SectionTitle, Textarea } from "@/components/ui";
 import { TYPE_ICON } from "@/components/ui/icons";
 import { linkLabel } from "@/features/session/EntryCard";
@@ -29,8 +29,8 @@ export function ItemPage() {
   const setTheory = useSettings((s) => s.setTheory);
   const item = data.items.find((i) => i.id === id);
   const [newLink, setNewLink] = useState("");
-  const [newSection, setNewSection] = useState("");
-  const [chartSection, setChartSection] = useState<string | undefined>(item?.sections?.[0]?.id);
+  const [picked, setChartSection] = useState<string | undefined>();
+  const [editTitle, setEditTitle] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   if (!item)
     return (
@@ -44,6 +44,8 @@ export function ItemPage() {
   const update = (patch: Parameters<typeof data.updateItem>[1]) => data.updateItem(item.id, patch);
   const today = localDate();
   const isSong = !!item.sections?.length || item.type === "song";
+  // Sections can appear later (from the file's markers), so default to the first one.
+  const chartSection = item.sections?.some((s) => s.id === picked) ? picked : item.sections?.[0]?.id;
   const unit = { itemId: item.id, sectionId: isSong ? chartSection : undefined };
   const history = entriesFor(data.log, unit).sort((a, b) => b.at - a.at);
   const section = item.sections?.find((s) => s.id === chartSection);
@@ -55,15 +57,26 @@ export function ItemPage() {
           <TypeIcon /> {TYPE_META[item.type].title}
         </Badge>
         {item.category && <Badge>{item.category}</Badge>}
-        <Badge variant="outline">{STATUS_META[item.status].title}</Badge>
       </div>
-      <textarea
-        value={item.title}
-        onChange={(e) => update({ title: e.target.value })}
-        rows={1}
-        aria-label="Название"
-        className="-mx-1 w-full resize-none rounded-xl bg-transparent px-1 text-[1.75rem] font-bold leading-tight tracking-tight outline-none transition-colors [field-sizing:content] focus:bg-surface-2/50"
-      />
+      {/* Plain text until the pencil is tapped — a stray tap shouldn't open the keyboard. */}
+      {editTitle ? (
+        <Input
+          autoFocus
+          value={item.title}
+          onChange={(e) => update({ title: e.target.value })}
+          onBlur={() => setEditTitle(false)}
+          onKeyDown={(e) => e.key === "Enter" && setEditTitle(false)}
+          aria-label="Название"
+          className="text-xl font-bold"
+        />
+      ) : (
+        <div className="flex items-start gap-2">
+          <h1 className="min-w-0 flex-1 text-[1.75rem] font-bold leading-tight tracking-tight">{item.title}</h1>
+          <Button variant="ghost" size="icon-sm" aria-label="Переименовать" onClick={() => setEditTitle(true)} className="mt-0.5">
+            <Pencil className="size-4" />
+          </Button>
+        </div>
+      )}
 
       {item.theory && (
         <Button
@@ -112,19 +125,22 @@ export function ItemPage() {
                 </Button>
               </Card>
             ))}
-            <div className="flex gap-2">
-              <Input value={newSection} onChange={(e) => setNewSection(e.target.value)} placeholder="Новый раздел" className="h-11 flex-1" />
-              <IconBtn
-                label="Добавить раздел"
-                onClick={() => {
-                  if (newSection.trim()) data.addSection(item.id, newSection.trim());
-                  setNewSection("");
-                }}
-              />
-            </div>
+            {!item.sections?.length && (
+              <p className="px-1 text-sm text-muted">
+                {item.tabFile ? "В файле нет меток разделов — песня играется целиком." : "Загрузи таб выше — разделы возьмутся из его меток."}
+              </p>
+            )}
           </div>
           {section && (
             <Card className="grid grid-cols-2 gap-2">
+              <label className="col-span-2 flex flex-col gap-1.5 text-[11px] font-medium text-muted">
+                Название раздела
+                <Input
+                  value={section.title}
+                  onChange={(e) => data.updateSection(item.id, section.id, { title: e.target.value })}
+                  className="h-11 rounded-xl text-base font-semibold"
+                />
+              </label>
               <NumberField
                 label="С такта"
                 min={0}

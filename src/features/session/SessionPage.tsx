@@ -108,7 +108,7 @@ export function SessionPage() {
   }, [phase, count, countKey]);
 
   // Plain exercises (no tab, no video) and improvisation play along with the metronome.
-  const usesMetronome = !!block && (block.kind === "improv" || (!!item && !item.tab && !item.video && !item.tabFile));
+  const usesMetronome = !!block && (block.kind === "improv" || (!!item && !item.tab && !item.video && !item.tabFile && !item.audioFile));
   useEffect(() => {
     if (phase === "play" && usesMetronome) startMetronome();
     else stopMetronome();
@@ -380,10 +380,69 @@ function Stage({ block, entry, item, playing, control, onBlocked }: StageProps) 
   if (item.tab) return <TabStage key={item.id} item={item} playing={playing} control={control} onBlocked={onBlocked} />;
   if (item.tabFile)
     return <SongStage key={`${item.id}#${entry.sectionId ?? ""}`} item={item} entry={entry} playing={playing} control={control} onBlocked={onBlocked} />;
+  if (item.audioFile) return <AudioStage key={item.id} item={item} entry={entry} playing={playing} control={control} onBlocked={onBlocked} />;
   return (
     <div className="space-y-3">
       <EntryCard entry={entry} />
       <CompactMetronome />
+    </div>
+  );
+}
+
+/** A recording without a tab: loops it at the chosen speed (pitch is kept). */
+function AudioStage({
+  item,
+  entry,
+  playing,
+  control,
+  onBlocked,
+}: {
+  item: Item;
+  entry: PlanEntry;
+  playing: boolean;
+  control: StageProps["control"];
+  onBlocked: (b: boolean) => void;
+}) {
+  const el = useRef<HTMLAudioElement>(null);
+  const [url, setUrl] = useState<string | null | undefined>(undefined);
+  const [speed, setSpeed] = useState(1);
+  useEffect(() => {
+    let u = "";
+    void loadAudioFile(item.id).then((f) => {
+      if (!f) return setUrl(null);
+      u = URL.createObjectURL(new Blob([f]));
+      setUrl(u);
+    });
+    return () => {
+      if (u) URL.revokeObjectURL(u);
+    };
+  }, [item.id]);
+  useEffect(() => {
+    const a = el.current;
+    if (!a) return;
+    control.current = { resume: () => void a.play() };
+    if (!playing) return a.pause();
+    // Mobile browsers may refuse to start audio without a tap.
+    a.play().then(
+      () => onBlocked(false),
+      () => onBlocked(true),
+    );
+  }, [playing, url]);
+  useEffect(() => {
+    if (el.current) el.current.playbackRate = speed;
+  }, [speed, url]);
+  if (url === null) return <EntryCard entry={entry} />;
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2 rounded-3xl border border-line bg-surface p-3">
+        {url && <audio ref={el} src={url} loop controls preload="auto" className="w-full" />}
+        <TempoBar
+          label={`${Math.round(speed * 100)}%`}
+          onMinus={() => setSpeed((s) => Math.max(0.5, +(s - 0.05).toFixed(2)))}
+          onPlus={() => setSpeed((s) => Math.min(1.25, +(s + 0.05).toFixed(2)))}
+        />
+      </div>
+      <EntryCard entry={entry} />
     </div>
   );
 }
