@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mergeData } from "./merge";
 import { DEFAULT_PRACTICE, type DataState } from "./data";
 import { STARTER_LIBRARY } from "@/data/library";
+import type { Item } from "@/shared/types";
 
 const base = (): DataState => ({ items: STARTER_LIBRARY, log: [], sessions: [], lastPlayed: {}, recentKeys: [], practice: DEFAULT_PRACTICE, deleted: {} });
 
@@ -12,6 +13,15 @@ describe("mergeData", () => {
     const merged = mergeData(base(), remote);
     expect(merged.items.find((i) => i.id === "tech-3nps")?.targetBpm).toBe(180);
     expect(merged.items).toHaveLength(STARTER_LIBRARY.length);
+  });
+  it("an edit wins over a newer version of the starter library", () => {
+    const old = base();
+    old.items = old.items.map((i) => (i.id === "tech-3nps" ? { ...i, targetBpm: 170, updatedAt: Date.UTC(2026, 9, 11) } : i));
+    expect(mergeData(base(), old).items.find((i) => i.id === "tech-3nps")?.targetBpm).toBe(170);
+    expect(mergeData(old, base()).items.find((i) => i.id === "tech-3nps")?.targetBpm).toBe(170);
+    const pristineOld = base();
+    pristineOld.items = pristineOld.items.map((i) => ({ ...i, updatedAt: undefined, tab: undefined }));
+    expect(mergeData(pristineOld, base()).items.find((i) => i.id === "wu-chromatic")?.tab).toBeTruthy();
   });
   it("unions logs, sessions and last-played days", () => {
     const a = base();
@@ -30,10 +40,10 @@ describe("mergeData", () => {
   it("respects deletions and newer re-creations", () => {
     const a = base();
     a.items = a.items.filter((i) => i.id !== "tech-tapping");
-    a.deleted = { "tech-tapping": 500 };
+    a.deleted = { "tech-tapping": Date.UTC(2026, 9, 13) };
     const b = base();
     expect(mergeData(a, b).items.some((i) => i.id === "tech-tapping")).toBe(false);
-    b.items = b.items.map((i) => (i.id === "tech-tapping" ? { ...i, updatedAt: 900 } : i));
+    b.items = b.items.map((i) => (i.id === "tech-tapping" ? { ...i, updatedAt: Date.UTC(2026, 9, 14) } : i));
     expect(mergeData(a, b).items.some((i) => i.id === "tech-tapping")).toBe(true);
   });
   it("keeps the newer practice settings", () => {
@@ -41,5 +51,19 @@ describe("mergeData", () => {
     const b = { ...base(), practice: { ...DEFAULT_PRACTICE, maxNew: 1 }, practiceUpdatedAt: 20 };
     expect(mergeData(a, b).practice.maxNew).toBe(1);
     expect(mergeData(b, a).practice.maxNew).toBe(1);
+  });
+});
+
+describe("upgradeStarter", () => {
+  it("replaces untouched starter items, keeps edits, adds new ones, skips deleted", async () => {
+    const { upgradeStarter } = await import("./data");
+    const old: Item[] = STARTER_LIBRARY.filter((i) => i.id !== "wu-video").map((i) => ({ ...i, updatedAt: undefined, tab: undefined, warmup: i.id.startsWith("wu-") }));
+    old[0] = { ...old[0], notes: "моё", updatedAt: Date.UTC(2026, 9, 11) };
+    const up = upgradeStarter(old, { "song-ascend": 1 });
+    expect(up.find((i) => i.id === old[0].id)?.notes).toBe("моё");
+    expect(up.find((i) => i.id === "wu-spider")?.tab).toBeTruthy();
+    expect(up.find((i) => i.id === "wu-spider")?.warmup).toBeFalsy();
+    expect(up.some((i) => i.id === "wu-video")).toBe(true);
+    expect(up.filter((i) => i.id === "song-ascend")).toHaveLength(1); // still there: deletion only blocks re-adding missing ones
   });
 });

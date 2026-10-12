@@ -4,6 +4,7 @@ import { TempoChart } from "@/components/charts/TempoChart";
 import { NumberField } from "@/components/metronome/MetronomePanel";
 import { Card, Chip, ScrollRow, SectionTitle, Segmented, Toggle } from "@/components/ui";
 import { linkLabel } from "@/features/session/EntryCard";
+import { MediaCard } from "./MediaCard";
 import { cleanBpm, entriesFor } from "@/lib/progress";
 import { formatDay, localDate } from "@/lib/date";
 import { useData } from "@/store/data";
@@ -71,6 +72,9 @@ export function ItemPage() {
         </button>
       )}
 
+      <SectionTitle>Таб и видео</SectionTitle>
+      <MediaCard item={item} />
+
       {isSong && (
         <>
           <SectionTitle>Разделы — нажми на статус, чтобы сменить</SectionTitle>
@@ -80,7 +84,7 @@ export function ItemPage() {
                 <button type="button" onClick={() => setChartSection(s.id)} className="min-w-0 flex-1 text-left">
                   <div className="truncate font-semibold">{s.title}</div>
                   <div className="text-xs text-muted">
-                    чисто {cleanBpm(data.log, { itemId: item.id, sectionId: s.id }, today) ?? "—"} / цель {s.targetBpm ?? "—"}
+                    {s.bars ? `такты ${s.bars[0]}–${s.bars[1]} · ` : ""}чисто {cleanBpm(data.log, { itemId: item.id, sectionId: s.id }, today) ?? "—"} / цель {s.targetBpm ?? "—"}
                   </div>
                 </button>
                 <button
@@ -113,6 +117,18 @@ export function ItemPage() {
           </div>
           {section && (
             <Card className="grid grid-cols-2 gap-2">
+              <NumberField
+                label="С такта"
+                min={0}
+                value={section.bars?.[0] ?? 0}
+                onChange={(v) => data.updateSection(item.id, section.id, { bars: v ? [v, Math.max(v, section.bars?.[1] ?? v)] : null })}
+              />
+              <NumberField
+                label="По такт"
+                min={0}
+                value={section.bars?.[1] ?? 0}
+                onChange={(v) => data.updateSection(item.id, section.id, { bars: v && section.bars ? [section.bars[0], Math.max(section.bars[0], v)] : section.bars })}
+              />
               <NumberField
                 label={`Целевой темп: ${section.title}`}
                 value={section.targetBpm ?? 0}

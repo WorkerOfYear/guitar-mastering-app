@@ -91,3 +91,19 @@ body {
     opacity: 0;
   }
 }
+
+/* alphaTab cursor and highlights */
+.at-cursor-bar {
+  background: color-mix(in oklab, var(--accent) 18%, transparent);
+}
+.at-cursor-beat {
+  background: var(--accent);
+  width: 3px;
+}
+.at-highlight * {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+.at-selection div {
+  background: color-mix(in oklab, var(--chord) 20%, transparent);
+}

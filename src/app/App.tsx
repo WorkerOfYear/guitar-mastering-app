@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { TabBar } from "./TabBar";
 import { tg } from "./telegram";
 import { BeatFlash } from "@/components/metronome/MetronomePanel";
 import { TodayPage } from "@/features/today/TodayPage";
@@ -14,7 +13,8 @@ import { MetronomePage } from "@/features/metronome/MetronomePage";
 import { ImprovPage } from "@/features/improv/ImprovPage";
 import { SessionPage } from "@/features/session/SessionPage";
 
-const TAB_ROOTS = ["/", "/library", "/theory", "/progress", "/metronome"];
+// One main screen for now; the others stay reachable from settings and from plan entries.
+const TAB_ROOTS = ["/"];
 
 /** Telegram's native back button for screens that are not tab roots. */
 function TelegramBack() {
@@ -38,12 +38,10 @@ function StartPage() {
 }
 
 function Shell() {
-  const { pathname } = useLocation();
-  const inSession = pathname === "/session";
   return (
     <>
       <TelegramBack />
-      <main className="mx-auto max-w-3xl px-4 pb-28 pt-[max(env(safe-area-inset-top),0.5rem)]">
+      <main className="mx-auto max-w-3xl px-4 pb-10 pt-[max(env(safe-area-inset-top),0.5rem)]">
         <Routes>
           <Route path="/" element={<StartPage />} />
           <Route path="/library" element={<LibraryPage />} />
@@ -58,7 +56,6 @@ function Shell() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-      {!inSession && <TabBar />}
       <BeatFlash />
     </>
   );

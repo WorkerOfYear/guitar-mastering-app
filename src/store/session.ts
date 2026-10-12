@@ -25,7 +25,8 @@ interface SessionStore {
   start: (blocks: PlanBlock[]) => void;
   pause: () => void;
   resume: () => void;
-  setEntry: (entry: number) => void;
+  /** Move the current block's clock (skip / back) */
+  seek: (seconds: number) => void;
   goToBlock: (block: number, opts?: { skipCurrent?: boolean }) => void;
   extend: (minutes: number) => void;
   setImprov: (task: ImprovTask) => void;
@@ -72,7 +73,13 @@ export const useSession = create<SessionStore>()(
         }),
       pause: () => set((st) => (st.active ? { active: { ...settle(st.active), runningSince: null } } : st)),
       resume: () => set((st) => (st.active && st.active.runningSince === null ? { active: { ...st.active, runningSince: now() } } : st)),
-      setEntry: (entry) => set((st) => (st.active ? { active: { ...st.active, entry } } : st)),
+      seek: (seconds) =>
+        set((st) => {
+          if (!st.active) return st;
+          const elapsed = [...st.active.elapsed];
+          elapsed[st.active.block] = Math.max(0, seconds);
+          return { active: { ...st.active, elapsed, runningSince: st.active.runningSince === null ? null : now() } };
+        }),
       goToBlock: (block, opts) =>
         set((st) => {
           if (!st.active) return st;

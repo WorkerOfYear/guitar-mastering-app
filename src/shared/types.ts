@@ -11,6 +11,14 @@ export interface Section {
   title: string;
   status: ItemStatus;
   targetBpm?: number | null;
+  /** Bars of the Guitar Pro file this section covers, 1-based and inclusive */
+  bars?: [number, number] | null;
+}
+
+export interface VideoLink {
+  youtubeId: string;
+  /** Start offset in seconds */
+  start?: number;
 }
 
 /** Opens the Theory screen with these settings. */
@@ -39,6 +47,14 @@ export interface Item {
   subdivision?: Subdivision;
   sections?: Section[];
   theory?: TheoryLink;
+  /** Tab in alphaTex — played Songsterr-style with a cursor and sound */
+  tab?: string;
+  /** Play-along video (YouTube) */
+  video?: VideoLink;
+  /** A Guitar Pro file is stored on this device for this item (IndexedDB) */
+  tabFile?: { name: string; size: number };
+  /** How long this item takes in a session; otherwise the block time is split evenly */
+  minutes?: number;
   notes?: string;
   createdAt: number;
   /** Last edit; the newer copy wins when two devices sync */

@@ -3,6 +3,8 @@ import { entryKey } from "@/lib/progress";
 import type { DataState } from "@/store/data";
 import type { Item, PlanBlock, PlanEntry } from "@/shared/types";
 
+export const WARMUP_CATEGORY = "Разминка";
+
 type PlanInput = Pick<DataState, "items" | "lastPlayed" | "recentKeys" | "practice">;
 
 /** Never-played first, then the longest ago. */
@@ -27,11 +29,20 @@ export function buildPlan(input: PlanInput, rnd = Math.random): PlanBlock[] {
   const live = items.filter((i) => i.status !== "archived");
   const order = byLastPlayed(lastPlayed);
 
-  const warmup = live.filter((i) => i.warmup).map((i) => ({ itemId: i.id }));
+  const warmupItems = live.filter((i) => i.warmup);
+  const warmup = warmupItems.map((i) => ({ itemId: i.id }));
+  // The warm-up lasts as long as its exercises (the video is 15 min, tab exercises 3 min each).
+  const warmupMinutes = warmupItems.length ? warmupItems.reduce((sum, i) => sum + (i.minutes ?? 3), 0) : practice.blocks.warmup;
 
-  const study = live.filter((i) => !i.warmup);
+  // Warm-up material (category "Разминка") is only ever played in the warm-up, even when switched off there.
+  const study = live.filter((i) => !i.warmup && i.category !== WARMUP_CATEGORY);
   const activeUnits = study.filter((i) => i.status === "active").flatMap((i) => units(i, "active")).sort(order);
-  const fresh = activeUnits.slice(0, practice.maxNew);
+  // Songs are the goal: one slot always goes to a song section when one is in progress.
+  const isSong = (e: PlanEntry) => !!e.sectionId;
+  const song = activeUnits.find(isSong);
+  const fresh = song
+    ? [song, ...activeUnits.filter((e) => e !== song)].slice(0, practice.maxNew).sort(order)
+    : activeUnits.slice(0, practice.maxNew);
 
   const reviewCount = Math.max(1, Math.floor(practice.blocks.review / practice.minutesPerReview));
   const rotation = study.filter((i) => i.status !== "queue").flatMap((i) => units(i, "rotation"));
@@ -44,7 +55,7 @@ export function buildPlan(input: PlanInput, rnd = Math.random): PlanBlock[] {
   }
 
   return [
-    { kind: "warmup", minutes: practice.blocks.warmup, entries: warmup },
+    { kind: "warmup", minutes: warmupMinutes, entries: warmup },
     { kind: "new", minutes: practice.blocks.new, entries: fresh },
     { kind: "review", minutes: practice.blocks.review, entries: review },
     { kind: "improv", minutes: practice.blocks.improv, entries: [], improv: randomTask({ recentKeys: input.recentKeys, rnd }) },

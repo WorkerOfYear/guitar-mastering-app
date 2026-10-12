@@ -11,12 +11,14 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@coderline/alphatab": "^1.8.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router-dom": "^7.18.4",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@coderline/alphatab-vite": "^1.8.4",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",

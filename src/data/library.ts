@@ -1,4 +1,5 @@
 import type { Item } from "@/shared/types";
+import { chromatic, legatoTriplets, pentatonicBoxes, spider, stretches } from "./exercises";
 
 // Starter library. Everything here is editable in the app; tempos are a starting guess, adjust them as you go.
 // BPM is counted in quarter notes; `subdivision` says how many notes per beat are played.
@@ -9,66 +10,83 @@ const songsterr = (q: string) => `https://www.songsterr.com/?pattern=${encodeURI
 type Seed = Omit<Item, "createdAt" | "links"> & { links?: string[] };
 
 const SEED: Seed[] = [
-  // ---------- warm-up (10 min)
+  // ---------- warm-up: the video by default (15 min); the tab exercises can be switched on instead
+  {
+    id: "wu-video",
+    type: "technique",
+    category: "Разминка",
+    title: "Разминка по видео",
+    description: "Играй вместе с видео. Видео стартует само после отсчёта.",
+    status: "active",
+    warmup: true,
+    minutes: 15,
+    video: { youtubeId: "2n6qPXwKfvc", start: 73 },
+    links: ["https://www.youtube.com/watch?v=2n6qPXwKfvc&t=73s"],
+  },
   {
     id: "wu-chromatic",
     type: "technique",
-    category: "Альтернатива",
+    category: "Разминка",
     title: "Хроматика 1-2-3-4",
     description: "По всем струнам вверх и вниз, строго альтернативным штрихом. Пальцы держи близко к грифу.",
-    status: "active",
-    warmup: true,
+    status: "queue",
     startBpm: 80,
     targetBpm: 140,
     subdivision: 4,
+    minutes: 3,
+    tab: chromatic(80),
   },
   {
     id: "wu-spider",
     type: "technique",
-    category: "Альтернатива",
+    category: "Разминка",
     title: "Паук (spider)",
     description: "Пальцы 1-3 на одной струне, 2-4 на соседней, переход через струну. Развивает независимость пальцев.",
-    status: "active",
-    warmup: true,
+    status: "queue",
     startBpm: 70,
     targetBpm: 120,
     subdivision: 4,
+    minutes: 3,
+    tab: spider(70),
   },
   {
     id: "wu-stretch",
     type: "technique",
-    category: "Растяжки",
+    category: "Разминка",
     title: "Растяжки с 12 лада вниз",
-    description: "1-2-3-4 через лад (12-14-16-17 и т. д.), сдвиг на лад вниз на каждом круге. Без напряжения в кисти.",
-    status: "active",
-    warmup: true,
+    description: "Лады f, f+2, f+4, f+5 на каждой струне, сдвиг на лад вниз на каждом круге. Без напряжения в кисти.",
+    status: "queue",
     startBpm: 60,
     targetBpm: 100,
     subdivision: 2,
+    minutes: 3,
+    tab: stretches(60),
   },
   {
     id: "wu-legato",
     type: "technique",
-    category: "Легато",
+    category: "Разминка",
     title: "Легато-триоли на одной струне",
-    description: "Hammer-on и pull-off триолями, все пальцы по очереди. Громкость нот должна быть ровной.",
-    status: "active",
-    warmup: true,
+    description: "Hammer-on и pull-off триолями. Громкость нот должна быть ровной.",
+    status: "queue",
     startBpm: 70,
     targetBpm: 130,
     subdivision: 3,
+    minutes: 3,
+    tab: legatoTriplets(70),
   },
   {
     id: "wu-penta16",
     type: "technique",
-    category: "Альтернатива",
-    title: "Пентатоника шестнадцатыми с акцентами",
-    description: "1-я позиция минорной пентатоники вверх-вниз, акцент на каждую долю.",
-    status: "active",
-    warmup: true,
+    category: "Разминка",
+    title: "Пентатоника: 5 позиций шестнадцатыми",
+    description: "Минорная пентатоника ля, все пять позиций вверх-вниз, акцент на каждую долю.",
+    status: "queue",
     startBpm: 70,
     targetBpm: 140,
     subdivision: 4,
+    minutes: 3,
+    tab: pentatonicBoxes(70),
     theory: { tab: "scale", tonic: "A", scaleId: "minor-pentatonic" },
   },
 
@@ -295,4 +313,10 @@ const SEED: Seed[] = [
   },
 ];
 
-export const STARTER_LIBRARY: Item[] = SEED.map((s) => ({ links: [], ...s, createdAt: 0 }));
+/**
+ * Version stamp of the starter library. Bump it when the starter content changes:
+ * untouched starter items get replaced on update, while anything the user edited has a newer stamp and stays.
+ */
+export const STARTER_VERSION = Date.UTC(2026, 9, 12);
+
+export const STARTER_LIBRARY: Item[] = SEED.map((s) => ({ links: [], ...s, createdAt: 0, updatedAt: STARTER_VERSION }));

@@ -64,6 +64,15 @@ export function EntryCard({ entry }: { entry: PlanEntry }) {
           ))}
         </div>
       )}
+      {item.type === "song" && !item.tabFile && (
+        <button
+          type="button"
+          onClick={() => navigate(`/library/${item.id}`)}
+          className="mt-3 h-11 w-full rounded-2xl border border-dashed border-line text-sm font-semibold"
+        >
+          📄 Загрузи Guitar Pro файл — будет играть как в Songsterr
+        </button>
+      )}
       {item.notes && <p className="mt-3 whitespace-pre-wrap rounded-2xl bg-surface-2 p-3 text-sm">{item.notes}</p>}
     </Card>
   );

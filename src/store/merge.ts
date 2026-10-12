@@ -1,3 +1,4 @@
+import { STARTER_VERSION } from "@/data/library";
 import type { DataState } from "./data";
 import type { Item, SessionLog, TempoEntry } from "@/shared/types";
 
@@ -5,6 +6,10 @@ import type { Item, SessionLog, TempoEntry } from "@/shared/types";
 // Merging is a union: nothing played on either device is lost, and for edited items the newer copy wins.
 
 const stamp = (i: Item) => i.updatedAt ?? i.createdAt ?? 0;
+/** A starter item nobody has touched (any version of the starter library). */
+export const isPristine = (i: Item) => !i.updatedAt || i.updatedAt === STARTER_VERSION;
+/** Edited beats pristine whatever the clock says; otherwise the newer copy wins. */
+const newer = (a: Item, b: Item) => (isPristine(a) !== isPristine(b) ? !isPristine(a) : stamp(a) >= stamp(b));
 const logKey = (t: TempoEntry) => `${t.at}:${t.itemId}:${t.sectionId ?? ""}`;
 
 export function mergeData(local: DataState, remote: DataState | null | undefined): DataState {
@@ -15,7 +20,7 @@ export function mergeData(local: DataState, remote: DataState | null | undefined
   const items = new Map<string, Item>();
   for (const item of [...(remote.items ?? []), ...local.items]) {
     const prev = items.get(item.id);
-    if (!prev || stamp(item) >= stamp(prev)) items.set(item.id, item);
+    if (!prev || newer(item, prev)) items.set(item.id, item);
   }
   // Keep order stable: local order first, then items only the other device has.
   const order = [...new Set([...local.items.map((i) => i.id), ...(remote.items ?? []).map((i) => i.id)])];

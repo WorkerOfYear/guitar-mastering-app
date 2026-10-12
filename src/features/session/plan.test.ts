@@ -12,10 +12,18 @@ describe("buildPlan", () => {
   it("builds four blocks from the starter library", () => {
     const plan = buildPlan(base, () => 0);
     expect(plan.map((b) => b.kind)).toEqual(["warmup", "new", "review", "improv"]);
-    expect(plan[0].entries).toHaveLength(5);
-    expect(plan[1].entries).toHaveLength(2);
+    expect(plan[0].entries).toEqual([{ itemId: "wu-video" }]);
+    expect(plan[0].minutes).toBe(15);
+    expect(plan[1].entries).toEqual([{ itemId: "song-tech-diff", sectionId: "intro" }, { itemId: "tech-3nps" }]);
     expect(plan[2].entries.map((e) => e.itemId)).toEqual(["th-penta5", "th-modes"]);
     expect(plan[3].improv?.key).toBeTruthy();
+  });
+  it("never plans warm-up material into the other blocks", () => {
+    const items = STARTER_LIBRARY.map((i) => (i.id === "wu-video" ? { ...i, warmup: false } : i.id === "wu-spider" ? { ...i, warmup: true } : i));
+    const plan = buildPlan({ ...base, items });
+    expect(plan[0].entries).toEqual([{ itemId: "wu-spider" }]);
+    expect(plan[0].minutes).toBe(3);
+    expect(plan.flatMap((b) => b.entries).some((e) => e.itemId === "wu-video")).toBe(false);
   });
   it("takes the least recently played active units first", () => {
     const lastPlayed = { "tech-3nps": "2026-10-09", "tech-gilbert-skip": "2026-10-01", "song-tech-diff#intro": "2026-10-05" };

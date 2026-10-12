@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { STARTER_LIBRARY } from "@/data/library";
+import { isPristine } from "./merge";
 import { entryKey } from "@/lib/progress";
 import type { BlockKind, Item, ItemStatus, PlanEntry, Section, SessionLog, TempoEntry } from "@/shared/types";
 
@@ -12,7 +13,7 @@ export interface PracticeSettings {
 }
 
 export const DEFAULT_PRACTICE: PracticeSettings = {
-  blocks: { warmup: 10, new: 20, review: 15, improv: 15 },
+  blocks: { warmup: 15, new: 20, review: 10, improv: 15 },
   days: [1, 3, 6],
   maxNew: 2,
   minutesPerReview: 5,
@@ -103,9 +104,26 @@ export const useData = create<DataState & DataActions>()(
       setPractice: (patch) => set((s) => ({ practice: { ...s.practice, ...patch }, practiceUpdatedAt: Date.now() })),
       replaceAll: (data) => set(() => ({ ...initial(), ...data })),
     }),
-    { name: "guitar:data", version: 1 },
+    {
+      name: "guitar:data",
+      version: 2,
+      migrate: (persisted, version) => {
+        const state = persisted as DataState;
+        if (version < 2) state.items = upgradeStarter(state.items ?? [], state.deleted ?? {});
+        return state;
+      },
+    },
   ),
 );
+
+/** New starter content replaces untouched starter items and adds new ones; edited items stay as they are. */
+export function upgradeStarter(items: Item[], deleted: Record<string, number>): Item[] {
+  const starter = new Map(STARTER_LIBRARY.map((i) => [i.id, i]));
+  const out = items.map((i) => (starter.has(i.id) && isPristine(i) ? starter.get(i.id)! : i));
+  const have = new Set(out.map((i) => i.id));
+  for (const s of STARTER_LIBRARY) if (!have.has(s.id) && deleted[s.id] === undefined) out.push(s);
+  return out;
+}
 
 /** Plain data for backups and (later) sync. */
 export const exportData = (): DataState => {

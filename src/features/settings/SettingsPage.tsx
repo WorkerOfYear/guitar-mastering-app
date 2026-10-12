@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { NumberField } from "@/components/metronome/MetronomePanel";
 import { Card, Chip, ScrollRow, Segmented, SectionTitle, Toggle } from "@/components/ui";
 import { PageHeader } from "@/components/ui/Placeholder";
@@ -39,6 +40,21 @@ export function SettingsPage() {
   return (
     <div>
       <PageHeader title="Настройки" />
+
+      <SectionTitle>Разделы</SectionTitle>
+      <Card className="grid grid-cols-2 gap-2">
+        {[
+          ["/library", "📚 Библиотека"],
+          ["/theory", "🎼 Теория"],
+          ["/progress", "📈 Прогресс"],
+          ["/metronome", "♩ Метроном"],
+          ["/improv", "🎶 Импровизация"],
+        ].map(([to, label]) => (
+          <Link key={to} to={to} className="flex h-12 items-center justify-center rounded-2xl bg-surface-2 text-sm font-semibold">
+            {label}
+          </Link>
+        ))}
+      </Card>
 
       <SectionTitle>Занятие</SectionTitle>
       <Card className="space-y-3">
