@@ -3,7 +3,8 @@
 import { describe, expect, it } from "vitest";
 import * as alphaTab from "@coderline/alphatab";
 import { readFileSync } from "node:fs";
-import { FPS, align, scoreTimeline } from "@/lib/autoSync";
+import { FPS, align } from "@/lib/align";
+import { scoreTimeline } from "@/lib/autoSync";
 
 const gp = process.env.GP;
 

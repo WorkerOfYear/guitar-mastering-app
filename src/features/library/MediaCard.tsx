@@ -53,6 +53,8 @@ export function MediaCard({ item }: { item: Item }) {
   const { updateItem } = useData();
   const [file, setFile] = useState<ArrayBuffer | null>(null);
   const [audioData, setAudioData] = useState<ArrayBuffer | null>(null);
+  // The item says a file exists, but this device doesn't have it (another device, a restored backup).
+  const [missing, setMissing] = useState({ tab: false, audio: false });
   const [useRecording, setUseRecording] = useState(true);
   const [score, setScore] = useState<ScoreInfo | null>(null);
   const [track, setTrack] = useState(0);
@@ -61,10 +63,18 @@ export function MediaCard({ item }: { item: Item }) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (item.tabFile) void loadTabFile(item.id).then((f) => setFile(f ?? null));
+    if (item.tabFile)
+      void loadTabFile(item.id).then((f) => {
+        setFile(f ?? null);
+        setMissing((m) => ({ ...m, tab: !f }));
+      });
   }, [item.id, item.tabFile]);
   useEffect(() => {
-    if (item.audioFile) void loadAudioFile(item.id).then((f) => setAudioData(f ?? null));
+    if (item.audioFile)
+      void loadAudioFile(item.id).then((f) => {
+        setAudioData(f ?? null);
+        setMissing((m) => ({ ...m, audio: !f }));
+      });
   }, [item.id, item.audioFile]);
 
   const uploadAudio = async (f: File) => {
@@ -73,6 +83,7 @@ export function MediaCard({ item }: { item: Item }) {
     const data = await f.arrayBuffer();
     await saveAudioFile(item.id, data);
     setAudioData(data);
+    setMissing((m) => ({ ...m, audio: false }));
     setPlaying(false);
     updateItem(item.id, { audioFile: { name: f.name, size: f.size } });
   };
@@ -89,6 +100,7 @@ export function MediaCard({ item }: { item: Item }) {
     const data = await f.arrayBuffer();
     await saveTabFile(item.id, data);
     setFile(data);
+    setMissing((m) => ({ ...m, tab: false }));
     setScore(null);
     updateItem(item.id, { tabFile: { name: f.name, size: f.size } });
   };
@@ -192,7 +204,7 @@ export function MediaCard({ item }: { item: Item }) {
         </>
       )}
 
-      {item.tabFile ? (
+      {item.tabFile && !missing.tab ? (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2 text-sm">
             <span className="min-w-0 truncate">📄 {item.tabFile.name}</span>
@@ -217,7 +229,7 @@ export function MediaCard({ item }: { item: Item }) {
             </div>
           ) : (
             <label className="flex h-12 cursor-pointer items-center justify-center rounded-2xl border border-dashed border-line px-3 text-center text-sm font-semibold">
-              🎧 Загрузить запись, по которой написан таб (mp3, m4a, wav)
+              {missing.audio ? `🎧 Загрузи «${item.audioFile?.name}» на этом устройстве (отметки сохранятся)` : "🎧 Загрузить запись, по которой написан таб (mp3, m4a, wav)"}
               <input type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg,.flac" hidden onChange={(e) => e.target.files?.[0] && void uploadAudio(e.target.files[0])} />
             </label>
           )}
@@ -225,7 +237,7 @@ export function MediaCard({ item }: { item: Item }) {
         </div>
       ) : (
         <label className="flex h-12 cursor-pointer items-center justify-center rounded-2xl border border-dashed border-line text-sm font-semibold">
-          📄 Загрузить Guitar Pro файл (.gp, .gp5, .gpx…)
+          {missing.tab ? `📄 Загрузи «${item.tabFile?.name}» на этом устройстве` : "📄 Загрузить Guitar Pro файл (.gp, .gp5, .gpx…)"}
           <input type="file" accept=".gp,.gp3,.gp4,.gp5,.gpx,.gp7,.xml,.musicxml" hidden onChange={(e) => e.target.files?.[0] && void upload(e.target.files[0])} />
         </label>
       )}
