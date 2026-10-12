@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { FileMusic, Headphones, LoaderCircle, Plus, Upload, Video, X } from "lucide-react";
-import { Button, Card, Chip, Input, Segmented } from "@/components/ui";
+import { Button, Card, Chip, Input, Segmented, Toggle } from "@/components/ui";
 import { TYPE_ICON } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/Placeholder";
 import { parseYouTube, AUDIO_ACCEPT, AUDIO_MAX, TAB_ACCEPT, TAB_MAX } from "./MediaCard";
@@ -18,6 +18,7 @@ export function NewItemPage() {
   const [title, setTitle] = useState("");
   const [type, setType] = useState<ItemType>("technique");
   const [status, setStatus] = useState<ItemStatus>("queue");
+  const [warmup, setWarmup] = useState(false);
   const [source, setSource] = useState<"video" | "audio">("video");
   const [videoUrl, setVideoUrl] = useState("");
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -35,7 +36,8 @@ export function NewItemPage() {
       const id = addItem({
         title: title.trim(),
         type: itemType,
-        status,
+        status: warmup ? "active" : status,
+        ...(warmup ? { warmup: true } : {}),
         links: video && source === "video" ? [videoUrl.trim()] : [],
         ...(itemType === "technique" || itemType === "lick" ? { startBpm: 60, targetBpm: 120, subdivision: 4 as const } : {}),
         ...(itemType === "song" ? { sections: [] } : {}),
@@ -148,14 +150,19 @@ export function NewItemPage() {
         {tabFile && <p className="px-1 text-xs text-muted">Разделы песни возьмутся из меток файла — их можно будет переименовать или удалить.</p>}
       </Card>
 
-      <Segmented
-        value={status}
-        onChange={setStatus}
-        options={[
-          { value: "queue", label: "В очередь" },
-          { value: "active", label: "Сразу в работу" },
-        ]}
-      />
+      <Card className="py-1">
+        <Toggle label="В разминку" hint={"Играется в начале каждого занятия, а не в разборе нового и повторении"} checked={warmup} onChange={setWarmup} />
+      </Card>
+      {!warmup && (
+        <Segmented
+          value={status}
+          onChange={setStatus}
+          options={[
+            { value: "queue", label: "В очередь" },
+            { value: "active", label: "Сразу в работу" },
+          ]}
+        />
+      )}
       <Button size="lg" disabled={!title.trim() || videoError || busy} onClick={() => void create()} className="w-full">
         {busy ? <LoaderCircle className="animate-spin" /> : <Plus />} Создать
       </Button>
