@@ -193,7 +193,9 @@ export default function TabPlayer({ tex, file, audio, sync, bpm, speed, playing,
     if (!a || !score.current) return;
     const s = score.current;
     a.playbackSpeed = Math.min(2, Math.max(0.25, speed ?? (bpm && s.tempo ? bpm / s.tempo : 1)));
-    a.countInVolume = countIn ? 1 : 0;
+    // alphaTab bug: with a backing track, count-in makes BackingTrackPlayer wait in
+    // fillMidiEventQueueToEndTime for a main-track time that never advances → the page freezes.
+    a.countInVolume = countIn && !audio ? 1 : 0;
     a.metronomeVolume = metronome ? 1 : 0;
     if (loopBars && s.masterBars.length) {
       const first = s.masterBars[Math.max(0, loopBars[0] - 1)];
@@ -204,7 +206,7 @@ export default function TabPlayer({ tex, file, audio, sync, bpm, speed, playing,
       a.playbackRange = range;
       a.tickPosition = first.start;
     } else a.playbackRange = null;
-  }, [bpm, speed, loopBars?.[0], loopBars?.[1], countIn, metronome, ready, loading]);
+  }, [bpm, speed, loopBars?.[0], loopBars?.[1], countIn, metronome, ready, loading, audio]);
 
   // Play / pause from outside. If the browser blocks audio without a tap, tell the parent.
   useEffect(() => {

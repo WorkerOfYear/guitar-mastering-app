@@ -378,6 +378,7 @@ function TabStage({ item, playing, control, onBlocked }: { item: Item; playing: 
 function SongStage({ item, entry, playing, control, onBlocked }: { item: Item; entry: PlanEntry; playing: boolean; control: StageProps["control"]; onBlocked: (b: boolean) => void }) {
   const [file, setFile] = useState<ArrayBuffer | null | undefined>(undefined);
   const [audio, setAudio] = useState<ArrayBuffer | null>(null);
+  const [audioLoaded, setAudioLoaded] = useState(false);
   const [useRecording, setUseRecording] = useState(true);
   const [speed, setSpeed] = useState(0.75);
   const [click, setClick] = useState(false);
@@ -385,19 +386,25 @@ function SongStage({ item, entry, playing, control, onBlocked }: { item: Item; e
   const section = findSection(item, entry.sectionId);
   useEffect(() => {
     void loadTabFile(item.id).then((f) => setFile(f ?? null));
-    if (item.audioFile) void loadAudioFile(item.id).then((f) => setAudio(f ?? null));
+    if (item.audioFile)
+      void loadAudioFile(item.id).then((f) => {
+        setAudio(f ?? null);
+        setAudioLoaded(true);
+      });
   }, [item.id, item.audioFile]);
   // Keep the "record result" tempo in sync with what's actually playing.
   useEffect(() => {
     if (tempo) useMetronome.getState().set({ bpm: clampBpm(tempo * speed) });
   }, [tempo, speed]);
   if (file === null) return <EntryCard entry={entry} />;
+  // Wait for the recording too, so the player is built once with everything (see MediaCard).
+  const ready = !!file && (!item.audioFile || audioLoaded);
   return (
     <div>
-      {file && (
+      {ready && (
         <Suspense fallback={<div className="rounded-3xl border border-line bg-surface" style={{ height: TAB_HEIGHT }} />}>
           <TabPlayer
-            file={file}
+            file={file!}
             audio={useRecording ? audio : null}
             sync={item.audioSync}
             height={TAB_HEIGHT}

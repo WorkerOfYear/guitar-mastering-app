@@ -77,6 +77,11 @@ export function MediaCard({ item }: { item: Item }) {
       });
   }, [item.id, item.audioFile]);
 
+  // Create the player only once both the tab and its recording are read: building it with the tab
+  // alone and rebuilding a moment later (when the recording arrives) left alphaTab half-initialised,
+  // and the next play froze the page.
+  const mediaReady = !item.audioFile || audioData !== null || missing.audio;
+
   const uploadAudio = async (f: File) => {
     setError("");
     if (f.size > 40_000_000) return setError("Аудио больше 40 МБ — сожми его в mp3");
@@ -162,7 +167,7 @@ export function MediaCard({ item }: { item: Item }) {
         </button>
       </div>
 
-      {(item.tab || file) && (
+      {(item.tab || file) && mediaReady && (
         <>
           <Suspense fallback={<div className="h-72 rounded-3xl border border-line bg-surface" />}>
             <TabPlayer
