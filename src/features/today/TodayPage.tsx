@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { m } from "motion/react";
-import { ChevronRight, Dices, Music, Play, PlayCircle, Video } from "lucide-react";
+import { ChevronRight, Dices, Library, Music, Play, PlayCircle, Plus, Video } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { BLOCK_ICON, IconTile } from "@/components/ui/icons";
 import { PageHeader, SettingsLink } from "@/components/ui/Placeholder";
@@ -61,6 +61,20 @@ export function TodayPage() {
         </Button>
       ) : (
         <>
+          {data.items.length === 0 && (
+            <Card className="mb-2.5 flex flex-col items-center gap-3 border-dashed py-6 text-center">
+              <IconTile icon={Library} />
+              <div>
+                <div className="font-semibold">Библиотека пока пуста</div>
+                <div className="mt-0.5 text-sm text-muted">Добавь упражнения и песни — они появятся в плане</div>
+              </div>
+              <Button asChild>
+                <Link to="/library/new">
+                  <Plus /> Добавить
+                </Link>
+              </Button>
+            </Card>
+          )}
           <div className="space-y-2.5">
             {plan.map((b, i) => (
               <m.div key={b.kind} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05, duration: 0.25 }}>

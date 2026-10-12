@@ -1,7 +1,8 @@
 import type { Item } from "@/shared/types";
 import { chromatic, legatoTriplets, pentatonicBoxes, spider, stretches } from "./exercises";
 
-// Starter library. Everything here is editable in the app; tempos are a starting guess, adjust them as you go.
+// The former built-in starter library. It is no longer put into the app (the user fills the library
+// alone); its ids are removed from old saved data (dropStarter in store/data.ts), and tests use it as sample data.
 // BPM is counted in quarter notes; `subdivision` says how many notes per beat are played.
 
 const yt = (q: string) => `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;

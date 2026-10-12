@@ -54,16 +54,15 @@ describe("mergeData", () => {
   });
 });
 
-describe("upgradeStarter", () => {
-  it("replaces untouched starter items, keeps edits, adds new ones, skips deleted", async () => {
-    const { upgradeStarter } = await import("./data");
-    const old: Item[] = STARTER_LIBRARY.filter((i) => i.id !== "wu-video").map((i) => ({ ...i, updatedAt: undefined, tab: undefined, warmup: i.id.startsWith("wu-") }));
-    old[0] = { ...old[0], notes: "моё", updatedAt: Date.UTC(2026, 9, 11) };
-    const up = upgradeStarter(old, { "song-ascend": 1 });
-    expect(up.find((i) => i.id === old[0].id)?.notes).toBe("моё");
-    expect(up.find((i) => i.id === "wu-spider")?.tab).toBeTruthy();
-    expect(up.find((i) => i.id === "wu-spider")?.warmup).toBeFalsy();
-    expect(up.some((i) => i.id === "wu-video")).toBe(true);
-    expect(up.filter((i) => i.id === "song-ascend")).toHaveLength(1); // still there: deletion only blocks re-adding missing ones
+describe("dropStarter", () => {
+  it("removes starter items, edited or not, keeps the user's own, and they stay gone after a sync", async () => {
+    const { dropStarter } = await import("./data");
+    const mine: Item = { id: "song-mine", type: "song", title: "Моя песня", status: "active", links: [], createdAt: 5, updatedAt: 5 };
+    const edited = { ...STARTER_LIBRARY[0], notes: "моё", updatedAt: Date.UTC(2026, 9, 12, 10) };
+    const { items, deleted } = dropStarter([edited, ...STARTER_LIBRARY.slice(1), mine], {}, Date.UTC(2026, 9, 13));
+    expect(items).toEqual([mine]);
+    // A device (or the server) that still has the starter items doesn't bring them back.
+    const merged = mergeData({ ...base(), items, deleted }, { ...base(), items: [edited, ...STARTER_LIBRARY.slice(1)] });
+    expect(merged.items).toEqual([mine]);
   });
 });

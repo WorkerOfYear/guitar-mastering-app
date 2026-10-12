@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { STARTER_LIBRARY } from "@/data/library";
-import { isPristine } from "./merge";
 import { entryKey } from "@/lib/progress";
 import type { BlockKind, Item, ItemStatus, PlanEntry, Section, SessionLog, TempoEntry } from "@/shared/types";
 
@@ -51,8 +50,8 @@ interface DataActions {
 const uid = (prefix: string) => `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
 const initial = (): DataState => ({
-  // Starter items keep timestamp 0: on a fresh device they never override edits synced from elsewhere.
-  items: STARTER_LIBRARY,
+  // The library starts empty: everything in it is added by the user.
+  items: [],
   log: [],
   sessions: [],
   lastPlayed: {},
@@ -61,8 +60,7 @@ const initial = (): DataState => ({
   deleted: {},
 });
 
-const mapItem = (items: Item[], id: string, fn: (i: Item) => Item) =>
-  items.map((i) => (i.id === id ? { ...fn(i), updatedAt: Date.now() } : i));
+const mapItem = (items: Item[], id: string, fn: (i: Item) => Item) => items.map((i) => (i.id === id ? { ...fn(i), updatedAt: Date.now() } : i));
 
 export const useData = create<DataState & DataActions>()(
   persist(
@@ -106,23 +104,25 @@ export const useData = create<DataState & DataActions>()(
     }),
     {
       name: "guitar:data",
-      version: 2,
+      version: 3,
       migrate: (persisted, version) => {
         const state = persisted as DataState;
-        if (version < 2) state.items = upgradeStarter(state.items ?? [], state.deleted ?? {});
+        if (version < 3) Object.assign(state, dropStarter(state.items ?? [], state.deleted ?? {}));
         return state;
       },
     },
   ),
 );
 
-/** New starter content replaces untouched starter items and adds new ones; edited items stay as they are. */
-export function upgradeStarter(items: Item[], deleted: Record<string, number>): Item[] {
-  const starter = new Map(STARTER_LIBRARY.map((i) => [i.id, i]));
-  const out = items.map((i) => (starter.has(i.id) && isPristine(i) ? starter.get(i.id)! : i));
-  const have = new Set(out.map((i) => i.id));
-  for (const s of STARTER_LIBRARY) if (!have.has(s.id) && deleted[s.id] === undefined) out.push(s);
-  return out;
+/**
+ * Removes the old built-in starter items, edited or not, and marks them deleted so a sync with
+ * another device or the server doesn't bring them back. The user's own items stay.
+ */
+export function dropStarter(items: Item[], deleted: Record<string, number>, now = Date.now()) {
+  const starter = new Set(STARTER_LIBRARY.map((i) => i.id));
+  const gone = { ...deleted };
+  for (const id of starter) gone[id] = Math.max(now, gone[id] ?? 0);
+  return { items: items.filter((i) => !starter.has(i.id)), deleted: gone };
 }
 
 /** Plain data for backups and (later) sync. */
