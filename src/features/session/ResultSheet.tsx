@@ -105,7 +105,7 @@ export function ResultSheet({ open, entry, bpm: initialBpm, onClose }: Props) {
                 </IconButton>
               </div>
             )}
-            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Заметка (необязательно)" />
+            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Заметка" />
             <div className="grid grid-cols-3 gap-2">
               {RESULTS.map((r) => (
                 <m.button

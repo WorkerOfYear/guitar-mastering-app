@@ -142,10 +142,7 @@ export function NewItemPage() {
           </FileField>
         )}
 
-        <div className="pt-2">
-          <span className="font-semibold">Таб или ноты</span>
-          <span className="text-xs text-muted"> · необязательно</span>
-        </div>
+        <div className="pt-2 font-semibold">Таб или ноты</div>
         <FileField
           icon={<FileMusic />}
           file={tabFile}
@@ -162,7 +159,6 @@ export function NewItemPage() {
         >
           Guitar Pro или MusicXML (.gp, .gp5, .gpx, .musicxml, .mxl)
         </FileField>
-        {tabFile && <p className="px-1 text-xs text-muted">Разделы песни возьмутся из меток файла — их можно будет переименовать или удалить.</p>}
       </Card>
 
       <Button size="lg" disabled={!finalTitle || videoError || busy} onClick={() => void create()} className="w-full">
