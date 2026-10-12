@@ -7,7 +7,8 @@ import { haptic } from "@/app/telegram";
 import { cn } from "@/lib/utils";
 import { TYPE_ICON } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/Placeholder";
-import { parseYouTube, AUDIO_ACCEPT, AUDIO_MAX, TAB_ACCEPT, TAB_MAX } from "./MediaCard";
+import { AUDIO_ACCEPT, AUDIO_MAX, TAB_ACCEPT, TAB_MAX } from "./MediaCard";
+import { parseYouTube, withScheme } from "@/lib/youtubeLink";
 import { saveAudioFile, saveTabFile } from "@/lib/tabFiles";
 import { fileTitle, songQuery, youtubeTitle } from "@/lib/titles";
 import { TabSearch } from "./TabSearch";
@@ -44,7 +45,7 @@ export function NewItemPage() {
     setVideoTitle(null);
     if (!video || source !== "video") return;
     const ctl = new AbortController();
-    void youtubeTitle(videoUrl.trim(), ctl.signal).then((t) => !ctl.signal.aborted && setVideoTitle(t));
+    void youtubeTitle(withScheme(videoUrl), ctl.signal).then((t) => !ctl.signal.aborted && setVideoTitle(t));
     return () => ctl.abort();
   }, [video?.youtubeId, source]);
   const suggestion =
@@ -65,7 +66,7 @@ export function NewItemPage() {
         type: itemType,
         // No queue/active choice any more: what gets played is set in the plan builder.
         status: "active",
-        links: [...(video && source === "video" ? [videoUrl.trim()] : []), ...tabLinks],
+        links: [...(video && source === "video" ? [withScheme(videoUrl)] : []), ...tabLinks],
         ...(itemType === "technique" || itemType === "lick" ? { startBpm: 60, targetBpm: 120, subdivision: 4 as const } : {}),
         ...(itemType === "song" ? { sections: [] } : {}),
         ...(video && source === "video" ? { video } : {}),
