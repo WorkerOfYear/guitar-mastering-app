@@ -80,6 +80,38 @@ describe("auto sync", () => {
   });
 });
 
+describe("a tempo change the recording plays differently", () => {
+  // The generated song goes 140 → 120 at bar 33 (Technical Difficulties: 130 → 120 at bar 50 and back);
+  // a band may not slow down there at all, or slow down by another amount.
+  it.each([
+    ["keeps the old tempo", 140],
+    ["slows down more", 110],
+    ["slows down as written", 120],
+  ])("follows a band that %s", (_, bandBpm) => {
+    const score = loadScore();
+    const timeline = scoreTimeline(score);
+    expect(timeline.tempoBars?.length).toBeGreaterThan(0);
+    const change = timeline.bars.find((b) => b.bar === timeline.tempoBars![0] && b.occurrence === 0)!.ms;
+    const offset = 2500;
+    const truth = (ms: number) => offset + (ms <= change ? ms : change + ((ms - change) * 120) / bandBpm);
+
+    const env = new Float32Array(Math.ceil(((truth(timeline.durationMs) + 4000) / 1000) * FPS));
+    let seed = 11;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    for (let i = 0; i < env.length; i++) env[i] = rnd() * 0.25;
+    for (const o of timeline.onsets) {
+      if (rnd() < 0.25) continue;
+      const f = Math.round(((truth(o.ms) + (rnd() - 0.5) * 20) / 1000) * FPS);
+      if (f >= 0 && f < env.length) env[f] = Math.min(1, env[f] + 0.5 + rnd() * 0.5);
+    }
+    const r = align(timeline, env);
+    for (const p of r.points) {
+      const bar = timeline.bars.find((b) => b.bar === p.bar && b.occurrence === (p.occurrence ?? 0))!;
+      expect(Math.abs(p.ms - truth(bar.ms)), `bar ${p.bar}`).toBeLessThan(60);
+    }
+  });
+});
+
 describe("a repeat the recording plays once", () => {
   it("aligns the first pass with the recording and skips the missing one", async () => {
     const { applyBackingTrack } = await import("@/lib/backingTrack");

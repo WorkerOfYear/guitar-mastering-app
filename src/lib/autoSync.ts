@@ -4,8 +4,9 @@ import { FPS, type AutoSyncResult, type ScoreTimeline } from "./align";
 // Automatic alignment of a recording with its tab.
 //  1. Where should notes sound? Note-on times from the score's MIDI (all tracks, drums weighted most).
 //  2. Where do notes sound? Onsets in the recording: spectral flux of the audio, 100 frames per second.
-//  3. Find the offset and overall tempo factor that line both up best, then refine piece by piece
-//     (every 4 bars) so a live performance that drifts still matches.
+//  3. Find candidate offsets and tempo factors that line both up, then follow the recording piece by piece
+//     (every 4 bars and at the tab's tempo changes), each piece with a tempo of its own, so a live performance
+//     that drifts, or a band that plays a tempo change differently from the tab, still matches.
 
 export function scoreTimeline(score: alphaTab.model.Score): ScoreTimeline {
   const midi = new alphaTab.midi.MidiFile();
@@ -51,8 +52,18 @@ export function scoreTimeline(score: alphaTab.model.Score): ScoreTimeline {
     return { bar, occurrence, ms: toMs(m.start) };
   });
   const lastBar = generator.tickLookup.masterBars.at(-1);
+  // Bars the tab changes tempo in (each bar once, at its first pass).
+  const tempoBars = [
+    ...new Set(
+      tempos
+        .slice(1)
+        .map((t) => generator.tickLookup.masterBars.find((m) => m.start <= t.tick && t.tick < m.end)?.masterBar.index)
+        .filter((i): i is number => i !== undefined && i > 0)
+        .map((i) => i + 1),
+    ),
+  ];
   ti = 0;
-  return { onsets, bars, durationMs: lastBar ? toMs(lastBar.end) : (onsets.at(-1)?.ms ?? 0) };
+  return { onsets, bars, tempoBars, durationMs: lastBar ? toMs(lastBar.end) : (onsets.at(-1)?.ms ?? 0) };
 }
 
 /**
