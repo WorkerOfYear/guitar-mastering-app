@@ -142,7 +142,7 @@ export function NewItemPage() {
           </FileField>
         )}
 
-        <div className="pt-2 font-semibold">Таб или ноты</div>
+        <div className="pt-2 font-semibold">Табы или ноты</div>
         <FileField
           icon={<FileMusic />}
           file={tabFile}
