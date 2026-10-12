@@ -83,5 +83,7 @@ api/_lib.ts     Redis (Upstash REST), авторизация (SYNC_KEY или Te
 api/state.ts    GET/PUT данных с optimistic lock; клиент сливает данные двух устройств (src/store/merge.ts)
 api/telegram.ts webhook бота, настройка и привязка владельца одноразовой ссылкой
 api/remind.ts   Vercel Cron: напоминание в дни занятий
+api/tabs.ts     поиск табов по песне: Songsterr (JSON-поиск) и Ultimate Guitar (JSON со страницы поиска), только ссылки;
+                MuseScore закрыт проверкой Cloudflare — для нот в приложении ссылка на его поиск
 tests/          тесты API с имитацией Redis и Telegram
 ```

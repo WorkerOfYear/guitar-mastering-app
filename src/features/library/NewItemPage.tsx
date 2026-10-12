@@ -9,7 +9,8 @@ import { TYPE_ICON } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/Placeholder";
 import { parseYouTube, AUDIO_ACCEPT, AUDIO_MAX, TAB_ACCEPT, TAB_MAX } from "./MediaCard";
 import { saveAudioFile, saveTabFile } from "@/lib/tabFiles";
-import { fileTitle, youtubeTitle } from "@/lib/titles";
+import { fileTitle, songQuery, youtubeTitle } from "@/lib/titles";
+import { TabSearch } from "./TabSearch";
 import { serverReady } from "@/lib/youtubeAudio";
 import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
@@ -30,6 +31,8 @@ export function NewItemPage() {
   // Once the user types a title, suggestions no longer overwrite it.
   const [titleTouched, setTitleTouched] = useState(false);
   const [videoTitle, setVideoTitle] = useState<string | null>(null);
+  // Tab and sheet-music links picked in the web search; they go into the item's links.
+  const [tabLinks, setTabLinks] = useState<string[]>([]);
 
   const video = videoUrl.trim() ? parseYouTube(videoUrl) : null;
   const videoError = !!videoUrl.trim() && !video;
@@ -49,6 +52,8 @@ export function NewItemPage() {
     if (!titleTouched) setTitle(suggestion);
   }, [suggestion]);
   const finalTitle = title.trim() || suggestion;
+  // The video's title says who plays what; otherwise search by the title typed for the item.
+  const videoQuery = source === "video" && videoTitle ? songQuery(videoTitle) : "";
 
   const create = async () => {
     if (!finalTitle || videoError) return;
@@ -59,7 +64,7 @@ export function NewItemPage() {
         type: itemType,
         // No queue/active choice any more: what gets played is set in the plan builder.
         status: "active",
-        links: video && source === "video" ? [videoUrl.trim()] : [],
+        links: [...(video && source === "video" ? [videoUrl.trim()] : []), ...tabLinks],
         ...(itemType === "technique" || itemType === "lick" ? { startBpm: 60, targetBpm: 120, subdivision: 4 as const } : {}),
         ...(itemType === "song" ? { sections: [] } : {}),
         ...(video && source === "video" ? { video } : {}),
@@ -163,6 +168,17 @@ export function NewItemPage() {
         >
           Guitar Pro или MusicXML (.gp, .gp5, .gpx, .musicxml, .mxl)
         </FileField>
+
+        <div className="pt-2">
+          <div className="font-semibold">Найти в интернете</div>
+          <div className="text-xs text-muted">Табы с Songsterr и Ultimate Guitar, ноты на MuseScore. Отмеченные ссылки прикрепятся к элементу</div>
+        </div>
+        <TabSearch
+          query={videoQuery || finalTitle}
+          auto={!!videoQuery}
+          picked={tabLinks}
+          onToggle={(url) => setTabLinks((l) => (l.includes(url) ? l.filter((u) => u !== url) : [...l, url]))}
+        />
       </Card>
 
       <Button size="lg" disabled={!finalTitle || videoError || busy} onClick={() => void create()} className="w-full">

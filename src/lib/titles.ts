@@ -21,3 +21,15 @@ export async function youtubeTitle(url: string, signal?: AbortSignal): Promise<s
     return null;
   }
 }
+
+/** "Paul Gilbert - Fuzz Universe (Official Audio) [HD]" → "Paul Gilbert Fuzz Universe": a search query for tab sites. */
+export function songQuery(videoTitle: string) {
+  return videoTitle
+    .replace(/[([{【][^)\]}】]*[)\]}】]/g, " ") // (Official Video), [HD], 【MV】
+    .replace(/\b(official|music|lyrics?|video|audio|live|cover|guitar lesson|lesson|tutorial|hd|4k|remastered(?: \d{4})?)\b/gi, " ")
+    .replace(/\b(ft|feat)\.?\s.*$/i, " ") // featured artists confuse the search
+    .replace(/[|/\\"«»“”]/g, " ")
+    .replace(/\s+[-–—:]\s+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}

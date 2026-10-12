@@ -89,6 +89,7 @@ export function linkLabel(url: string) {
     if (host.includes("youtube") || host.includes("youtu.be")) return "YouTube";
     if (host.includes("songsterr")) return "Songsterr";
     if (host.includes("ultimate-guitar")) return "Ultimate Guitar";
+    if (host.includes("musescore")) return "MuseScore";
     return host;
   } catch {
     return "Ссылка";
