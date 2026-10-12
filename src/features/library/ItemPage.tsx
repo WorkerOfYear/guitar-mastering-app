@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { TempoChart } from "@/components/charts/TempoChart";
 import { NumberField } from "@/components/metronome/MetronomePanel";
-import { Card, Chip, ScrollRow, SectionTitle, Segmented, Toggle } from "@/components/ui";
+import { Card, Chip, ScrollRow, SectionTitle } from "@/components/ui";
 import { linkLabel } from "@/features/session/EntryCard";
 import { MediaCard } from "./MediaCard";
 import { cleanBpm, entriesFor } from "@/lib/progress";
@@ -11,7 +11,6 @@ import { useData } from "@/store/data";
 import { useSettings } from "@/store/settings";
 import { STATUS_META, SUBDIVISION_META, TYPE_META, type ItemStatus, type Section, type Subdivision } from "@/shared/types";
 
-const STATUSES: ItemStatus[] = ["active", "queue", "rotation", "archived"];
 const NEXT_STATUS: Record<ItemStatus, ItemStatus> = { queue: "active", active: "rotation", rotation: "queue", archived: "queue" };
 const SECTION_STYLE: Record<ItemStatus, string> = {
   queue: "bg-surface-2 text-muted",
@@ -52,12 +51,6 @@ export function ItemPage() {
         rows={1}
         className="w-full resize-none bg-transparent text-2xl font-bold leading-tight outline-none [field-sizing:content]"
       />
-      <Segmented size="sm" value={item.status} onChange={(status) => data.setStatus(item.id, status)} options={STATUSES.map((s) => ({ value: s, label: STATUS_META[s].title }))} />
-
-      <Card className="py-1">
-        <Toggle label="📌 Всегда в повторении" checked={!!item.pinned} onChange={(pinned) => update({ pinned })} />
-        <Toggle label="🔥 В разминке" checked={!!item.warmup} onChange={(warmup) => update({ warmup })} />
-      </Card>
 
       {item.theory && (
         <button
