@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { TempoChart } from "@/components/charts/TempoChart";
 import { ExternalLink, GraduationCap, Pencil, Plus, SearchX, Trash2, X } from "lucide-react";
-import { Badge, Button, Card, Chip, Input, NumberField, ScrollRow, SectionTitle, Textarea, Toggle } from "@/components/ui";
+import { Badge, Button, Card, Chip, Input, NumberField, ScrollRow, SectionTitle, Textarea } from "@/components/ui";
 import { TYPE_ICON } from "@/components/ui/icons";
 import { linkLabel } from "@/features/session/EntryCard";
 import { MediaCard } from "./MediaCard";
@@ -96,15 +96,6 @@ export function ItemPage() {
           <GraduationCap /> Открыть на грифе
         </Button>
       )}
-
-      <Card className="py-1">
-        <Toggle
-          label="В разминку"
-          hint={"Играется в начале каждого занятия, а не в разборе нового и повторении"}
-          checked={!!item.warmup}
-          onChange={(warmup) => update({ warmup })}
-        />
-      </Card>
 
       <SectionTitle>Таб и видео</SectionTitle>
       <MediaCard item={item} />

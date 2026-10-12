@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { BookOpen, ChevronRight, Download, Guitar, GraduationCap, Metronome, TrendingUp, Upload, type LucideIcon } from "lucide-react";
+import { BookOpen, ChevronRight, ListChecks, Download, Guitar, GraduationCap, Metronome, TrendingUp, Upload, type LucideIcon } from "lucide-react";
 import { Button, Card, NumberField, Segmented, SectionTitle, Toggle } from "@/components/ui";
 import { BLOCK_ICON } from "@/components/ui/icons";
 import { haptic } from "@/app/telegram";
@@ -15,6 +15,7 @@ import { SyncCard } from "./SyncCard";
 
 const DAY_LABELS = ["ВС", "ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ"];
 const SECTIONS: [string, string, LucideIcon][] = [
+  ["/settings/plan", "Конструктор плана", ListChecks],
   ["/library", "Библиотека", BookOpen],
   ["/theory", "Теория", GraduationCap],
   ["/progress", "Прогресс", TrendingUp],

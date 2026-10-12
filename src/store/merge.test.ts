@@ -54,6 +54,18 @@ describe("mergeData", () => {
   });
 });
 
+describe("plan template", () => {
+  it("keeps the newer hand-made plan from either side", () => {
+    const t1 = { warmup: [{ itemId: "a" }], new: [], review: [] };
+    const t2 = { warmup: [], new: [{ itemId: "b" }], review: [] };
+    const a = { ...base(), template: t1, templateUpdatedAt: 10 };
+    const b = { ...base(), template: t2, templateUpdatedAt: 20 };
+    expect(mergeData(a, b).template).toEqual(t2);
+    expect(mergeData(b, a).template).toEqual(t2);
+    expect(mergeData(base(), a).template).toEqual(t1);
+  });
+});
+
 describe("dropStarter", () => {
   it("removes starter items, edited or not, keeps the user's own, and they stay gone after a sync", async () => {
     const { dropStarter } = await import("./data");

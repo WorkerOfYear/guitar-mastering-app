@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { m } from "motion/react";
-import { ChevronRight, Dices, Library, Music, Play, PlayCircle, Plus, Video } from "lucide-react";
+import { ChevronRight, Dices, Library, ListChecks, Music, Play, PlayCircle, Plus, Video } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { BLOCK_ICON, IconTile } from "@/components/ui/icons";
 import { PageHeader, SettingsLink } from "@/components/ui/Placeholder";
 import { audio } from "@/audio/player";
-import { buildPlan } from "@/features/session/plan";
+import { buildPlan, templateSize } from "@/features/session/plan";
 import { resolveProgression } from "@/music/improv";
 import { unitTitle } from "@/lib/progress";
 import { useData } from "@/store/data";
@@ -35,7 +35,7 @@ export function TodayPage() {
   const { active, start } = useSession();
   const navigate = useNavigate();
   const [seed, setSeed] = useState(0);
-  const plan = useMemo(() => buildPlan(data), [data.items, data.lastPlayed, data.practice, seed]);
+  const plan = useMemo(() => buildPlan(data), [data.items, data.lastPlayed, data.practice, data.template, seed]);
 
   const begin = () => {
     audio(); // unlock sound inside the tap
@@ -116,7 +116,12 @@ export function TodayPage() {
               </m.div>
             ))}
           </div>
-          <Button size="xl" onClick={begin} className="mt-5 w-full text-lg">
+          <Button asChild variant="ghost" size="sm" className="mt-2 w-full">
+            <Link to="/settings/plan">
+              <ListChecks className="size-4" /> {templateSize(data.template) ? "Изменить план" : "Составить план вручную"}
+            </Link>
+          </Button>
+          <Button size="xl" onClick={begin} className="mt-3 w-full text-lg">
             <Play className="size-6" fill="currentColor" />
             Старт
           </Button>

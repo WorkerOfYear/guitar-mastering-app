@@ -41,6 +41,8 @@ export function mergeData(local: DataState, remote: DataState | null | undefined
   for (const [k, d] of Object.entries(local.lastPlayed)) if (!lastPlayed[k] || d > lastPlayed[k]) lastPlayed[k] = d;
 
   const remoteNewer = (remote.practiceUpdatedAt ?? 0) > (local.practiceUpdatedAt ?? 0);
+  const remoteTemplate = (remote.templateUpdatedAt ?? 0) > (local.templateUpdatedAt ?? 0);
+  const template = remoteTemplate ? remote.template : local.template;
   return {
     items: mergedItems,
     log: [...log.values()].sort((a, b) => a.at - b.at),
@@ -50,6 +52,7 @@ export function mergeData(local: DataState, remote: DataState | null | undefined
     practice: remoteNewer ? remote.practice : local.practice,
     practiceUpdatedAt: Math.max(local.practiceUpdatedAt ?? 0, remote.practiceUpdatedAt ?? 0) || undefined,
     deleted,
+    ...(template ? { template, templateUpdatedAt: Math.max(local.templateUpdatedAt ?? 0, remote.templateUpdatedAt ?? 0) } : {}),
   };
 }
 

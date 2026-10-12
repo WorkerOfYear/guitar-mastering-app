@@ -9,6 +9,27 @@ import type { Item, SessionLog, TempoEntry } from "@/shared/types";
 const base = { items: STARTER_LIBRARY, lastPlayed: {}, recentKeys: [], practice: DEFAULT_PRACTICE };
 
 describe("buildPlan", () => {
+  it("follows the hand-made plan and skips entries that no longer exist", () => {
+    const items = STARTER_LIBRARY.map((i) => (i.id === "tech-vibrato" ? { ...i, status: "archived" as const } : i));
+    const template = {
+      warmup: [{ itemId: "wu-spider" }, { itemId: "gone" }],
+      new: [
+        { itemId: "song-ascend", sectionId: "part2" },
+        { itemId: "song-ascend", sectionId: "nope" },
+      ],
+      review: [{ itemId: "tech-vibrato" }, { itemId: "th-modes" }],
+    };
+    const plan = buildPlan({ ...base, items, template }, () => 0);
+    expect(plan[0].entries).toEqual([{ itemId: "wu-spider" }]);
+    expect(plan[0].minutes).toBe(3);
+    expect(plan[1].entries).toEqual([{ itemId: "song-ascend", sectionId: "part2" }]);
+    expect(plan[2].entries).toEqual([{ itemId: "th-modes" }]);
+    expect(plan[3].improv?.key).toBeTruthy();
+  });
+  it("plans automatically while the hand-made plan is empty", () => {
+    const empty = { warmup: [], new: [], review: [] };
+    expect(buildPlan({ ...base, template: empty }, () => 0)).toEqual(buildPlan(base, () => 0));
+  });
   it("builds four blocks from the starter library", () => {
     const plan = buildPlan(base, () => 0);
     expect(plan.map((b) => b.kind)).toEqual(["warmup", "new", "review", "improv"]);

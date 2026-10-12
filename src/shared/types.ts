@@ -90,6 +90,14 @@ export interface PlanEntry {
   sectionId?: string;
 }
 
+/** A plan made by hand in the plan builder: what each block plays, in order. */
+export interface PlanTemplate {
+  warmup: PlanEntry[];
+  new: PlanEntry[];
+  review: PlanEntry[];
+}
+export type TemplateBlock = keyof PlanTemplate;
+
 export interface ImprovTask {
   key: string;
   progressionId: string;

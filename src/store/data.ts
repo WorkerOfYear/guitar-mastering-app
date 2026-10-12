@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { STARTER_LIBRARY } from "@/data/library";
 import { entryKey } from "@/lib/progress";
-import type { BlockKind, Item, ItemStatus, PlanEntry, Section, SessionLog, TempoEntry } from "@/shared/types";
+import type { BlockKind, Item, ItemStatus, PlanEntry, PlanTemplate, Section, SessionLog, TempoEntry } from "@/shared/types";
 
 export interface PracticeSettings {
   blocks: Record<BlockKind, number>; // minutes
@@ -29,6 +29,9 @@ export interface DataState {
   practiceUpdatedAt?: number;
   /** Deleted item ids → when, so a sync doesn't bring them back */
   deleted?: Record<string, number>;
+  /** The hand-made plan; when it has any entries, sessions follow it instead of the automatic planner */
+  template?: PlanTemplate;
+  templateUpdatedAt?: number;
 }
 
 interface DataActions {
@@ -44,6 +47,7 @@ interface DataActions {
   addSession: (session: SessionLog) => void;
   pushRecentKey: (key: string) => void;
   setPractice: (patch: Partial<PracticeSettings>) => void;
+  setTemplate: (template: PlanTemplate) => void;
   replaceAll: (data: DataState) => void;
 }
 
@@ -100,6 +104,7 @@ export const useData = create<DataState & DataActions>()(
       addSession: (session) => set((s) => ({ sessions: [...s.sessions.filter((x) => x.id !== session.id), session] })),
       pushRecentKey: (key) => set((s) => ({ recentKeys: [...s.recentKeys, key].slice(-6) })),
       setPractice: (patch) => set((s) => ({ practice: { ...s.practice, ...patch }, practiceUpdatedAt: Date.now() })),
+      setTemplate: (template) => set(() => ({ template, templateUpdatedAt: Date.now() })),
       replaceAll: (data) => set(() => ({ ...initial(), ...data })),
     }),
     {
@@ -127,6 +132,6 @@ export function dropStarter(items: Item[], deleted: Record<string, number>, now 
 
 /** Plain data for backups and (later) sync. */
 export const exportData = (): DataState => {
-  const { items, log, sessions, lastPlayed, recentKeys, practice, practiceUpdatedAt, deleted } = useData.getState();
-  return { items, log, sessions, lastPlayed, recentKeys, practice, practiceUpdatedAt, deleted };
+  const { items, log, sessions, lastPlayed, recentKeys, practice, practiceUpdatedAt, deleted, template, templateUpdatedAt } = useData.getState();
+  return { items, log, sessions, lastPlayed, recentKeys, practice, practiceUpdatedAt, deleted, template, templateUpdatedAt };
 };

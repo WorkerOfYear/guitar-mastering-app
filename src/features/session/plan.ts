@@ -1,11 +1,11 @@
 import { randomTask } from "@/music/improv";
 import { entryKey } from "@/lib/progress";
 import type { DataState } from "@/store/data";
-import type { Item, PlanBlock, PlanEntry } from "@/shared/types";
+import type { Item, PlanBlock, PlanEntry, PlanTemplate } from "@/shared/types";
 
 export const WARMUP_CATEGORY = "Разминка";
 
-type PlanInput = Pick<DataState, "items" | "lastPlayed" | "recentKeys" | "practice">;
+type PlanInput = Pick<DataState, "items" | "lastPlayed" | "recentKeys" | "practice" | "template">;
 
 /** Never-played first, then the longest ago. */
 const byLastPlayed = (lastPlayed: Record<string, string>) => (a: PlanEntry, b: PlanEntry) =>
@@ -24,25 +24,48 @@ function units(item: Item, status: "active" | "rotation"): PlanEntry[] {
   return item.status === status ? [{ itemId: item.id }] : [];
 }
 
+/** Warm-up lasts as long as its exercises (each item's own minutes, 3 by default). */
+const warmupLength = (entries: PlanEntry[], items: Item[], fallback: number) =>
+  entries.length ? entries.reduce((sum, e) => sum + (items.find((i) => i.id === e.itemId)?.minutes ?? 3), 0) : fallback;
+
+export const templateSize = (t?: PlanTemplate) => (t ? t.warmup.length + t.new.length + t.review.length : 0);
+
+/** The hand-made plan, minus entries whose item or section no longer exists. */
+function fromTemplate(input: PlanInput, template: PlanTemplate, rnd: () => number): PlanBlock[] {
+  const { items, practice } = input;
+  const exists = (e: PlanEntry) => {
+    const item = items.find((i) => i.id === e.itemId);
+    return !!item && item.status !== "archived" && (!e.sectionId || !!item.sections?.some((s) => s.id === e.sectionId));
+  };
+  const warmup = template.warmup.filter(exists);
+  return [
+    { kind: "warmup", minutes: warmupLength(warmup, items, practice.blocks.warmup), entries: warmup },
+    { kind: "new", minutes: practice.blocks.new, entries: template.new.filter(exists) },
+    { kind: "review", minutes: practice.blocks.review, entries: template.review.filter(exists) },
+    { kind: "improv", minutes: practice.blocks.improv, entries: [], improv: randomTask({ recentKeys: input.recentKeys, rnd }) },
+  ];
+}
+
 export function buildPlan(input: PlanInput, rnd = Math.random): PlanBlock[] {
+  if (input.template && templateSize(input.template)) return fromTemplate(input, input.template, rnd);
   const { items, lastPlayed, practice } = input;
   const live = items.filter((i) => i.status !== "archived");
   const order = byLastPlayed(lastPlayed);
 
   const warmupItems = live.filter((i) => i.warmup);
   const warmup = warmupItems.map((i) => ({ itemId: i.id }));
-  // The warm-up lasts as long as its exercises (the video is 15 min, tab exercises 3 min each).
-  const warmupMinutes = warmupItems.length ? warmupItems.reduce((sum, i) => sum + (i.minutes ?? 3), 0) : practice.blocks.warmup;
+  const warmupMinutes = warmupLength(warmup, items, practice.blocks.warmup);
 
   // Warm-up material (category "Разминка") is only ever played in the warm-up, even when switched off there.
   const study = live.filter((i) => !i.warmup && i.category !== WARMUP_CATEGORY);
-  const activeUnits = study.filter((i) => i.status === "active").flatMap((i) => units(i, "active")).sort(order);
+  const activeUnits = study
+    .filter((i) => i.status === "active")
+    .flatMap((i) => units(i, "active"))
+    .sort(order);
   // Songs are the goal: one slot always goes to a song section when one is in progress.
   const isSong = (e: PlanEntry) => !!e.sectionId;
   const song = activeUnits.find(isSong);
-  const fresh = song
-    ? [song, ...activeUnits.filter((e) => e !== song)].slice(0, practice.maxNew).sort(order)
-    : activeUnits.slice(0, practice.maxNew);
+  const fresh = song ? [song, ...activeUnits.filter((e) => e !== song)].slice(0, practice.maxNew).sort(order) : activeUnits.slice(0, practice.maxNew);
 
   const reviewCount = Math.max(1, Math.floor(practice.blocks.review / practice.minutesPerReview));
   const rotation = study.filter((i) => i.status !== "queue").flatMap((i) => units(i, "rotation"));
