@@ -4,6 +4,7 @@ import { CompactMetronome } from "@/components/metronome/MetronomePanel";
 import { IconButton } from "@/components/ui";
 import { YouTubePlayer } from "@/components/video/YouTubePlayer";
 import type { PlayerControl } from "@/components/tab/TabPlayer";
+import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
 import { audio } from "@/audio/player";
 import { signal, startMetronome, stopMetronome } from "@/audio/metronome";
 import { haptic, tg } from "@/app/telegram";
@@ -366,6 +367,9 @@ function TabStage({ item, playing, control, onBlocked }: { item: Item; playing: 
         onPlus={() => useMetronome.getState().set({ bpm: clampBpm(bpm + 5) })}
         extra={<MetronomeToggle on={click} onChange={setClick} />}
       />
+      <div className="mt-2">
+        <TabViewSwitch />
+      </div>
     </div>
   );
 }
@@ -407,6 +411,9 @@ function SongStage({ item, entry, playing, control, onBlocked }: { item: Item; e
         onPlus={() => setSpeed((s) => Math.min(1.5, +(s + 0.05).toFixed(2)))}
         extra={<MetronomeToggle on={click} onChange={setClick} />}
       />
+      <div className="mt-2">
+        <TabViewSwitch />
+      </div>
       {section && !section.bars && <p className="mt-2 px-1 text-xs text-muted">Раздел не привязан к тактам — играет весь файл. Привязать можно в карточке песни.</p>}
     </div>
   );

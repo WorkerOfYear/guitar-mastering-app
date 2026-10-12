@@ -1,5 +1,22 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import * as alphaTab from "@coderline/alphatab";
+import { useSettings, type TabView } from "@/store/settings";
+
+/**
+ * Show tab and/or standard notation on every staff. Stave profiles only reveal what the file
+ * itself enables (many tabs ship without notation), so the staff flags are set directly.
+ */
+function applyView(score: alphaTab.model.Score, view: TabView) {
+  for (const track of score.tracks) {
+    for (const staff of track.staves) {
+      if (staff.isPercussion) continue;
+      const stringed = staff.tuning.length > 0;
+      staff.showTablature = stringed && view !== "score";
+      staff.showStandardNotation = !stringed || view !== "tab";
+    }
+  }
+}
+
 
 // Songsterr-style tab player on alphaTab: renders the tab, plays it with a guitar sound font,
 // moves a cursor and scrolls along. Playback is controlled from outside (`playing`), so a session
@@ -49,6 +66,11 @@ export default function TabPlayer({ tex, file, bpm, speed, playing, loopBars, tr
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const view = useSettings((s) => s.tabView);
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const trackRef = useRef(track);
+  trackRef.current = track;
   const cb = useRef({ onScore, onBlocked, onProgress });
   cb.current = { onScore, onBlocked, onProgress };
 
@@ -57,7 +79,7 @@ export default function TabPlayer({ tex, file, bpm, speed, playing, loopBars, tr
     if (!host.current || !scroller.current || (!tex && !file)) return;
     const settings = new alphaTab.Settings();
     settings.core.fontDirectory = "/font/";
-    settings.display.staveProfile = alphaTab.StaveProfile.Tab;
+    settings.display.staveProfile = alphaTab.StaveProfile.Default;
     settings.display.scale = 1;
     settings.display.resources.mainGlyphColor = alphaTab.model.Color.fromJson(getComputedStyle(document.documentElement).getPropertyValue("--text").trim() || "#000")!;
     settings.display.resources.staffLineColor = alphaTab.model.Color.fromJson(getComputedStyle(document.documentElement).getPropertyValue("--muted").trim() || "#888")!;
@@ -91,6 +113,7 @@ export default function TabPlayer({ tex, file, bpm, speed, playing, loopBars, tr
     api.current = a;
     a.scoreLoaded.on((s) => {
       score.current = s;
+      applyView(s, viewRef.current);
       setLoading(false);
       cb.current.onScore?.({
         title: s.title,
@@ -120,6 +143,16 @@ export default function TabPlayer({ tex, file, bpm, speed, playing, loopBars, tr
       setLoading(true);
     };
   }, [tex, file]);
+
+  // Switch between tab and notation without reloading.
+  const shownView = useRef(view);
+  useEffect(() => {
+    const a = api.current;
+    if (!a || !score.current || shownView.current === view) return;
+    shownView.current = view;
+    applyView(score.current, view);
+    a.renderScore(score.current, [Math.min(trackRef.current, score.current.tracks.length - 1)]);
+  }, [view]);
 
   // Track switch without reloading the file.
   useEffect(() => {

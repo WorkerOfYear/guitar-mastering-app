@@ -3,6 +3,7 @@ import { NumberField } from "@/components/metronome/MetronomePanel";
 import { Card } from "@/components/ui";
 import { YouTubePlayer } from "@/components/video/YouTubePlayer";
 import type { ScoreInfo } from "@/components/tab/TabPlayer";
+import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
 import { audio } from "@/audio/player";
 import { deleteTabFile, loadTabFile, saveTabFile } from "@/lib/tabFiles";
 import { useData } from "@/store/data";
@@ -120,6 +121,7 @@ export function MediaCard({ item }: { item: Item }) {
               onScore={setScore}
             />
           </Suspense>
+          <TabViewSwitch />
           <div className="flex items-center gap-2">
             <button
               type="button"

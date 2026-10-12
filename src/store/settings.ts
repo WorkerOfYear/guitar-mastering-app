@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 export type LabelMode = "note" | "degree" | "chord" | "finger" | "none";
+/** How the tab player draws music: tablature, standard notation, or both */
+export type TabView = "tab" | "score" | "both";
 
 interface FretboardSettings {
   labelMode: LabelMode;
@@ -25,6 +27,8 @@ interface TheoryState {
 interface SettingsStore {
   fretboard: FretboardSettings;
   theory: TheoryState;
+  tabView: TabView;
+  setTabView: (view: TabView) => void;
   setFretboard: (patch: Partial<FretboardSettings>) => void;
   setTheory: (patch: Partial<TheoryState>) => void;
 }
@@ -34,6 +38,8 @@ export const useSettings = create<SettingsStore>()(
     (set) => ({
       fretboard: { labelMode: "degree", leftHanded: false, frets: 15, zoom: 1, showOutside: true },
       theory: { tab: "scale", tonic: "A", scaleId: "minor-pentatonic", chordType: "m7", diatonic: 0, position: 0 },
+      tabView: "tab",
+      setTabView: (tabView) => set({ tabView }),
       setFretboard: (patch) => set((s) => ({ fretboard: { ...s.fretboard, ...patch } })),
       setTheory: (patch) => set((s) => ({ theory: { ...s.theory, ...patch } })),
     }),
