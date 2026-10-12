@@ -31,6 +31,24 @@ function TelegramBack() {
   return null;
 }
 
+/** In a normal browser: "← Назад" on every screen except home and the session (Telegram has its own button). */
+function BackButton() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  if (tg || location.pathname === "/" || location.pathname === "/session") return null;
+  // Opened by a direct link there is no history to go back to — go home instead.
+  const back = () => (location.key === "default" ? navigate("/") : navigate(-1));
+  return (
+    <button
+      type="button"
+      onClick={back}
+      className="-ml-1 mb-1 flex h-10 items-center gap-1 rounded-xl px-2 text-sm font-semibold text-muted active:bg-surface-2"
+    >
+      ← Назад
+    </button>
+  );
+}
+
 /** Bot buttons open the app with ?page=theory etc. */
 function StartPage() {
   const page = new URLSearchParams(window.location.search).get("page");
@@ -42,6 +60,7 @@ function Shell() {
     <>
       <TelegramBack />
       <main className="mx-auto max-w-3xl px-4 pb-10 pt-[max(env(safe-area-inset-top),0.5rem)]">
+        <BackButton />
         <Routes>
           <Route path="/" element={<StartPage />} />
           <Route path="/library" element={<LibraryPage />} />
