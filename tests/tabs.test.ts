@@ -29,7 +29,23 @@ const ugResults = [
   { song_name: "Fuzz Universe", artist_name: "Paul Gilbert", type: "Video", votes: 500, tab_access_type: "public", tab_url: "https://tabs.ultimate-guitar.com/v" },
 ];
 
-afterEach(() => vi.unstubAllGlobals());
+// Brave's web results for "… site:musescore.com": scores, plus pages that aren't one.
+const brave = {
+  web: {
+    results: [
+      { title: "Fuzz Universe – Paul Gilbert Sheet music for Guitar (Solo) | Musescore.com", url: "https://musescore.com/user/3044216/scores/5193702" },
+      { title: "Paul Gilbert sheet music | Play, print, and download in PDF or MIDI", url: "https://musescore.com/sheetmusic/artists/paul-gilbert" },
+      { title: "Fuzz Universe &amp; <strong>more</strong> Sheet music for Guitar, Bass guitar (Mixed Duet) | Musescore.com", url: "https://musescore.com/fuzzfan/scores/1234/" },
+      { title: "Fuzz Universe – Paul Gilbert Sheet music for Guitar (Solo) | Musescore.com", url: "http://musescore.com/user/3044216/scores/5193702" },
+      { title: "Third", url: "https://musescore.com/user/1/scores/1" },
+    ],
+  },
+};
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
 
 describe("tab search", () => {
   it("builds Songsterr links with the difficulty of the most viewed guitar part", () => {
@@ -67,6 +83,44 @@ describe("tab search", () => {
     expect(body.results).toHaveLength(1);
     expect(body.failed).toEqual(["ug"]);
     expect((await tabs.GET(new Request("https://guitar.test/api/tabs?q=a"))).status).toBe(400);
+  });
+
+  it("takes MuseScore scores from search results, without duplicates or pages that aren't a score", () => {
+    expect(tabs.parseMuseScore(brave.web.results)).toEqual([
+      {
+        source: "musescore",
+        artist: "Paul Gilbert",
+        title: "Fuzz Universe",
+        kind: "Ноты",
+        url: "https://musescore.com/user/3044216/scores/5193702",
+        parts: "Guitar (Solo)",
+      },
+      { source: "musescore", artist: "", title: "Fuzz Universe & more", kind: "Ноты", url: "https://musescore.com/fuzzfan/scores/1234", parts: "Guitar, Bass guitar (Mixed Duet)" },
+    ]);
+  });
+
+  it("searches MuseScore through Brave only with a key, and puts its scores after Songsterr", async () => {
+    const asked: string[] = [];
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      asked.push(url);
+      if (url.includes("songsterr")) return new Response(JSON.stringify(songsterr));
+      if (url.includes("brave")) {
+        expect((init?.headers as Record<string, string>)["X-Subscription-Token"]).toBe("k");
+        expect(new URL(url).searchParams.get("q")).toBe("Paul Gilbert Fuzz Universe site:musescore.com");
+        return new Response(JSON.stringify(brave));
+      }
+      return new Response(ugPage(ugResults));
+    });
+    const req = () => tabs.GET(new Request("https://guitar.test/api/tabs?q=Paul%20Gilbert%20Fuzz%20Universe"));
+
+    vi.stubEnv("BRAVE_SEARCH_KEY", "");
+    let body = await (await req()).json();
+    expect(asked.some((u) => u.includes("brave"))).toBe(false);
+    expect(body.failed).toEqual([]);
+
+    vi.stubEnv("BRAVE_SEARCH_KEY", "k");
+    body = await (await req()).json();
+    expect(body.results.map((r: { source: string }) => r.source)).toEqual(["songsterr", "musescore", "musescore", "ug", "ug", "ug"]);
   });
 
   it("turns a video title into a search query", () => {

@@ -75,6 +75,18 @@ YouTube блокирует). Код и инструкция — в [`server/yout
 На бесплатном плане Vercel cron срабатывает раз в день в пределах указанного часа.
 Дни занятий берутся из настроек приложения.
 
+## Ноты MuseScore в поиске табов
+
+MuseScore не пускает серверные запросы, поэтому его ноты ищутся через [Brave Search API](https://brave.com/search/api/)
+запросом `<песня> site:musescore.com`. Без ключа поиск работает как раньше, а для MuseScore остаётся ссылка на его поиск.
+
+1. Зарегистрируйся на [api-dashboard.search.brave.com](https://api-dashboard.search.brave.com), выбери бесплатный план
+   и создай ключ (**API Keys → Add API key**).
+2. Сайт: Vercel → проект → Settings → **Environment Variables** → `BRAVE_SEARCH_KEY` = ключ → Redeploy.
+3. Тестовый стенд: на сервере `echo "BRAVE_SEARCH_KEY=<ключ>" > server/dev-stand/.env` и `bash server/dev-stand/up.sh`.
+
+Один поиск песни — один запрос к Brave; повторы того же запроса сайт сутки отдаёт из кеша Vercel.
+
 ## Как устроено
 
 ```
@@ -84,6 +96,6 @@ api/state.ts    GET/PUT данных с optimistic lock; клиент слива
 api/telegram.ts webhook бота, настройка и привязка владельца одноразовой ссылкой
 api/remind.ts   Vercel Cron: напоминание в дни занятий
 api/tabs.ts     поиск табов по песне: Songsterr (JSON-поиск) и Ultimate Guitar (JSON со страницы поиска), только ссылки;
-                MuseScore закрыт проверкой Cloudflare — для нот в приложении ссылка на его поиск
+                ноты MuseScore — через Brave Search API (сам MuseScore закрыт проверкой Cloudflare), см. ниже
 tests/          тесты API с имитацией Redis и Telegram
 ```
