@@ -16,7 +16,7 @@ services:
     container_name: guitar-dev-api
     restart: unless-stopped
     working_dir: /srv/api
-    # BRAVE_SEARCH_KEY=… here turns on MuseScore scores in tab search (see the main README). Not in git.
+    # TAVILY_API_KEY=… (or SERPER_API_KEY=…) here turns on MuseScore scores in tab search (see the main README). Not in git.
     env_file: [{ path: .env, required: false }]
     command: ["sh", "-c", "until [ -f api.js ]; do sleep 5; done; exec node api.js"]
     volumes:

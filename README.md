@@ -77,15 +77,21 @@ YouTube блокирует). Код и инструкция — в [`server/yout
 
 ## Ноты MuseScore в поиске табов
 
-MuseScore не пускает серверные запросы, поэтому его ноты ищутся через [Brave Search API](https://brave.com/search/api/)
-запросом `<песня> site:musescore.com`. Без ключа поиск работает как раньше, а для MuseScore остаётся ссылка на его поиск.
+MuseScore не пускает серверные запросы, поэтому его ноты ищутся через API поисковика по сайту musescore.com.
+Нужен ключ одного из двух сервисов (оба без карты). Без ключа поиск работает как раньше, а для MuseScore остаётся
+ссылка на его поиск.
 
-1. Зарегистрируйся на [api-dashboard.search.brave.com](https://api-dashboard.search.brave.com), выбери бесплатный план
-   и создай ключ (**API Keys → Add API key**).
-2. Сайт: Vercel → проект → Settings → **Environment Variables** → `BRAVE_SEARCH_KEY` = ключ → Redeploy.
-3. Тестовый стенд: на сервере `echo "BRAVE_SEARCH_KEY=<ключ>" > server/dev-stand/.env` и `bash server/dev-stand/up.sh`.
+- **Tavily** — 1000 запросов в месяц бесплатно. Войди на [app.tavily.com](https://app.tavily.com) (Google или GitHub),
+  ключ `tvly-…` — на главной странице. Переменная `TAVILY_API_KEY`.
+- **Serper** (выдача Google) — 2500 бесплатных запросов один раз. Зарегистрируйся на [serper.dev](https://serper.dev),
+  ключ — в разделе API Key. Переменная `SERPER_API_KEY`.
 
-Один поиск песни — один запрос к Brave; повторы того же запроса сайт сутки отдаёт из кеша Vercel.
+Если заданы оба, используется Tavily.
+
+1. Сайт: Vercel → проект → Settings → **Environment Variables** → переменная с ключом → Redeploy.
+2. Тестовый стенд: на сервере `echo "TAVILY_API_KEY=<ключ>" > server/dev-stand/.env` и `bash server/dev-stand/up.sh`.
+
+Один поиск песни — один запрос к сервису; повторы того же запроса сайт сутки отдаёт из кеша Vercel.
 
 ## Как устроено
 
@@ -96,6 +102,6 @@ api/state.ts    GET/PUT данных с optimistic lock; клиент слива
 api/telegram.ts webhook бота, настройка и привязка владельца одноразовой ссылкой
 api/remind.ts   Vercel Cron: напоминание в дни занятий
 api/tabs.ts     поиск табов по песне: Songsterr (JSON-поиск) и Ultimate Guitar (JSON со страницы поиска), только ссылки;
-                ноты MuseScore — через Brave Search API (сам MuseScore закрыт проверкой Cloudflare), см. ниже
+                ноты MuseScore — через API поисковика Tavily или Serper (сам MuseScore закрыт проверкой Cloudflare), см. выше
 tests/          тесты API с имитацией Redis и Telegram
 ```

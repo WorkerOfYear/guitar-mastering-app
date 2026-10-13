@@ -1,8 +1,8 @@
 // GET /api/tabs?q=<artist and song> → { results, failed }
 // Looks a song up on Songsterr (public JSON search), Ultimate Guitar (results JSON embedded in the search page) and
 // MuseScore. Only links are returned: the tabs themselves stay on those sites. None allows cross-origin requests, hence a function.
-// MuseScore sits behind a Cloudflare bot check that a server can't pass, so its scores come from Brave Search
-// (`site:musescore.com`) — only when BRAVE_SEARCH_KEY is set; without it the app just links to MuseScore's search page.
+// MuseScore sits behind a Cloudflare bot check that a server can't pass, so its scores come from a web search API limited
+// to musescore.com — Tavily (TAVILY_API_KEY) or Serper (SERPER_API_KEY); without a key the app just links to MuseScore's search.
 import { handle, HttpError } from "./_lib.js";
 
 export type TabSource = "songsterr" | "ug" | "musescore";
@@ -98,7 +98,7 @@ export function parseUltimateGuitar(html: string): TabResult[] {
   );
 }
 
-interface BraveResult {
+interface WebResult {
   title?: string;
   url?: string;
 }
@@ -107,10 +107,10 @@ interface BraveResult {
 const SCORE_URL = /^https:\/\/(?:www\.)?musescore\.com\/(?:[^/?#]+\/)+scores\/\d+\/?$/;
 
 /**
- * MuseScore scores from Brave's web results. Their titles look like
+ * MuseScore scores from web search results. Their titles look like
  * "Fuzz Universe – Paul Gilbert Sheet music for Guitar (Solo) | Musescore.com".
  */
-export function parseMuseScore(results: BraveResult[]): TabResult[] {
+export function parseMuseScore(results: WebResult[]): TabResult[] {
   const seen = new Set<string>();
   return results
     .flatMap((r) => {
@@ -127,25 +127,39 @@ export function parseMuseScore(results: BraveResult[]): TabResult[] {
     .slice(0, MUSESCORE_MAX);
 }
 
-async function get(url: string, accept: string, headers: Record<string, string> = {}) {
+async function get(url: string, accept: string, init: RequestInit = {}) {
   const r = await fetch(url, {
-    headers: { "User-Agent": UA, Accept: accept, "Accept-Language": "en", ...headers },
+    ...init,
+    headers: { "User-Agent": UA, Accept: accept, "Accept-Language": "en", ...(init.headers as Record<string, string>) },
     signal: AbortSignal.timeout(TIMEOUT),
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r;
 }
 
+const postJson = async (url: string, headers: Record<string, string>, body: unknown) =>
+  (await get(url, "application/json", { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) })).json();
+
+/** Web pages from musescore.com for the query, through whichever search API has a key (Tavily first). */
+async function searchMuseScoreSite(q: string): Promise<WebResult[]> {
+  const { TAVILY_API_KEY: tavily, SERPER_API_KEY: serper } = process.env;
+  if (tavily) {
+    const body = { query: `${q} sheet music`, include_domains: ["musescore.com"], max_results: 20 };
+    const data = (await postJson("https://api.tavily.com/search", { Authorization: `Bearer ${tavily}` }, body)) as { results?: WebResult[] };
+    return data.results ?? [];
+  }
+  // 10 results: more costs Serper two credits.
+  const body = { q: `${q} site:musescore.com`, num: 10 };
+  const data = (await postJson("https://google.serper.dev/search", { "X-API-KEY": serper! }, body)) as { organic?: { title?: string; link?: string }[] };
+  return (data.organic ?? []).map((r) => ({ title: r.title, url: r.link }));
+}
+
+const hasMuseScoreSearch = () => !!(process.env.TAVILY_API_KEY || process.env.SERPER_API_KEY);
+
 const SEARCH: Record<TabSource, (q: string) => Promise<TabResult[]>> = {
   songsterr: async (q) =>
     parseSongsterr((await (await get(`https://www.songsterr.com/api/songs?size=${SONGSTERR_MAX}&pattern=${encodeURIComponent(q)}`, "application/json")).json()) as SongsterrSong[]),
-  musescore: async (q) => {
-    const url = `https://api.search.brave.com/res/v1/web/search?count=20&q=${encodeURIComponent(`${q} site:musescore.com`)}`;
-    const data = (await (await get(url, "application/json", { "X-Subscription-Token": process.env.BRAVE_SEARCH_KEY! })).json()) as {
-      web?: { results?: BraveResult[] };
-    };
-    return parseMuseScore(data.web?.results ?? []);
-  },
+  musescore: async (q) => parseMuseScore(await searchMuseScoreSite(q)),
   ug: async (q) =>
     parseUltimateGuitar(await (await get(`https://www.ultimate-guitar.com/search.php?search_type=title&value=${encodeURIComponent(q)}`, "text/html")).text()),
 };
@@ -155,7 +169,7 @@ export const GET = handle(async (req) => {
   const q = (new URL(req.url).searchParams.get("q") ?? "").replace(/\s+/g, " ").trim();
   if (q.length < 2 || q.length > 120) throw new HttpError(400, "Нужен запрос: исполнитель и название");
   // Results come in this order: Songsterr, MuseScore, UG. MuseScore is skipped, not "failed", without a search key.
-  const sources = (Object.keys(SEARCH) as TabSource[]).filter((s) => s !== "musescore" || process.env.BRAVE_SEARCH_KEY);
+  const sources = (Object.keys(SEARCH) as TabSource[]).filter((s) => s !== "musescore" || hasMuseScoreSearch());
   const settled = await Promise.allSettled(sources.map((s) => SEARCH[s](q)));
   const results = settled.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
   const failed = sources.filter((_, i) => settled[i].status === "rejected");
