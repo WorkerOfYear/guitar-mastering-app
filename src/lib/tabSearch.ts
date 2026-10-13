@@ -17,7 +17,9 @@ export const searchPage = (source: TabSource | "musescore", q: string) => {
 
 export async function searchTabs(q: string, signal?: AbortSignal): Promise<{ results: TabResult[]; failed: TabSource[] }> {
   const r = await fetch(`/api/tabs?q=${encodeURIComponent(q)}`, { signal });
-  const data = (await r.json().catch(() => ({}))) as { results?: TabResult[]; failed?: TabSource[]; error?: string };
-  if (!r.ok) throw new Error(data.error || `Ошибка сервера (${r.status})`);
-  return { results: data.results ?? [], failed: data.failed ?? [] };
+  const data = (await r.json().catch(() => null)) as { results?: TabResult[]; failed?: TabSource[]; error?: string } | null;
+  if (!r.ok) throw new Error(data?.error || `Ошибка сервера (${r.status})`);
+  // A host without the function (a static copy of the app) answers with the app's own page.
+  if (!Array.isArray(data?.results)) throw new Error("на этом сервере нет поиска — открой сайты по ссылкам ниже");
+  return { results: data.results, failed: data.failed ?? [] };
 }

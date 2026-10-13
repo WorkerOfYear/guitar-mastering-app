@@ -17,6 +17,7 @@ import { formatClock, useNow, useWakeLock } from "@/lib/hooks";
 import { localDate } from "@/lib/date";
 import { findSection, startingBpm, unitTitle } from "@/lib/progress";
 import { loadAudioFile, loadTabFile } from "@/lib/tabFiles";
+import { audioBlob } from "@/lib/audioType";
 import { SourceSwitch } from "@/features/library/MediaCard";
 import { useData } from "@/store/data";
 import { clampBpm, useMetronome } from "@/store/metronome";
@@ -413,7 +414,7 @@ function AudioStage({
     let u = "";
     void loadAudioFile(item.id).then((f) => {
       if (!f) return setUrl(null);
-      u = URL.createObjectURL(new Blob([f]));
+      u = URL.createObjectURL(audioBlob(f));
       setUrl(u);
     });
     return () => {

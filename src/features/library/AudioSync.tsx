@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Eye, EyeOff, LoaderCircle, Minus, Plus, Timer, TriangleAlert, WandSparkles } from "lucide-react";
 import { Button, IconButton, Input } from "@/components/ui";
+import { audioBlob } from "@/lib/audioType";
 import { formatClockMs, parseClock } from "@/lib/clock";
 import { useData } from "@/store/data";
 import type { Item, SyncPoint } from "@/shared/types";
@@ -52,7 +53,7 @@ export function AudioSync({ item, audio, tab, sections, bars }: Props) {
     }
   };
   useEffect(() => {
-    const u = URL.createObjectURL(new Blob([audio]));
+    const u = URL.createObjectURL(audioBlob(audio));
     setUrl(u);
     return () => URL.revokeObjectURL(u);
   }, [audio]);

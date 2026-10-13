@@ -1,0 +1,16 @@
+# Static test copy of the app (built by GitHub Actions from dev). /api/tabs goes to the api service (server/dev-stand/api.ts);
+# the rest of /api (sync, the bot) lives on Vercel only.
+:80 {
+	# Separate handle blocks: try_files runs before a bare handle and would turn /api/tabs into /index.html.
+	handle /api/tabs {
+		reverse_proxy api:8789
+	}
+	handle {
+		root * /srv/dist
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		header / Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}

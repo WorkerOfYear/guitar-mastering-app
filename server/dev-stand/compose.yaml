@@ -1,0 +1,27 @@
+# Test stand: serves /srv/guitar-dev/dist (and /api/tabs from /srv/guitar-dev/api) on 127.0.0.1:8788 and publishes it with a Cloudflare quick tunnel.
+#   docker compose up -d
+#   docker compose logs tunnel | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1
+services:
+  web:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["127.0.0.1:8788:80"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /srv/guitar-dev:/srv
+  # Functions from api/ that work without Vercel (tab search), bundled into /srv/guitar-dev/api/api.js by the workflow,
+  # which restarts the container after each deploy. Until the first deploy it waits for the file.
+  api:
+    image: node:22-alpine
+    container_name: guitar-dev-api
+    restart: unless-stopped
+    working_dir: /srv/api
+    command: ["sh", "-c", "until [ -f api.js ]; do sleep 5; done; exec node api.js"]
+    volumes:
+      # Only the api folder (docker creates it on the host if it isn't there yet), read-only.
+      - /srv/guitar-dev/api:/srv/api:ro
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    network_mode: host
+    command: tunnel --no-autoupdate --url http://127.0.0.1:8788

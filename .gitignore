@@ -6,3 +6,4 @@ dist
 # copied by the alphaTab Vite plugin at build time
 public/font
 public/soundfont
+dist-api

@@ -5,6 +5,7 @@ import * as alphaTab from "@coderline/alphatab";
 import { readFileSync } from "node:fs";
 import { FPS, align } from "@/lib/align";
 import { scoreTimeline } from "@/lib/autoSync";
+import { scoreChroma } from "@/lib/chroma";
 
 const gp = process.env.GP;
 
@@ -76,6 +77,76 @@ describe("auto sync", () => {
       const bar = timeline.bars.find((b) => b.bar === p.bar && b.occurrence === (p.occurrence ?? 0))!;
       const truth = 3500 + bar.ms * 1.02 + driftAt(bar.ms, half, 300, timeline.durationMs);
       expect(Math.abs(p.ms - truth), `bar ${p.bar}`).toBeLessThan(60);
+    }
+  });
+});
+
+describe("a tempo change the recording plays differently", () => {
+  // The generated song goes 140 → 120 at bar 33 (Technical Difficulties: 130 → 120 at bar 50 and back);
+  // a band may not slow down there at all, or slow down by another amount.
+  it.each([
+    ["keeps the old tempo", 140],
+    ["slows down more", 110],
+    ["slows down as written", 120],
+  ])("follows a band that %s", (_, bandBpm) => {
+    const score = loadScore();
+    const timeline = scoreTimeline(score);
+    expect(timeline.tempoBars?.length).toBeGreaterThan(0);
+    const change = timeline.bars.find((b) => b.bar === timeline.tempoBars![0] && b.occurrence === 0)!.ms;
+    const offset = 2500;
+    const truth = (ms: number) => offset + (ms <= change ? ms : change + ((ms - change) * 120) / bandBpm);
+
+    const env = new Float32Array(Math.ceil(((truth(timeline.durationMs) + 4000) / 1000) * FPS));
+    let seed = 11;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    for (let i = 0; i < env.length; i++) env[i] = rnd() * 0.25;
+    for (const o of timeline.onsets) {
+      if (rnd() < 0.25) continue;
+      const f = Math.round(((truth(o.ms) + (rnd() - 0.5) * 20) / 1000) * FPS);
+      if (f >= 0 && f < env.length) env[f] = Math.min(1, env[f] + 0.5 + rnd() * 0.5);
+    }
+    const r = align(timeline, env);
+    for (const p of r.points) {
+      const bar = timeline.bars.find((b) => b.bar === p.bar && b.occurrence === (p.occurrence ?? 0))!;
+      expect(Math.abs(p.ms - truth(bar.ms)), `bar ${p.bar}`).toBeLessThan(60);
+    }
+  });
+});
+
+describe("a section the band plays shorter than the tab", () => {
+  // Technical Difficulties: the band plays the solo two bars shorter than the tab, so after it every note
+  // came ~4 s late. Bars 25–26 of a steady rock beat are missing from the fake recording.
+  it("finds every bar after the cut", () => {
+    let seed = 9;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const RHYTHMS = [":16 a a a a a a a a a a a a a a a a", ":8 a a a a a a a a", ":8 a :16 a a :8 a a :4 a a", ":4 a :8 a a :4 a a"];
+    const lead = Array.from({ length: 48 }, () => RHYTHMS[Math.floor(rnd() * RHYTHMS.length)].replace(/\ba\b/g, () => `${3 + Math.floor(rnd() * 10)}.${1 + Math.floor(rnd() * 4)}`));
+    const drums = Array.from({ length: 48 }, () => ":8 (36 42) 42 (38 42) 42 (36 42) 42 (38 42) 42");
+    const tex = `\\tempo 120 .\n\\track "Lead" \\staff {tabs}\n${lead.join(" |\n")} |\n\\track "Drums" \\instrument percussion \\staff {score}\n${drums.join(" |\n")} |`;
+    const score = alphaTab.importer.ScoreLoader.loadAlphaTex(tex, new alphaTab.Settings());
+    const timeline = scoreTimeline(score);
+    const barMs = (bar: number) => timeline.bars.find((b) => b.bar === bar && b.occurrence === 0)!.ms;
+    const cutFrom = barMs(25);
+    const cut = barMs(27) - cutFrom;
+    const offset = 1500;
+    const truth = (ms: number) => offset + (ms < cutFrom ? ms : ms - cut);
+    // Louder where more sounds at once (kick or snare with the hi-hat and the lead), like a real mix.
+    const env = new Float32Array(Math.ceil(((truth(timeline.durationMs) + 3000) / 1000) * FPS));
+    for (let i = 0; i < env.length; i++) env[i] = rnd() * 0.2;
+    const top = Math.max(...timeline.onsets.map((o) => o.w));
+    for (const o of timeline.onsets) {
+      if ((o.ms >= cutFrom && o.ms < cutFrom + cut) || rnd() < 0.2) continue;
+      const f = Math.round(((truth(o.ms) + (rnd() - 0.5) * 20) / 1000) * FPS);
+      if (f >= 0 && f < env.length) env[f] = Math.min(1, env[f] + 0.3 + (0.7 * o.w) / top);
+    }
+    // What sounds when in the recording (pitch classes of the lead), with some noise.
+    const played = timeline.notes!.filter((n) => n.ms < cutFrom || n.ms >= cutFrom + cut).map((n) => ({ ...n, ms: truth(n.ms), end: truth(n.end) }));
+    const chroma = scoreChroma(played, truth(timeline.durationMs) + 3000).map((v) => v + rnd() * 0.15);
+    const r = align(timeline, env, undefined, chroma);
+    for (const bar of [5, 10, 20, 24, 28, 32, 40, 47]) {
+      const p = r.points.find((x) => x.bar === bar && !x.occurrence);
+      expect(p, `bar ${bar}`).toBeDefined();
+      expect(Math.abs(p!.ms - truth(barMs(bar))), `bar ${bar}`).toBeLessThan(60);
     }
   });
 });

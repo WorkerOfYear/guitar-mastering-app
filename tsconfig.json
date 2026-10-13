@@ -33,6 +33,7 @@
     "src",
     "api",
     "tests",
-    "vite.config.ts"
+    "vite.config.ts",
+    "server/dev-stand"
   ]
 }

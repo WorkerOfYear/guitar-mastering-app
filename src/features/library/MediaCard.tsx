@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   Check,
   ChevronDown,
+  Download,
   FileMusic,
   Headphones,
   Link2,
@@ -27,6 +28,7 @@ import type { ScoreInfo } from "@/components/tab/TabPlayer";
 import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
 import { audio } from "@/audio/player";
 import { deleteAudioFile, deleteTabFile, loadAudioFile, loadTabFile, saveAudioFile, saveTabFile } from "@/lib/tabFiles";
+import { audioBlob, downloadAudio } from "@/lib/audioType";
 import { AudioSync, detectSync } from "./AudioSync";
 import { fetchYoutubeAudio, serverReady } from "@/lib/youtubeAudio";
 import { useSettings } from "@/store/settings";
@@ -36,20 +38,7 @@ import type { Item, Section } from "@/shared/types";
 
 const TabPlayer = lazy(() => import("@/components/tab/TabPlayer"));
 
-/** "https://youtu.be/ID?t=73" / "watch?v=ID&t=1m13s" → { youtubeId, start } */
-export function parseYouTube(url: string) {
-  try {
-    const u = new URL(url.trim());
-    const id = u.hostname.includes("youtu.be") ? u.pathname.slice(1) : u.searchParams.get("v");
-    if (!id || !/^[\w-]{6,}$/.test(id)) return null;
-    const t = u.searchParams.get("t") ?? u.searchParams.get("start") ?? "0";
-    const m = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$/.exec(t);
-    const start = m ? Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0) : 0;
-    return { youtubeId: id, start };
-  } catch {
-    return null;
-  }
-}
+import { parseYouTube, withScheme } from "@/lib/youtubeLink";
 
 /** The original recording or the synthesizer. */
 export function SourceSwitch({ recording, onChange }: { recording: boolean; onChange: (v: boolean) => void }) {
@@ -284,7 +273,8 @@ export function MediaCard({ item }: { item: Item }) {
   const saveVideo = () => {
     const v = parseYouTube(videoUrl);
     if (!v) return toast.error("Не похоже на ссылку YouTube");
-    updateItem(item.id, { video: v, links: item.links.includes(videoUrl.trim()) ? item.links : [...item.links, videoUrl.trim()] });
+    const url = withScheme(videoUrl);
+    updateItem(item.id, { video: v, links: item.links.includes(url) ? item.links : [...item.links, url] });
     setVideoUrl("");
     setEditVideo(false);
   };
@@ -426,6 +416,11 @@ export function MediaCard({ item }: { item: Item }) {
             .join(" · ")}
           actions={
             <>
+              {audioData && (
+                <IconAction label="Скачать запись" onClick={() => downloadAudio(audioData, item.audioFile!.name)}>
+                  <Download className="size-4" />
+                </IconAction>
+              )}
               <FileAction label="Заменить запись" accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)} />
               <IconAction label="Удалить запись" onClick={() => void removeAudio()}>
                 <Trash2 className="size-4" />
@@ -583,7 +578,7 @@ export function MediaCard({ item }: { item: Item }) {
 function AudioPreview({ data }: { data: ArrayBuffer }) {
   const [url, setUrl] = useState("");
   useEffect(() => {
-    const u = URL.createObjectURL(new Blob([data]));
+    const u = URL.createObjectURL(audioBlob(data));
     setUrl(u);
     return () => URL.revokeObjectURL(u);
   }, [data]);
