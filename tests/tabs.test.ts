@@ -111,7 +111,7 @@ describe("tab search", () => {
       const body = JSON.parse((init?.body as string) ?? "null");
       if (url.includes("tavily")) {
         expect(headers.Authorization).toBe("Bearer t");
-        expect(body).toMatchObject({ query: "Paul Gilbert Fuzz Universe sheet music", include_domains: ["musescore.com"] });
+        expect(body).toMatchObject({ query: "Paul Gilbert Fuzz Universe", include_domains: ["musescore.com"] });
         return new Response(JSON.stringify(webResults));
       }
       if (url.includes("serper")) {

@@ -147,7 +147,8 @@ const postJson = async (url: string, headers: Record<string, string>, body: unkn
 async function searchMuseScoreSite(q: string): Promise<WebResult[]> {
   const { TAVILY_API_KEY: tavily, SERPER_API_KEY: serper } = process.env;
   if (tavily) {
-    const body = { query: `${q} sheet music`, include_domains: ["musescore.com"], max_results: 20 };
+    // Just the song: with "sheet music" added Tavily has answered with other artists' pages.
+    const body = { query: q, include_domains: ["musescore.com"], max_results: 20 };
     const data = (await postJson("https://api.tavily.com/search", { Authorization: `Bearer ${tavily}` }, body)) as { results?: WebResult[] };
     return data.results ?? [];
   }
