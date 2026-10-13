@@ -1,7 +1,7 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { BookOpen, ChevronRight, ListChecks, Download, Guitar, GraduationCap, Metronome, TrendingUp, Upload, type LucideIcon } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, ListChecks, Download, Guitar, GraduationCap, Metronome, TrendingUp, Upload, type LucideIcon } from "lucide-react";
 import { Button, Card, NumberField, Segmented, SectionTitle, Toggle } from "@/components/ui";
 import { BLOCK_ICON } from "@/components/ui/icons";
 import { haptic } from "@/app/telegram";
@@ -28,6 +28,7 @@ export function SettingsPage() {
   const { fretboard, setFretboard } = useSettings();
   const { practice, setPractice, replaceAll } = useData();
   const file = useRef<HTMLInputElement>(null);
+  const [more, setMore] = useState(false);
 
   const download = () => {
     const blob = new Blob([JSON.stringify(exportData(), null, 2)], { type: "application/json" });
@@ -120,41 +121,58 @@ export function SettingsPage() {
         </div>
       </Card>
 
-      <SectionTitle>Гриф</SectionTitle>
-      <Card>
-        <div className="pb-2 text-sm">Количество ладов</div>
-        <Segmented
-          value={String(fretboard.frets)}
-          onChange={(v) => setFretboard({ frets: Number(v) })}
-          options={["12", "15", "17", "24"].map((v) => ({ value: v, label: v }))}
-        />
-        <Toggle label="Для левши" checked={fretboard.leftHanded} onChange={(v) => setFretboard({ leftHanded: v })} />
-        <Toggle
-          label="Ноты лада за пределами позиции"
-          hint="Показывать их на грифе бледным цветом, чтобы видеть, как позиции соединяются"
-          checked={fretboard.showOutside}
-          onChange={(v) => setFretboard({ showOutside: v })}
-        />
-      </Card>
+      <button
+        type="button"
+        aria-expanded={more}
+        onClick={() => {
+          haptic();
+          setMore((v) => !v);
+        }}
+        className="mt-5 flex h-12 w-full items-center justify-center gap-1.5 rounded-xl text-sm font-semibold text-muted transition-colors active:bg-surface-2"
+      >
+        {more ? "Скрыть остальные настройки" : "Остальные настройки"}
+        <ChevronDown className={cn("size-4 transition-transform", more && "rotate-180")} />
+      </button>
 
-      <SectionTitle>Звук из YouTube</SectionTitle>
-      <AudioServerCard />
+      {more && (
+        <>
+          <SectionTitle>Гриф</SectionTitle>
+          <Card>
+            <div className="pb-2 text-sm">Количество ладов</div>
+            <Segmented
+              value={String(fretboard.frets)}
+              onChange={(v) => setFretboard({ frets: Number(v) })}
+              options={["12", "15", "17", "24"].map((v) => ({ value: v, label: v }))}
+            />
+            <Toggle label="Для левши" checked={fretboard.leftHanded} onChange={(v) => setFretboard({ leftHanded: v })} />
+            <Toggle
+              label="Ноты лада за пределами позиции"
+              hint="Показывать их на грифе бледным цветом, чтобы видеть, как позиции соединяются"
+              checked={fretboard.showOutside}
+              onChange={(v) => setFretboard({ showOutside: v })}
+            />
+          </Card>
 
-      <SectionTitle>Синхронизация и Telegram</SectionTitle>
-      <SyncCard />
+          <SectionTitle>Звук из YouTube</SectionTitle>
+          <AudioServerCard />
 
-      <SectionTitle>Бэкап</SectionTitle>
-      <Card className="space-y-2">
-        <div className="grid grid-cols-2 gap-2">
-          <Button variant="secondary" onClick={download}>
-            <Download className="size-4" /> Сохранить в файл
-          </Button>
-          <Button variant="secondary" onClick={() => file.current?.click()}>
-            <Upload className="size-4" /> Загрузить
-          </Button>
-        </div>
-        <input ref={file} type="file" accept="application/json,.json" hidden onChange={(e) => e.target.files?.[0] && restore(e.target.files[0])} />
-      </Card>
+          <SectionTitle>Синхронизация и Telegram</SectionTitle>
+          <SyncCard />
+
+          <SectionTitle>Бэкап</SectionTitle>
+          <Card className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="secondary" onClick={download}>
+                <Download className="size-4" /> Сохранить в файл
+              </Button>
+              <Button variant="secondary" onClick={() => file.current?.click()}>
+                <Upload className="size-4" /> Загрузить
+              </Button>
+            </div>
+            <input ref={file} type="file" accept="application/json,.json" hidden onChange={(e) => e.target.files?.[0] && restore(e.target.files[0])} />
+          </Card>
+        </>
+      )}
     </div>
   );
 }
