@@ -36,7 +36,9 @@ const webResults = {
     { title: "Paul Gilbert sheet music | Play, print, and download in PDF or MIDI", url: "https://musescore.com/sheetmusic/artists/paul-gilbert" },
     { title: "Fuzz Universe &amp; <strong>more</strong> Sheet music for Guitar, Bass guitar (Mixed Duet) | Musescore.com", url: "https://musescore.com/fuzzfan/scores/1234/" },
     { title: "Fuzz Universe – Paul Gilbert Sheet music for Guitar (Solo) | Musescore.com", url: "http://musescore.com/user/3044216/scores/5193702" },
-    { title: "Third", url: "https://musescore.com/user/1/scores/1" },
+    { title: "joeyyang28 | Free sheet music | Download PDF or print on ...", url: "https://musescore.com/user/36104006" },
+    { title: "Fuzz Universe by Paul Gilbert sheet music", url: "https://musescore.com/song/fuzz_universe-1650534" },
+    { title: "Nothing Else Matters Band - Metallica", url: "https://musescore.com/4yourdrumscore_com/nothing-else-matters-band-metallica" },
   ],
 };
 
@@ -84,11 +86,14 @@ describe("tab search", () => {
   });
 
   it("takes MuseScore scores from search results, without duplicates or pages that aren't a score", () => {
+    expect(tabs.parseMuseScore(webResults.results.slice(4)).map((r) => r.url)).toEqual([
+      "https://musescore.com/4yourdrumscore_com/nothing-else-matters-band-metallica",
+    ]);
     expect(tabs.parseMuseScore(webResults.results)).toEqual([
       {
         source: "musescore",
-        artist: "Paul Gilbert",
-        title: "Fuzz Universe",
+        artist: "",
+        title: "Fuzz Universe – Paul Gilbert",
         kind: "Ноты",
         url: "https://musescore.com/user/3044216/scores/5193702",
         parts: "Guitar (Solo)",

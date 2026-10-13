@@ -103,26 +103,29 @@ interface WebResult {
   url?: string;
 }
 
-// A score's page: musescore.com/user/123/scores/456 or musescore.com/<name>/scores/456 — not search, sets or profiles.
-const SCORE_URL = /^https:\/\/(?:www\.)?musescore\.com\/(?:[^/?#]+\/)+scores\/\d+\/?$/;
+// A score's page: musescore.com/user/123/scores/456, /<name>/scores/456 or the newer /<name>/<score-slug>.
+const SCORE_URL = /^https:\/\/(?:www\.)?musescore\.com\/(?:user\/\d+\/scores\/\d+|[^/?#]+\/scores\/\d+|([^/?#]+)\/[^/?#]+)\/?$/;
+// …but not two-segment pages of the site itself: profiles, artists, songs, catalog.
+const NOT_A_SCORER = new Set(["user", "artist", "song", "sheetmusic", "hub", "groups", "official_scores", "courses", "news", "support"]);
 
 /**
- * MuseScore scores from web search results. Their titles look like
- * "Fuzz Universe – Paul Gilbert Sheet music for Guitar (Solo) | Musescore.com".
+ * MuseScore scores from web search results. A score's title is whatever its author called it ("Paul Gilbert - Fuzz Universe
+ * guitar intro", "Nothing else matters – Metallica"), so it's shown whole, not split into artist and song. Tails like
+ * "Sheet Music for Piano (Solo) | Musescore.com" become `parts`.
  */
 export function parseMuseScore(results: WebResult[]): TabResult[] {
   const seen = new Set<string>();
   return results
     .flatMap((r) => {
       const url = r.url?.replace(/^http:/, "https:").replace(/\/$/, "");
-      if (!url || !SCORE_URL.test(url) || seen.has(url)) return [];
+      const m = url?.match(SCORE_URL);
+      if (!url || !m || (m[1] && NOT_A_SCORER.has(m[1])) || seen.has(url)) return [];
       seen.add(url);
       const text = decodeEntities((r.title ?? "").replace(/<[^>]*>/g, ""))
         .replace(/\s*[|–-]\s*musescore(\.com)?\s*$/i, "")
         .trim();
-      const [name, parts] = text.split(/\s+sheet music(?: for)?\s*/i);
-      const [title, artist = ""] = name.split(/\s+[–—-]\s+/);
-      return [{ source: "musescore" as const, artist: artist.trim(), title: title.trim() || "Ноты", kind: "Ноты", url, ...(parts?.trim() ? { parts: parts.trim() } : {}) }];
+      const [title, parts] = text.split(/\s+sheet music(?: for)?\s*/i).map((t) => t.trim());
+      return [{ source: "musescore" as const, artist: "", title: title || "Ноты", kind: "Ноты", url, ...(parts ? { parts } : {}) }];
     })
     .slice(0, MUSESCORE_MAX);
 }
