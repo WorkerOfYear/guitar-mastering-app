@@ -9,7 +9,7 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - /srv/guitar-dev:/srv
-  # Functions from api/ that work without Vercel (tab search), bundled into /srv/guitar-dev/api/api.js by the workflow,
+  # Functions from api/ that work without Vercel (tab search), bundled into /srv/guitar-dev/api/api.js by up.sh,
   # which restarts the container after each deploy. Until the first deploy it waits for the file.
   api:
     image: node:22-alpine

@@ -1,36 +1,32 @@
-# Тестовый стенд из ветки dev
+# Тестовый стенд
 
-Пуш в `dev` → GitHub Actions (`.github/workflows/dev-stand.yml`, копия — `github-workflow.yml` рядом) проверяет код (tsc, тесты),
-а `deploy.sh` собирает и по SSH кладёт сборку в `/srv/guitar-dev/dist` на сервере. Caddy отдаёт её, туннель Cloudflare даёт https-адрес.
-Рядом крутится контейнер `api` (`api.ts`): та же функция поиска табов `api/tabs.ts`, собранная в `dist-api/api.js`
-и выложенная в `/srv/guitar-dev/api`; Caddy отдаёт ему `/api/tabs`. Синхронизации и бота на стенде нет
-(им нужны хранилище и бот Vercel) — данные живут в браузере.
-
-## Установка (один раз, на сервере)
+Разработка идёт прямо на сервере, в клоне репозитория. После каждой правки:
 
 ```bash
-# 1. Стенд
-cd ~/guitar-mastering-app && git pull && cd server/dev-stand
-mkdir -p /srv/guitar-dev/dist && echo "Ждём первую сборку из dev…" > /srv/guitar-dev/dist/index.html
-docker compose up -d
-sleep 8; docker compose logs tunnel | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1   # адрес стенда
-
-# 2. Ключ, которым GitHub будет заходить на сервер
-ssh-keygen -t ed25519 -N "" -C "github-dev-stand" -f ~/.ssh/github-dev-stand
-cat ~/.ssh/github-dev-stand.pub >> ~/.ssh/authorized_keys
-cat ~/.ssh/github-dev-stand        # приватный ключ — целиком в секрет STAND_SSH_KEY
+bash server/dev-stand/up.sh
 ```
 
-3. GitHub → репозиторий → **Settings → Secrets and variables → Actions → New repository secret**:
-   - `STAND_HOST` — IP сервера;
-   - `STAND_USER` — `root` (или другой пользователь с доступом к `/srv/guitar-dev`);
-   - `STAND_SSH_KEY` — приватный ключ из шага 2 (от `-----BEGIN` до `END-----` включительно);
-   - `STAND_PORT` — только если SSH не на 22.
+Скрипт проверяет код (`tsc`, тесты), собирает приложение и функцию поиска табов, кладёт их в `/srv/guitar-dev/dist`
+и `/srv/guitar-dev/api`, перезапускает контейнер `api` и проверяет, что стенд отдаёт именно эту сборку.
+В конце — `OK: стенд поднят с <коммит>` и адрес стенда; иначе `ОШИБКА` и ненулевой код выхода.
+Какая версия на стенде сейчас: `<адрес стенда>/version.txt` (коммит, `+changes` — если были незакоммиченные правки, и время сборки).
 
-4. Проверка: GitHub → **Actions → dev → test stand → Run workflow**, ветка `dev`. Через пару минут стенд обновится.
+- Node на сервере не обязателен: если `npm` нет, сборка идёт в контейнере `node:22-alpine`.
+- `SKIP_CHECKS=1 bash server/dev-stand/up.sh` — без `tsc` и тестов (быстрее, для мелочей).
+- `STAND_DIR=…` — другая папка вместо `/srv/guitar-dev`.
 
-Обновил стенд до версии с поиском табов (контейнер `api`)? Один раз на сервере:
-`cd ~/guitar-mastering-app && git pull && cd server/dev-stand && docker compose up -d` — поднимет `api` и перечитает Caddyfile
-(если Caddy не подхватил: `docker compose restart web`).
+Caddy отдаёт сборку на `127.0.0.1:8788`, `/api/tabs` уходит в контейнер `api` (`api.ts` — та же функция `api/tabs.ts`).
+Туннель Cloudflare даёт https-адрес. Синхронизации и бота на стенде нет (им нужны хранилище и бот Vercel) — данные живут в браузере.
 
-Если адрес туннеля сменился (перезапуск сервера) — снова последняя команда шага 1.
+## Установка (один раз)
+
+```bash
+cd ~/guitar-mastering-app && git pull
+bash server/dev-stand/up.sh          # соберёт, поднимет контейнеры (docker compose up -d) и напечатает адрес
+```
+
+Если адрес туннеля сменился (перезапуск сервера):
+`cd server/dev-stand && docker compose logs tunnel | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1`
+
+Раньше стенд обновлялся из GitHub Actions по пушу в `dev`; это убрано. Секреты `STAND_*` в настройках репозитория
+и ключ `~/.ssh/github-dev-stand` на сервере больше не нужны — их можно удалить.

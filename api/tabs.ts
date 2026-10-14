@@ -20,7 +20,8 @@ export interface TabResult {
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36";
 const TIMEOUT = 8000;
-const PER_SOURCE = 5;
+// The client shows the first few and reveals more on request.
+const PER_SOURCE = 20;
 // Songsterr adds the artist's other songs after the matches, so keep only its top few.
 const SONGSTERR_MAX = 3;
 
