@@ -52,6 +52,7 @@ npm run build      # проверка типов + сборка в dist/
 
 Чтобы брать звук из видео YouTube и привязывать его к табу, нужен свой небольшой сервер (облака вроде Vercel
 YouTube блокирует). Код и инструкция — в [`server/youtube-audio`](server/youtube-audio/README.md).
+Ноты с MuseScore (PDF, MIDI, mp3) по ссылке из песни скачивает такой же свой сервис на dl-librescore — [`server/score-download`](server/score-download/README.md).
 
 ## Telegram: бот, напоминания и синхронизация
 

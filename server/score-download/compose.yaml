@@ -1,0 +1,9 @@
+# The service listens on 127.0.0.1:8788 only; HTTPS comes from outside (Tailscale Funnel, your own reverse proxy…). See README.md.
+#   docker compose up -d --build
+services:
+  score:
+    build: .
+    restart: unless-stopped
+    environment:
+      KEY: ${KEY:?задай KEY в .env}
+    ports: ["127.0.0.1:${PORT:-8790}:8080"]
