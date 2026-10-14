@@ -9,8 +9,8 @@ import { searchPage, searchTabs, SOURCE_NAME, type TabResult, type TabSource } f
 const PAGE = 6;
 
 /**
- * Finds the song's tabs on Songsterr and Ultimate Guitar and lets the user pick links to attach;
- * MuseScore (sheet music) is a search link, its site doesn't let a server read it.
+ * Finds the song's tabs on Songsterr and Ultimate Guitar and its scores on MuseScore, and lets the user pick links
+ * to attach; each site's search page is a link too, for what the server didn't find.
  * `query` follows the video or item title until the user edits it; `auto` searches as soon as it arrives.
  */
 export function TabSearch({ query, auto, picked, onToggle }: { query: string; auto: boolean; picked: string[]; onToggle: (url: string) => void }) {
@@ -125,11 +125,11 @@ function ResultRow({ r, picked, onToggle }: { r: TabResult; picked: boolean; onT
     <div className={cn("flex items-center gap-2 rounded-2xl border py-1.5 pl-3 pr-1.5 transition-colors", picked ? "border-accent bg-accent/10" : "border-line")}>
       <a href={r.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold">
-          {r.artist} — {r.title}
+          {[r.artist, r.title].filter(Boolean).join(" — ")}
         </div>
         <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
           <span>{SOURCE_NAME[r.source]}</span>
-          <Badge variant={r.kind === "Guitar Pro" || r.kind === "Таб + плеер" ? "soft" : "secondary"} className="px-2 py-0 text-[10px]">
+          <Badge variant={r.kind === "Guitar Pro" || r.kind === "Таб + плеер" || r.kind === "Ноты" ? "soft" : "secondary"} className="px-2 py-0 text-[10px]">
             {r.kind}
           </Badge>
           {r.rating != null && (
@@ -140,6 +140,7 @@ function ResultRow({ r, picked, onToggle }: { r: TabResult; picked: boolean; onT
             </span>
           )}
           {r.difficulty != null && <span>сложность {r.difficulty}</span>}
+          {r.parts && <span className="truncate">{r.parts}</span>}
         </div>
       </a>
       <Button

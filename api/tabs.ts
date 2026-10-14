@@ -1,17 +1,20 @@
 // GET /api/tabs?q=<artist and song> → { results, failed }
-// Looks a song up on Songsterr (public JSON search) and Ultimate Guitar (results JSON embedded in the search page).
-// Only links are returned: the tabs themselves stay on those sites. Neither allows cross-origin requests, hence a function.
-// MuseScore sits behind a Cloudflare bot check that a server can't pass, so the app links to its search page instead.
+// Looks a song up on Songsterr (public JSON search), Ultimate Guitar (results JSON embedded in the search page) and
+// MuseScore. Only links are returned: the tabs themselves stay on those sites. None allows cross-origin requests, hence a function.
+// MuseScore sits behind a Cloudflare bot check that a server can't pass, so its scores come from a web search API limited
+// to musescore.com — Tavily (TAVILY_API_KEY) or Serper (SERPER_API_KEY); without a key the app just links to MuseScore's search.
 import { handle, HttpError } from "./_lib.js";
 
-export type TabSource = "songsterr" | "ug";
+export type TabSource = "songsterr" | "ug" | "musescore";
 
 export interface TabResult {
   source: TabSource;
   artist: string;
   title: string;
-  /** "Таб + плеер", "Guitar Pro", "Аккорды"… */
+  /** "Таб + плеер", "Guitar Pro", "Аккорды", "Ноты"… */
   kind: string;
+  /** MuseScore: the instruments the score is for, "Guitar (Solo)". */
+  parts?: string;
   url: string;
   rating?: number;
   votes?: number;
@@ -24,6 +27,8 @@ const TIMEOUT = 8000;
 const PER_SOURCE = 20;
 // Songsterr adds the artist's other songs after the matches, so keep only its top few.
 const SONGSTERR_MAX = 3;
+// Scores go between Songsterr and UG, so keep few of them for UG to show up on the first screen too.
+const MUSESCORE_MAX = 2;
 
 const slug = (s: string) =>
   s
@@ -93,24 +98,109 @@ export function parseUltimateGuitar(html: string): TabResult[] {
   );
 }
 
-async function get(url: string, accept: string) {
-  const r = await fetch(url, { headers: { "User-Agent": UA, Accept: accept, "Accept-Language": "en" }, signal: AbortSignal.timeout(TIMEOUT) });
+interface WebResult {
+  title?: string;
+  url?: string;
+  /** The page as markdown (Tavily's include_raw_content). */
+  raw_content?: string | null;
+}
+
+/** "1.7K" → 1700, "414" → 414. */
+const count = (s: string) => Math.round(parseFloat(s.replace(/,/g, "")) * ({ K: 1e3, M: 1e6 }[s.slice(-1)] ?? 1));
+
+const LEVELS: Record<string, string> = { Beginner: "начальный уровень", Intermediate: "средний уровень", Advanced: "продвинутый уровень" };
+
+/**
+ * Rating, instrument and level from a score page's markdown. Under the "# <name>" heading (and the author) it has
+ * `[87.6K](…)3K[39](…#comments)4.5 (414)` — views, saves, comments, then rating (votes) if anyone rated it —
+ * and then the instrument and the level ("Select level" when the author didn't set one).
+ */
+export function museScoreStats(page: string): Pick<TabResult, "rating" | "votes" | "parts"> {
+  const h1 = page.search(/^# /m);
+  if (h1 < 0) return {};
+  const m = page
+    .slice(h1, h1 + 1500)
+    .match(/\[[\d.,]+[KM]?\]\([^)\s]*\)[\d.,]+[KM]?\[[\d.,]+[KM]?\]\([^)\s]*#comments\)(?:[ \t]*([\d.]+)[ \t]*\(([\d.,]+[KM]?)\))?[ \t]*\n+([^\n]+)\n+([^\n]+)/);
+  if (!m) return {};
+  const [, rating, votes, instrument, level] = m;
+  const parts = [instrument.trim(), LEVELS[level.trim()]].filter(Boolean).join(" · ");
+  return { ...(rating && votes ? { rating: parseFloat(rating), votes: count(votes) } : {}), ...(parts ? { parts } : {}) };
+}
+
+// A score's page: musescore.com/user/123/scores/456, /<name>/scores/456 or the newer /<name>/<score-slug>.
+const SCORE_URL = /^https:\/\/(?:www\.)?musescore\.com\/(?:user\/\d+\/scores\/\d+|[^/?#]+\/scores\/\d+|([^/?#]+)\/[^/?#]+)\/?$/;
+// …but not two-segment pages of the site itself: profiles, artists, songs, catalog.
+const NOT_A_SCORER = new Set(["user", "artist", "song", "sheetmusic", "hub", "groups", "official_scores", "courses", "news", "support"]);
+
+/**
+ * MuseScore scores from web search results. A score's title is whatever its author called it ("Paul Gilbert - Fuzz Universe
+ * guitar intro", "Nothing else matters – Metallica"), so it's shown whole, not split into artist and song. Tails like
+ * "Sheet Music for Piano (Solo) | Musescore.com" become `parts`.
+ */
+export function parseMuseScore(results: WebResult[]): TabResult[] {
+  const seen = new Set<string>();
+  return results
+    .flatMap((r) => {
+      const url = r.url?.replace(/^http:/, "https:").replace(/\/$/, "");
+      const m = url?.match(SCORE_URL);
+      if (!url || !m || (m[1] && NOT_A_SCORER.has(m[1])) || seen.has(url)) return [];
+      seen.add(url);
+      const text = decodeEntities((r.title ?? "").replace(/<[^>]*>/g, ""))
+        .replace(/\s*[|–-]\s*musescore(\.com)?\s*$/i, "")
+        .trim();
+      const [title, parts] = text.split(/\s+sheet music(?: for)?\s*/i).map((t) => t.trim());
+      // The page itself, when the search gave it, knows more than the title: instrument, level, rating.
+      const stats = r.raw_content ? museScoreStats(r.raw_content) : {};
+      return [{ source: "musescore" as const, artist: "", title: title || "Ноты", kind: "Ноты", url, ...(parts ? { parts } : {}), ...stats }];
+    })
+    .slice(0, MUSESCORE_MAX);
+}
+
+async function get(url: string, accept: string, init: RequestInit = {}) {
+  const r = await fetch(url, {
+    ...init,
+    headers: { "User-Agent": UA, Accept: accept, "Accept-Language": "en", ...(init.headers as Record<string, string>) },
+    signal: AbortSignal.timeout(TIMEOUT),
+  });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r;
 }
 
+const postJson = async (url: string, headers: Record<string, string>, body: unknown) =>
+  (await get(url, "application/json", { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) })).json();
+
+/** Web pages from musescore.com for the query, through whichever search API has a key (Tavily first). */
+async function searchMuseScoreSite(q: string): Promise<WebResult[]> {
+  const { TAVILY_API_KEY: tavily, SERPER_API_KEY: serper } = process.env;
+  if (tavily) {
+    // Just the song: with "sheet music" added Tavily has answered with other artists' pages.
+    // The pages' text too (no extra credits, ~1 s slower): the rating is only on the page.
+    const body = { query: q, include_domains: ["musescore.com"], max_results: 20, include_raw_content: true };
+    const data = (await postJson("https://api.tavily.com/search", { Authorization: `Bearer ${tavily}` }, body)) as { results?: WebResult[] };
+    return data.results ?? [];
+  }
+  // 10 results: more costs Serper two credits.
+  const body = { q: `${q} site:musescore.com`, num: 10 };
+  const data = (await postJson("https://google.serper.dev/search", { "X-API-KEY": serper! }, body)) as { organic?: { title?: string; link?: string }[] };
+  return (data.organic ?? []).map((r) => ({ title: r.title, url: r.link }));
+}
+
+const hasMuseScoreSearch = () => !!(process.env.TAVILY_API_KEY || process.env.SERPER_API_KEY);
+
 const SEARCH: Record<TabSource, (q: string) => Promise<TabResult[]>> = {
   songsterr: async (q) =>
     parseSongsterr((await (await get(`https://www.songsterr.com/api/songs?size=${SONGSTERR_MAX}&pattern=${encodeURIComponent(q)}`, "application/json")).json()) as SongsterrSong[]),
+  musescore: async (q) => parseMuseScore(await searchMuseScoreSite(q)),
   ug: async (q) =>
     parseUltimateGuitar(await (await get(`https://www.ultimate-guitar.com/search.php?search_type=title&value=${encodeURIComponent(q)}`, "text/html")).text()),
 };
 
-// No auth: it only reads two fixed public sites and returns links, nothing from the owner's data.
+// No auth: it only reads fixed public sites and returns links, nothing from the owner's data.
 export const GET = handle(async (req) => {
   const q = (new URL(req.url).searchParams.get("q") ?? "").replace(/\s+/g, " ").trim();
   if (q.length < 2 || q.length > 120) throw new HttpError(400, "Нужен запрос: исполнитель и название");
-  const sources = Object.keys(SEARCH) as TabSource[];
+  // Results come in this order: Songsterr, MuseScore, UG. MuseScore is skipped, not "failed", without a search key.
+  const sources = (Object.keys(SEARCH) as TabSource[]).filter((s) => s !== "musescore" || hasMuseScoreSearch());
   const settled = await Promise.allSettled(sources.map((s) => SEARCH[s](q)));
   const results = settled.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
   const failed = sources.filter((_, i) => settled[i].status === "rejected");

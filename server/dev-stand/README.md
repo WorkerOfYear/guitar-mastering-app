@@ -30,3 +30,6 @@ bash server/dev-stand/up.sh          # соберёт, поднимет конт
 
 Раньше стенд обновлялся из GitHub Actions по пушу в `dev`; это убрано. Секреты `STAND_*` в настройках репозитория
 и ключ `~/.ssh/github-dev-stand` на сервере больше не нужны — их можно удалить.
+
+Ноты MuseScore в поиске табов: положи ключ Tavily или Serper в `server/dev-stand/.env` (`TAVILY_API_KEY=…` или `SERPER_API_KEY=…`, файл не в git)
+и запусти `up.sh` — контейнер `api` пересоздастся с ключом. Как получить ключ — в README в корне.

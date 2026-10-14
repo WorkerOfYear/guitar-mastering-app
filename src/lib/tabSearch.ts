@@ -1,12 +1,12 @@
-// Looking a song's tabs and sheet music up on the web: Songsterr and Ultimate Guitar through /api/tabs,
-// MuseScore (and the same two sites) as plain search links that open in the browser.
+// Looking a song's tabs and sheet music up on the web: Songsterr, Ultimate Guitar and MuseScore (when the server
+// has a search key) through /api/tabs, plus each site's own search page as a link that opens in the browser.
 import type { TabResult, TabSource } from "../../api/tabs";
 
 export type { TabResult, TabSource };
 
-export const SOURCE_NAME: Record<TabSource | "musescore", string> = { songsterr: "Songsterr", ug: "Ultimate Guitar", musescore: "MuseScore" };
+export const SOURCE_NAME: Record<TabSource, string> = { songsterr: "Songsterr", ug: "Ultimate Guitar", musescore: "MuseScore" };
 
-export const searchPage = (source: TabSource | "musescore", q: string) => {
+export const searchPage = (source: TabSource, q: string) => {
   const e = encodeURIComponent(q);
   return {
     songsterr: `https://www.songsterr.com/?pattern=${e}`,
