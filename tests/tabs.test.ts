@@ -102,6 +102,27 @@ describe("tab search", () => {
     ]);
   });
 
+  it("reads a score's rating, instrument and level from its page", () => {
+    // Pieces of real pages as Tavily returns them.
+    const page = (stats: string, level = "Beginner") =>
+      `[Tools](https://musescore.com/tools)\n\n# Nothing Else Matters (by Metallica)\n\n[![Image 13: burberry18's profile picture](https://musescore.com/a.png) burberry18](https://musescore.com/user/14429466)\n\n${stats}\n\nPiano\n\n${level}\n\nDownload Print Save score Share\n\n## Other versions of this score\n\n1.9K votes`;
+    expect(tabs.museScoreStats(page("[87.6K](https://musescore.com/user/1/scores/2)3K[39](https://musescore.com/user/1/scores/2#comments)4.5 (414)"))).toEqual({
+      rating: 4.5,
+      votes: 414,
+      parts: "Piano · начальный уровень",
+    });
+    expect(tabs.museScoreStats(page("[1.7K](https://musescore.com/a/b)26[3](https://musescore.com/a/b#comments)5 (1.2K)", "Select level"))).toEqual({
+      rating: 5,
+      votes: 1200,
+      parts: "Piano",
+    });
+    // Nobody rated it yet.
+    expect(tabs.museScoreStats(page("[422](https://musescore.com/a/b)2[0](https://musescore.com/a/b#comments)", "Advanced"))).toEqual({
+      parts: "Piano · продвинутый уровень",
+    });
+    expect(tabs.museScoreStats("Just a moment...")).toEqual({});
+  });
+
   it("searches MuseScore only with a key, through Tavily or Serper, and puts its scores after Songsterr", async () => {
     const asked: string[] = [];
     vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
@@ -111,7 +132,7 @@ describe("tab search", () => {
       const body = JSON.parse((init?.body as string) ?? "null");
       if (url.includes("tavily")) {
         expect(headers.Authorization).toBe("Bearer t");
-        expect(body).toMatchObject({ query: "Paul Gilbert Fuzz Universe", include_domains: ["musescore.com"] });
+        expect(body).toMatchObject({ query: "Paul Gilbert Fuzz Universe", include_domains: ["musescore.com"], include_raw_content: true });
         return new Response(JSON.stringify(webResults));
       }
       if (url.includes("serper")) {

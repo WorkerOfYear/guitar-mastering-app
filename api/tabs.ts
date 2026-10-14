@@ -101,6 +101,30 @@ export function parseUltimateGuitar(html: string): TabResult[] {
 interface WebResult {
   title?: string;
   url?: string;
+  /** The page as markdown (Tavily's include_raw_content). */
+  raw_content?: string | null;
+}
+
+/** "1.7K" → 1700, "414" → 414. */
+const count = (s: string) => Math.round(parseFloat(s.replace(/,/g, "")) * ({ K: 1e3, M: 1e6 }[s.slice(-1)] ?? 1));
+
+const LEVELS: Record<string, string> = { Beginner: "начальный уровень", Intermediate: "средний уровень", Advanced: "продвинутый уровень" };
+
+/**
+ * Rating, instrument and level from a score page's markdown. Under the "# <name>" heading (and the author) it has
+ * `[87.6K](…)3K[39](…#comments)4.5 (414)` — views, saves, comments, then rating (votes) if anyone rated it —
+ * and then the instrument and the level ("Select level" when the author didn't set one).
+ */
+export function museScoreStats(page: string): Pick<TabResult, "rating" | "votes" | "parts"> {
+  const h1 = page.search(/^# /m);
+  if (h1 < 0) return {};
+  const m = page
+    .slice(h1, h1 + 1500)
+    .match(/\[[\d.,]+[KM]?\]\([^)\s]*\)[\d.,]+[KM]?\[[\d.,]+[KM]?\]\([^)\s]*#comments\)(?:[ \t]*([\d.]+)[ \t]*\(([\d.,]+[KM]?)\))?[ \t]*\n+([^\n]+)\n+([^\n]+)/);
+  if (!m) return {};
+  const [, rating, votes, instrument, level] = m;
+  const parts = [instrument.trim(), LEVELS[level.trim()]].filter(Boolean).join(" · ");
+  return { ...(rating && votes ? { rating: parseFloat(rating), votes: count(votes) } : {}), ...(parts ? { parts } : {}) };
 }
 
 // A score's page: musescore.com/user/123/scores/456, /<name>/scores/456 or the newer /<name>/<score-slug>.
@@ -125,7 +149,9 @@ export function parseMuseScore(results: WebResult[]): TabResult[] {
         .replace(/\s*[|–-]\s*musescore(\.com)?\s*$/i, "")
         .trim();
       const [title, parts] = text.split(/\s+sheet music(?: for)?\s*/i).map((t) => t.trim());
-      return [{ source: "musescore" as const, artist: "", title: title || "Ноты", kind: "Ноты", url, ...(parts ? { parts } : {}) }];
+      // The page itself, when the search gave it, knows more than the title: instrument, level, rating.
+      const stats = r.raw_content ? museScoreStats(r.raw_content) : {};
+      return [{ source: "musescore" as const, artist: "", title: title || "Ноты", kind: "Ноты", url, ...(parts ? { parts } : {}), ...stats }];
     })
     .slice(0, MUSESCORE_MAX);
 }
@@ -148,7 +174,8 @@ async function searchMuseScoreSite(q: string): Promise<WebResult[]> {
   const { TAVILY_API_KEY: tavily, SERPER_API_KEY: serper } = process.env;
   if (tavily) {
     // Just the song: with "sheet music" added Tavily has answered with other artists' pages.
-    const body = { query: q, include_domains: ["musescore.com"], max_results: 20 };
+    // The pages' text too (no extra credits, ~1 s slower): the rating is only on the page.
+    const body = { query: q, include_domains: ["musescore.com"], max_results: 20, include_raw_content: true };
     const data = (await postJson("https://api.tavily.com/search", { Authorization: `Bearer ${tavily}` }, body)) as { results?: WebResult[] };
     return data.results ?? [];
   }
