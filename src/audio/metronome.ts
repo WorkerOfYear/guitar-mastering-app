@@ -28,9 +28,13 @@ function schedule() {
     const pos = tick % perBar;
     const { beat, tick: sub, kind } = planTick(rhythm, beats, accents, pos);
     if (kind) playClick(click, nextTime, kind, volume);
-    if (!sub) {
+    if (kind || !sub) {
       const delay = Math.max(0, (nextTime - ctx.currentTime) * 1000);
-      setTimeout(() => useMetronome.getState().running && useMetronome.setState({ beat }), delay);
+      setTimeout(() => {
+        if (!useMetronome.getState().running) return;
+        // `beat` marks the start of a beat (screen flash), `note` every sounding note (beat circles)
+        useMetronome.setState((s) => ({ ...(sub ? {} : { beat }), ...(kind ? { note: { beat, id: s.note.id + 1 } } : {}) }));
+      }, delay);
     }
     nextTime += 60 / bpm / rhythm.grid;
     tick++;
@@ -62,7 +66,7 @@ export function stopMetronome() {
   if (timer) clearInterval(timer);
   timer = null;
   silenceClicks();
-  useMetronome.setState({ running: false, beat: -1 });
+  useMetronome.setState((s) => ({ running: false, beat: -1, note: { beat: -1, id: s.note.id } }));
 }
 
 export const toggleMetronome = () => (useMetronome.getState().running ? stopMetronome() : startMetronome());

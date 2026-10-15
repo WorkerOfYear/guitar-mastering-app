@@ -168,15 +168,15 @@ function RhythmImage({ rhythm, unit, className }: { rhythm: Rhythm; unit: 4 | 8;
 const FLASH_MS = 110;
 
 function Beats() {
-  const { beats, beat, accents, running } = useMetronome();
+  const { beats, accents, running, note } = useMetronome();
   const [lit, setLit] = useState(-1);
-  // light the circle only for an instant, then let it go dark again
+  // every sounding note lights the circle of its beat — only for an instant, then it goes dark again
   useEffect(() => {
-    if (!running || beat < 0) return setLit(-1);
-    setLit(beat);
+    if (!running || note.beat < 0) return setLit(-1);
+    setLit(note.beat);
     const t = setTimeout(() => setLit(-1), FLASH_MS);
     return () => clearTimeout(t);
-  }, [beat, running]);
+  }, [note.id, note.beat, running]);
   const toggle = (n: number) => {
     haptic();
     const cur = useMetronome.getState().accents;
@@ -200,10 +200,10 @@ function Beats() {
             <span
               className="block size-5 rounded-full border bg-surface-2"
               style={{
+                // only the rim lights up; the inside stays as it is
                 borderColor: on ? color : "var(--border)",
-                background: on ? color : undefined,
-                boxShadow: on ? `0 0 14px ${color}` : undefined,
-                transition: on ? "none" : "background-color 120ms, box-shadow 120ms, border-color 120ms",
+                boxShadow: on ? `0 0 0 1px ${color}, 0 0 8px ${color}` : undefined,
+                transition: on ? "none" : "box-shadow 120ms, border-color 120ms",
               }}
             />
             <span className={cn("text-sm font-bold leading-none text-muted", !accented && "invisible")}>↑</span>

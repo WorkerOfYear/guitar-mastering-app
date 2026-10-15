@@ -21,6 +21,8 @@ export interface MetronomeState {
   running: boolean;
   /** Current beat (0-based) while running, −1 when stopped */
   beat: number;
+  /** Last sounded note (not only the first of a beat), for lighting the circle of its beat; `id` changes on every note */
+  note: { beat: number; id: number };
   set: (patch: Partial<Omit<MetronomeState, "set">>) => void;
 }
 
@@ -41,12 +43,13 @@ export const useMetronome = create<MetronomeState>()(
       flash: false,
       running: false,
       beat: -1,
+      note: { beat: -1, id: 0 },
       set: (patch) => set(patch),
     }),
     {
       name: "guitar:metronome",
       version: 2,
-      partialize: ({ running: _r, beat: _b, set: _s, ...rest }) => rest,
+      partialize: ({ running: _r, beat: _b, note: _n, set: _s, ...rest }) => rest,
       // v1 had `accent` (downbeat on/off) and `subdivision` instead of per-beat accents and patterns.
       migrate: (persisted, version) => {
         const s = (persisted ?? {}) as Record<string, unknown>;
