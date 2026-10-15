@@ -6,6 +6,8 @@ import {
   ChevronDown,
   Download,
   FileMusic,
+  Grid3x3,
+  Pencil,
   Headphones,
   Link2,
   ListTree,
@@ -24,6 +26,8 @@ import { Badge, Button, Card, Input, NumberField, Segmented } from "@/components
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { YouTubePlayer } from "@/components/video/YouTubePlayer";
+import { DEFAULT_BOARD, TheoryPicker } from "@/components/fretboard/TheoryPicker";
+import { choiceOf, theoryView } from "@/music/theoryView";
 import type { ScoreInfo } from "@/components/tab/TabPlayer";
 import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
 import { audio } from "@/audio/player";
@@ -270,6 +274,7 @@ export function MediaCard({ item }: { item: Item }) {
 
   const [videoUrl, setVideoUrl] = useState("");
   const [editVideo, setEditVideo] = useState(false);
+  const [editBoard, setEditBoard] = useState(false);
   const saveVideo = () => {
     const v = parseYouTube(videoUrl);
     if (!v) return toast.error("Не похоже на ссылку YouTube");
@@ -308,11 +313,16 @@ export function MediaCard({ item }: { item: Item }) {
 
   const synced = !!item.audioSync?.length;
   const sectionCount = item.sections?.length ?? 0;
-  const empty = !item.video && !item.tabFile && !item.tab && !item.audioFile;
+  const empty = !item.video && !item.tabFile && !item.tab && !item.audioFile && !item.theory;
   const [showSync, setShowSync] = useState(false);
 
   const badges = (
     <>
+      {item.theory && (
+        <Badge variant="soft">
+          <Grid3x3 /> гриф
+        </Badge>
+      )}
       {item.video && (
         <Badge variant="soft">
           <Video /> видео
@@ -403,6 +413,42 @@ export function MediaCard({ item }: { item: Item }) {
         <AddRow icon={<FileMusic />} title="Добавить табы" sub="Guitar Pro или MusicXML" accept={TAB_ACCEPT} onFile={(f) => void upload(f)} />
       )}
 
+      {/* The neck: a scale or a chord shown on the fretboard */}
+      {item.theory && !editBoard ? (
+        <MaterialRow
+          icon={<Grid3x3 />}
+          title="Гриф"
+          sub={theoryView(choiceOf(item.theory)).title}
+          actions={
+            <>
+              <IconAction label="Изменить гриф" onClick={() => setEditBoard(true)}>
+                <Pencil className="size-4" />
+              </IconAction>
+              <IconAction label="Убрать гриф" onClick={() => updateItem(item.id, { theory: undefined })}>
+                <Trash2 className="size-4" />
+              </IconAction>
+            </>
+          }
+        />
+      ) : editBoard ? (
+        <div className="space-y-2 rounded-2xl bg-surface-2/50 p-3">
+          <TheoryPicker value={item.theory ?? DEFAULT_BOARD} onChange={(theory) => updateItem(item.id, { theory })} />
+          <Button variant="secondary" onClick={() => setEditBoard(false)} className="w-full">
+            <Check /> Готово
+          </Button>
+        </div>
+      ) : (
+        <AddRow
+          icon={<Grid3x3 />}
+          title="Добавить гриф"
+          sub="гамма, лад или аккорд по позициям"
+          onClick={() => {
+            updateItem(item.id, { theory: DEFAULT_BOARD });
+            setEditBoard(true);
+          }}
+        />
+      )}
+
       {/* Recording */}
       {item.audioFile ? (
         <MaterialRow
@@ -450,7 +496,7 @@ export function MediaCard({ item }: { item: Item }) {
       <Card className="space-y-3 p-3">
         {empty ? (
           <>
-            <div className="px-1 text-sm text-muted">Добавь видео, табы или запись — под них и будешь играть.</div>
+            <div className="px-1 text-sm text-muted">Добавь видео, табы, запись или гриф — под них и будешь играть.</div>
             {materials}
           </>
         ) : (

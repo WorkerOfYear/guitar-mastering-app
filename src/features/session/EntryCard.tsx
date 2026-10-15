@@ -1,19 +1,17 @@
 import { useNavigate } from "react-router-dom";
-import { ExternalLink, FileUp, GraduationCap } from "lucide-react";
+import { ExternalLink, FileUp } from "lucide-react";
 import { Badge, Button, Card, Progress, Stat } from "@/components/ui";
 import { TYPE_ICON } from "@/components/ui/icons";
 import { cleanBpm, findSection, lastEntry, targetBpm } from "@/lib/progress";
 import { localDate } from "@/lib/date";
 import { useData } from "@/store/data";
-import { useSettings } from "@/store/settings";
 import { SUBDIVISION_META, TYPE_META, type PlanEntry } from "@/shared/types";
 
 const RESULT_LABEL = { clean: "чисто", errors: "с ошибками", fail: "не получилось" } as const;
 
-/** What to play: description, tempo history and links. */
+/** What to play: description, tempo history and links. The neck is shown by the session itself. */
 export function EntryCard({ entry }: { entry: PlanEntry }) {
   const { items, log } = useData();
-  const setTheory = useSettings((s) => s.setTheory);
   const navigate = useNavigate();
   const item = items.find((i) => i.id === entry.itemId);
   if (!item) return <Card>Элемент удалён из библиотеки</Card>;
@@ -44,26 +42,8 @@ export function EntryCard({ entry }: { entry: PlanEntry }) {
       )}
       {clean && target ? <Progress className="mt-3" value={(clean / target) * 100} /> : null}
 
-      {(item.links.length > 0 || item.theory) && (
+      {item.links.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
-          {item.theory && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setTheory({
-                  ...item.theory!,
-                  scaleId: item.theory!.scaleId ?? "ionian",
-                  chordType: item.theory!.chordType ?? "maj7",
-                  diatonic: item.theory!.diatonic ?? 0,
-                  position: 0,
-                });
-                navigate("/theory");
-              }}
-            >
-              <GraduationCap /> На грифе
-            </Button>
-          )}
           {item.links.map((url) => (
             <Button key={url} asChild variant="secondary" size="sm">
               <a href={url} target="_blank" rel="noreferrer">

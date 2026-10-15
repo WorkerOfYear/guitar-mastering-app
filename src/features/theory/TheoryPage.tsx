@@ -1,50 +1,20 @@
 import { useMemo } from "react";
 import { ChordDiagram } from "@/components/fretboard/ChordDiagram";
-import { ScaleBoard, highlightOf } from "@/components/fretboard/ScaleBoard";
+import { ScaleBoard } from "@/components/fretboard/ScaleBoard";
 import { Chip, ScrollRow, Segmented, SectionTitle } from "@/components/ui";
 import { strum } from "@/audio/player";
-import { CHORD_TYPES, chordTones, chordTypeById, voicings } from "@/music/chords";
-import { buildPatterns, STANDARD_TUNING } from "@/music/fretboard";
-import { SCALES, diatonicChords, scaleById, scaleTones } from "@/music/scales";
+import { CHORD_TYPES, voicings } from "@/music/chords";
+import { STANDARD_TUNING } from "@/music/fretboard";
+import { SCALES } from "@/music/scales";
+import { theoryView } from "@/music/theoryView";
 import { TONICS, noteName, parseNote } from "@/music/notes";
 import { useSettings } from "@/store/settings";
 
 export function TheoryPage() {
   const { theory, setTheory } = useSettings();
   const { tab, tonic, scaleId, chordType, diatonic } = theory;
-  const scale = scaleById(scaleId);
 
-  const view = useMemo(() => {
-    if (tab === "chord") {
-      const tones = chordTones(tonic, chordType);
-      const type = chordTypeById(chordType);
-      return {
-        title: `${noteName(parseNote(tonic))}${type.symbol}`,
-        subtitle: type.name,
-        tones,
-        chord: highlightOf(tones),
-        patterns: buildPatterns(tones, STANDARD_TUNING, { perString: 2 }),
-        chords: [],
-        voicingRoot: tonic,
-        voicingType: chordType,
-      };
-    }
-    const tones = scaleTones(tonic, scaleId);
-    const chords = diatonicChords(tonic, scaleId);
-    const dc = chords.find((c) => c.degree === diatonic);
-    const chordToneSet = dc ? (dc.typeId ? chordTones(dc.rootName, dc.typeId) : dc.tones) : null;
-    const base = scale.patternBase ? scaleTones(tonic, scale.patternBase) : tones;
-    return {
-      title: `${noteName(parseNote(tonic))} — ${scale.name.toLowerCase()}`,
-      subtitle: dc ? `Аккорд ${dc.roman}: ${dc.symbol}` : `${tones.length} нот`,
-      tones,
-      chord: chordToneSet ? highlightOf(chordToneSet) : null,
-      patterns: buildPatterns(base, STANDARD_TUNING, { extra: scale.patternBase ? tones : undefined }),
-      chords,
-      voicingRoot: dc?.rootName,
-      voicingType: dc?.typeId,
-    };
-  }, [tab, tonic, scaleId, chordType, diatonic, scale]);
+  const view = useMemo(() => theoryView({ tab, tonic, scaleId, chordType, diatonic }), [tab, tonic, scaleId, chordType, diatonic]);
 
   const vs = view.voicingRoot && view.voicingType ? voicings(view.voicingRoot, view.voicingType, STANDARD_TUNING) : [];
 

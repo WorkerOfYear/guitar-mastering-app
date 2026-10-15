@@ -1,15 +1,16 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { TempoChart } from "@/components/charts/TempoChart";
-import { ExternalLink, GraduationCap, Pencil, Plus, SearchX, Trash2, X } from "lucide-react";
+import { Check, ExternalLink, Pencil, Plus, SearchX, Trash2, X } from "lucide-react";
 import { Badge, Button, Card, Chip, Input, NumberField, ScrollRow, SectionTitle, Textarea } from "@/components/ui";
 import { TYPE_ICON } from "@/components/ui/icons";
 import { linkLabel } from "@/features/session/EntryCard";
 import { MediaCard } from "./MediaCard";
+import { ItemBoard } from "@/components/fretboard/ItemBoard";
+import { isMastered, masteredPatch } from "@/lib/library";
 import { cleanBpm, entriesFor } from "@/lib/progress";
 import { formatDay, localDate } from "@/lib/date";
 import { useData } from "@/store/data";
-import { useSettings } from "@/store/settings";
 import { STATUS_META, SUBDIVISION_META, TYPE_META, type ItemStatus, type Section, type Subdivision } from "@/shared/types";
 
 const NEXT_STATUS: Record<ItemStatus, ItemStatus> = { queue: "active", active: "rotation", rotation: "queue", archived: "queue" };
@@ -26,7 +27,6 @@ export function ItemPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const data = useData();
-  const setTheory = useSettings((s) => s.setTheory);
   const item = data.items.find((i) => i.id === id);
   const [newLink, setNewLink] = useState("");
   const [picked, setChartSection] = useState<string | undefined>();
@@ -78,26 +78,16 @@ export function ItemPage() {
         </div>
       )}
 
-      {item.theory && (
-        <Button
-          variant="secondary"
-          onClick={() => {
-            setTheory({
-              ...item.theory!,
-              scaleId: item.theory!.scaleId ?? "ionian",
-              chordType: item.theory!.chordType ?? "maj7",
-              diatonic: item.theory!.diatonic ?? 0,
-              position: 0,
-            });
-            navigate("/theory");
-          }}
-          className="w-full"
-        >
-          <GraduationCap /> Открыть на грифе
-        </Button>
-      )}
+      <Button
+        variant={isMastered(item) ? "secondary" : "default"}
+        onClick={() => update(masteredPatch(item, !isMastered(item)))}
+        className="w-full"
+      >
+        <Check /> {isMastered(item) ? "Разобрано — вернуть в работу" : "Отметить разобранным"}
+      </Button>
 
       <MediaCard item={item} />
+      {item.theory && <ItemBoard link={item.theory} />}
 
       {isSong && (
         <>

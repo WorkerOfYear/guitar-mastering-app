@@ -1,18 +1,42 @@
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { m } from "motion/react";
-import { ChevronRight, Inbox, Pin, Plus } from "lucide-react";
-import { Button, Card, Progress } from "@/components/ui";
+import { Check, ChevronRight, Inbox, Pin, Plus } from "lucide-react";
+import { Button, Card, Chip, Progress, Segmented } from "@/components/ui";
 import { TYPE_ICON, IconTile } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/Placeholder";
 import { cleanBpm, targetBpm } from "@/lib/progress";
 import { localDate } from "@/lib/date";
+import { isMastered, tabOf, type LibraryTab } from "@/lib/library";
 import { useData } from "@/store/data";
 import { TYPE_META } from "@/shared/types";
 
-/** Everything in one plain list; what goes into a session is decided by the planner. */
+type Filter = "all" | "open" | "done";
+const FILTERS: { value: Filter; label: string }[] = [
+  { value: "all", label: "Все" },
+  { value: "open", label: "В работе" },
+  { value: "done", label: "Разобрано" },
+];
+
+/** Two shelves: exercises and pieces. "Разобрано" is the user's own mark; the planner decides what goes into a session. */
 export function LibraryPage() {
-  const { items, log } = useData();
+  const { items: all, log } = useData();
   const today = localDate();
+  const [params, setParams] = useSearchParams();
+  const tab: LibraryTab = params.get("tab") === "pieces" ? "pieces" : "exercises";
+  const filter = (["open", "done"].includes(params.get("show") ?? "") ? params.get("show") : "all") as Filter;
+  const setQuery = (patch: Record<string, string | null>) =>
+    setParams(
+      (p) => {
+        const next = new URLSearchParams(p);
+        for (const [k, v] of Object.entries(patch)) v ? next.set(k, v) : next.delete(k);
+        return next;
+      },
+      { replace: true },
+    );
+
+  const shelf = all.filter((i) => tabOf(i) === tab && i.status !== "archived" && !i.warmup);
+  const doneCount = shelf.filter(isMastered).length;
+  const items = shelf.filter((i) => (filter === "all" ? true : filter === "done" ? isMastered(i) : !isMastered(i)));
 
   return (
     <div className="space-y-3">
@@ -20,16 +44,38 @@ export function LibraryPage() {
         title="Библиотека"
         action={
           <Button asChild className="h-11">
-            <Link to="/library/new">
+            <Link to={`/library/new?type=${tab === "pieces" ? "song" : "technique"}`}>
               <Plus /> Добавить
             </Link>
           </Button>
         }
       />
+      <Segmented
+        value={tab}
+        onChange={(v) => setQuery({ tab: v === "pieces" ? v : null, show: null })}
+        options={[
+          { value: "exercises", label: "Упражнения" },
+          { value: "pieces", label: "Произведения" },
+        ]}
+      />
+      {shelf.length > 0 && (
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex gap-2">
+            {FILTERS.map((f) => (
+              <Chip key={f.value} active={filter === f.value} onClick={() => setQuery({ show: f.value === "all" ? null : f.value })}>
+                {f.label}
+              </Chip>
+            ))}
+          </div>
+          <span className="shrink-0 text-xs text-muted tabular-nums">
+            разобрано {doneCount} из {shelf.length}
+          </span>
+        </div>
+      )}
       {items.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-12 text-center text-sm text-muted">
           <Inbox className="size-10 opacity-50" />
-          Здесь пока пусто
+          {shelf.length ? "Ничего подходящего" : tab === "pieces" ? "Произведений пока нет" : "Упражнений пока нет"}
         </div>
       ) : (
         <div className="space-y-2">
@@ -38,6 +84,7 @@ export function LibraryPage() {
             const target = targetBpm(item);
             const sections = item.sections ?? [];
             const done = sections.filter((s) => s.status === "rotation").length;
+            const mastered = isMastered(item);
             return (
               <m.div key={item.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 10) * 0.03 }}>
                 <Link to={`/library/${item.id}`} className="block">
@@ -59,6 +106,7 @@ export function LibraryPage() {
                         <span className="text-muted">/{target}</span>
                       </div>
                     ) : null}
+                    {mastered ? <Check className="size-5 shrink-0 text-good" aria-label="Разобрано" /> : null}
                     <ChevronRight className="size-4 shrink-0 text-muted" />
                   </Card>
                 </Link>

@@ -4,15 +4,11 @@ import { FullscreenBoard } from "./FullscreenBoard";
 import { ChevronLeft, ChevronRight, Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 import { Button, Card, IconButton, Segmented } from "@/components/ui";
 import { playNote } from "@/audio/player";
-import { isGuideTone } from "@/music/chords";
 import { fretNotes, STRING_NAMES, type ChordHighlight, type FretNote, type Pattern } from "@/music/fretboard";
 import type { Tone } from "@/music/scales";
 import { useSettings, type LabelMode } from "@/store/settings";
 
-export const highlightOf = (tones: Tone[]): ChordHighlight => ({
-  tones,
-  guide: new Set(tones.filter(isGuideTone).map((t) => t.chroma)),
-});
+export { highlightOf } from "@/music/theoryView";
 
 interface Props {
   title: string;

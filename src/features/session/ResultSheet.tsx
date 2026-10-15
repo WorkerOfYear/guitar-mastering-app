@@ -5,7 +5,7 @@ import { Button, IconButton, Input, Toggle } from "@/components/ui";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { haptic } from "@/app/telegram";
 import { clampBpm } from "@/store/metronome";
-import { targetBpm, unitTitle } from "@/lib/progress";
+import { findSection, targetBpm, unitTitle } from "@/lib/progress";
 import { localDate } from "@/lib/date";
 import { useData } from "@/store/data";
 import type { PlanEntry, Result } from "@/shared/types";
@@ -48,7 +48,9 @@ export function ResultSheet({ open, entry, bpm: initialBpm, onClose }: Props) {
     logTempo({ itemId: entry.itemId, sectionId: entry.sectionId, date, bpm: useTempo ? bpm : null, result, note: note.trim() || undefined });
     markPlayed([entry], date);
     const target = targetBpm(item, entry.sectionId);
-    if (result === "clean" && useTempo && target && bpm >= target) setReached(true);
+    // Clean at the target tempo: offer the "learned" mark (unless it's already there). The user decides.
+    const learned = (entry.sectionId ? findSection(item, entry.sectionId)?.status : item?.status) === "rotation";
+    if (result === "clean" && useTempo && target && bpm >= target && !learned) setReached(true);
     else onClose(true);
   };
 
@@ -72,10 +74,13 @@ export function ResultSheet({ open, entry, bpm: initialBpm, onClose }: Props) {
               <Target className="size-8 shrink-0" />
               <p className="text-lg font-semibold">Цель достигнута: {bpm} bpm чисто!</p>
             </div>
-            <p className="text-sm text-muted">Перевести в ротацию? Тогда это будет попадать в блок «Повторение», а в «Разбор нового» придёт следующее.</p>
+            <p className="text-sm text-muted">
+              Похоже, {entry.sectionId ? "раздел разобран" : "разобрано"}. Отметить? Тогда это будет попадать в блок «Повторение», а в «Разбор нового» придёт
+              следующее.
+            </p>
             <div className="flex gap-2">
               <Button size="lg" onClick={toRotation} className="flex-1">
-                В ротацию
+                <Check /> Разобрано
               </Button>
               <Button size="lg" variant="secondary" onClick={() => onClose(true)} className="flex-1">
                 Ещё поработаю
