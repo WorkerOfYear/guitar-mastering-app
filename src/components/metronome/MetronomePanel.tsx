@@ -159,7 +159,8 @@ const PICKABLE = RHYTHMS.filter((r) => r.id !== "x6");
 
 const CIRCLE =
   "flex shrink-0 select-none items-center justify-center rounded-full border-2 border-line bg-surface-2 text-muted shadow-md outline-none [-webkit-tap-highlight-color:transparent] transition-transform active:scale-95 focus-visible:ring-2 focus-visible:ring-ring/60";
-const SERIF = "font-['Noto_Serif',Georgia,serif]";
+/** Display face of the metronome: tempo, time signature, ruler. */
+const DISPLAY = "font-display";
 
 /** Fetch the pattern icons ahead of time (the current beat unit first), so the picker opens fully drawn. */
 export function preloadRhythmImages(unit: 4 | 8) {
@@ -295,7 +296,7 @@ function TempoSlider() {
         </button>
       </div>
       {/* the ruler: same width and inset as the slider, so every mark sits under its own spot on the track */}
-      <div className="mx-[56px] mt-2 text-xs font-medium text-muted" aria-hidden>
+      <div className="mx-[56px] mt-2 font-display text-[10px] font-medium text-muted" aria-hidden>
         <div className="relative h-9">
           {TICKS.map((v) => (
             <span key={v} className={cn("absolute top-0 w-px -translate-x-1/2 bg-line", HINT_BPMS.includes(v) ? "h-3" : "h-1.5")} style={{ left: thumbLeft(v) }} />
@@ -343,13 +344,13 @@ function StartButton() {
         <span className="absolute inset-[4%] flex flex-col items-center justify-center rounded-full bg-surface-2">
           <span
             className={cn(
-              "-mt-6 bg-gradient-to-br bg-clip-text text-[60px] font-semibold leading-none tabular-nums text-transparent",
+              "-mt-6 bg-gradient-to-br bg-clip-text font-display text-[46px] font-semibold leading-none tabular-nums text-transparent",
               running ? "from-[var(--guide)] to-[var(--root)]" : "from-[var(--accent)] to-[var(--chord)]",
             )}
           >
             {bpm}
           </span>
-          <span className="absolute mt-[50px] text-sm text-muted">ударов в мин.</span>
+          <span className="absolute mt-[46px] font-display text-[11px] font-light text-muted">ударов в мин.</span>
           <img
             src={`${BASE}metronome/hint-space.png`}
             alt=""
@@ -411,7 +412,7 @@ function MeterSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
             ].map((row) => (
               <div key={row.l} className="flex items-center">
                 {step(row.min, row.dec, <Minus className="size-6" />, `${row.l}: меньше`)}
-                <div className={cn(SERIF, "w-24 text-center text-[88px] leading-[0.85] text-fg tabular-nums")}>{row.v}</div>
+                <div className={cn(DISPLAY, "w-32 text-center text-[64px] font-semibold leading-[0.9] text-fg tabular-nums")}>{row.v}</div>
                 {step(row.max, row.inc, <Plus className="size-6" />, `${row.l}: больше`)}
               </div>
             ))}
@@ -431,7 +432,7 @@ function MeterSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
                   key={`${pb}/${pu}`}
                   type="button"
                   onClick={() => apply(pb, pu)}
-                  className={cn(SERIF, "flex size-14 flex-col items-center justify-center rounded-full border text-lg font-bold leading-none outline-none", active ? "border-2 border-accent text-fg" : "border-line text-muted hover:opacity-80")}
+                  className={cn(DISPLAY, "flex size-14 flex-col items-center justify-center rounded-full border text-lg font-bold leading-none outline-none", active ? "border-2 border-accent text-fg" : "border-line text-muted hover:opacity-80")}
                 >
                   <span>{pb}</span>
                   <span className="-mt-0.5">{pu}</span>
@@ -492,7 +493,7 @@ export function MetronomePanel() {
         <div className="flex justify-center gap-10">
           <div className="flex flex-col items-center">
             <span className="mb-2.5 text-xs text-muted">Размер</span>
-            <button type="button" onClick={() => setSheet("meter")} aria-label={`Размер ${m.beats}/${m.beatUnit}`} className={cn(CIRCLE, SERIF, "size-[60px] flex-col text-lg font-bold leading-none")}>
+            <button type="button" onClick={() => setSheet("meter")} aria-label={`Размер ${m.beats}/${m.beatUnit}`} className={cn(CIRCLE, DISPLAY, "size-[60px] flex-col text-lg font-bold leading-none")}>
               <span>{m.beats}</span>
               <span className="-mt-0.5">{m.beatUnit}</span>
             </button>

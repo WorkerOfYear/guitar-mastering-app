@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "@fontsource-variable/inter";
+@import "@fontsource-variable/unbounded";
 
 /* Design tokens. Dark is the default (phone on a music stand); inside Telegram they follow its theme. */
 :root {
@@ -59,6 +60,7 @@
   --color-guide: var(--guide);
   --color-chord: var(--chord);
   --color-good: var(--good);
+  --font-display: "Unbounded Variable", "Inter Variable", system-ui, sans-serif;
   --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
   /* shadcn/ui names, so components added with `npx shadcn add` pick up the same theme.
