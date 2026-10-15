@@ -221,12 +221,31 @@ const THUMB = 36;
 /** Where the centre of the thumb sits for `bpm` — the thumb never leaves the track, so it is inset by half its width. */
 const thumbLeft = (bpm: number) => `calc(${THUMB / 2}px + (100% - ${THUMB}px) * ${(bpm - BPM_MIN) / (BPM_MAX - BPM_MIN)})`;
 
+/** Arrow keys that change the tempo — only shown where there is a keyboard. */
+function KeyHint() {
+  return (
+    <div className="mb-6 flex justify-center opacity-30 max-[600px]:hidden" aria-hidden>
+      {[-90, 180, 0, 90].map((deg) => (
+        <img
+          key={deg}
+          src={`${BASE}metronome/hint-arrow.png`}
+          alt=""
+          draggable={false}
+          className="mx-[5px] size-4 [:root[data-theme=light]_&]:invert"
+          style={{ transform: `rotate(${deg}deg)` }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function TempoSlider() {
   const bpm = useMetronome((s) => s.bpm);
   const up = useHoldRepeat(1);
   const down = useHoldRepeat(-1);
   return (
-    <div className="mt-10">
+    <div className="mt-6">
+      <KeyHint />
       <div className="flex items-center gap-4">
         <button type="button" aria-label="Темп −1" className={cn(CIRCLE, "size-10 touch-none")} {...down}>
           <Minus className="size-5" />
@@ -306,9 +325,12 @@ function StartButton() {
             {bpm}
           </motion.span>
           <span className="absolute mt-[50px] text-sm text-muted">ударов в мин.</span>
-          <span className="absolute mt-[105px] text-muted" aria-hidden>
-            {running ? <Square className="size-4" fill="currentColor" /> : <Play className="size-4" fill="currentColor" />}
-          </span>
+          <img
+            src={`${BASE}metronome/hint-space.png`}
+            alt=""
+            draggable={false}
+            className="absolute mt-[100px] h-[17px] w-[60px] opacity-70 max-[600px]:hidden [:root[data-theme=light]_&]:invert"
+          />
         </span>
       </motion.button>
       <button
@@ -476,7 +498,7 @@ export function MetronomePanel() {
         <StartButton />
 
         <TempoSlider />
-        <p className="mt-3 text-center text-xs text-muted">Пробел — старт/стоп · стрелки — темп · нажми на долю — акцент</p>
+        <p className="mt-4 text-center text-xs text-muted">Нажми на долю, чтобы выделить её акцентом</p>
       </section>
 
       <Card className="divide-y divide-line/60 py-1">
