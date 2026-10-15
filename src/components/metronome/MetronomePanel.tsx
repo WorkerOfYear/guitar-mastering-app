@@ -161,6 +161,13 @@ const CIRCLE =
   "flex shrink-0 select-none items-center justify-center rounded-full border-2 border-line bg-surface-2 text-muted shadow-md outline-none [-webkit-tap-highlight-color:transparent] transition-transform active:scale-95 focus-visible:ring-2 focus-visible:ring-ring/60";
 const SERIF = "font-['Noto_Serif',Georgia,serif]";
 
+/** Fetch the pattern icons ahead of time (the current beat unit first), so the picker opens fully drawn. */
+export function preloadRhythmImages(unit: 4 | 8) {
+  for (const u of [unit, unit === 4 ? 8 : 4] as const) {
+    for (const r of PICKABLE) new Image().src = rhythmImage(r, u);
+  }
+}
+
 function RhythmImage({ rhythm, unit, className }: { rhythm: Rhythm; unit: 4 | 8; className?: string }) {
   return <img src={rhythmImage(rhythm, unit)} alt="" draggable={false} className={cn("pointer-events-none object-contain [:root[data-theme=light]_&]:invert", className)} />;
 }
