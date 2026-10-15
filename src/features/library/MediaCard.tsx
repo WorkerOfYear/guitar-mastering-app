@@ -256,6 +256,7 @@ export function MediaCard({ item }: { item: Item }) {
     try {
       const { data, name } = await fetchScore(scoreLink, format, scoreServer);
       if (format === "mp3") return await setRecording(data, { name, size: data.byteLength });
+      if (format === "musicxml") return await setTab(data, name);
       const url = URL.createObjectURL(new Blob([data]));
       const a = Object.assign(document.createElement("a"), { href: url, download: name });
       document.body.append(a);
@@ -276,14 +277,17 @@ export function MediaCard({ item }: { item: Item }) {
     updateItem(item.id, { audioFile: undefined, audioSync: undefined, audioUnrepeat: undefined });
   };
 
-  const upload = async (f: File) => {
-    if (f.size > TAB_MAX) return toast.error("Файл больше 5 МБ — это точно табы?");
-    const data = await f.arrayBuffer();
+  const setTab = async (data: ArrayBuffer, name: string) => {
     await saveTabFile(item.id, data);
     setFile(data);
     setMissing((m) => ({ ...m, tab: false }));
     setScore(null);
-    updateItem(item.id, { tabFile: { name: f.name, size: f.size } });
+    updateItem(item.id, { tabFile: { name, size: data.byteLength } });
+  };
+
+  const upload = async (f: File) => {
+    if (f.size > TAB_MAX) return toast.error("Файл больше 5 МБ — это точно табы?");
+    await setTab(await f.arrayBuffer(), f.name);
   };
 
   const removeFile = async () => {
@@ -471,12 +475,12 @@ export function MediaCard({ item }: { item: Item }) {
         <MaterialRow
           icon={<FileMusic />}
           title="Ноты с MuseScore"
-          sub="PDF и MIDI — файлом, mp3 — как запись"
+          sub="XML — в табы, mp3 — как запись, PDF и MIDI — файлом"
           actions={
             <>
-              {(["pdf", "midi", "mp3"] as const).map((f) => (
+              {(["musicxml", "pdf", "midi", "mp3"] as const).map((f) => (
                 <Button key={f} variant="ghost" size="sm" disabled={!!scoreBusy} onClick={() => void grabScore(f)} className="px-2 text-xs uppercase">
-                  {scoreBusy === f ? <LoaderCircle className="size-4 animate-spin" /> : f}
+                  {scoreBusy === f ? <LoaderCircle className="size-4 animate-spin" /> : f === "musicxml" ? "xml" : f}
                 </Button>
               ))}
             </>

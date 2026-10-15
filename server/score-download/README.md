@@ -1,11 +1,14 @@
 # Ноты с MuseScore — свой сервер
 
-Сервис скачивает ноты с MuseScore по ссылке: PDF, MIDI или mp3. Приложение ходит к нему напрямую из браузера.
+Сервис скачивает ноты с MuseScore по ссылке: MusicXML, PDF, MIDI или mp3. Приложение ходит к нему напрямую из браузера.
 
-- `GET /score?url=<ссылка на ноты musescore.com>&type=pdf|midi|mp3` с заголовком `Authorization: Bearer <KEY>` → файл.
-- Принимает только ссылки `https://musescore.com/…` и три формата — сервер нельзя заставить качать произвольные адреса.
-- Без ключа отвечает 401. Скачивает по одному запросу за раз. MIDI и mp3 — секунд 10, PDF на 70 страниц — около 25.
-- MusicXML так не получить, поэтому табы в приложение не попадут: PDF и MIDI сохраняются файлом, mp3 становится записью песни.
+- `GET /score?url=<ссылка на ноты musescore.com>&type=musicxml|pdf|midi|mp3` с заголовком `Authorization: Bearer <KEY>` → файл.
+- Принимает только ссылки `https://musescore.com/…` и четыре формата — сервер нельзя заставить качать произвольные адреса.
+- Без ключа отвечает 401. Скачивает по одному запросу за раз. MIDI и mp3 — секунд 10, PDF на 70 страниц — около 25, MusicXML — 20–40.
+- MusicXML (`.mxl`) приложение сразу ставит табами песни, mp3 — записью, PDF и MIDI сохраняются файлом.
+- MusicXML отдаёт только кнопка «Download» на сайте, и только со входом в аккаунт MuseScore и только для бесплатных нот.
+  У платных («Buy this score») сервис ответит, что они платные. Аккаунт лучше завести отдельный: за автоматическое
+  скачивание его могут заблокировать.
 - Скачивание нот обходит ограничения MuseScore — пользуйся для себя и на свой риск.
 
 ## Как устроено
@@ -16,16 +19,23 @@ MuseScore закрыт проверкой Cloudflare. Браузер её про
 страницу нот и проходит проверку. Дальше — способ dl-librescore, но изнутри этой страницы: ключ API
 (`md5(id + тип + страница + суффикс из скрипта сайта)`), запрос `/api/jmuse` за ссылкой на файл, сам файл — с хранилища
 MuseScore, где проверки нет. PDF печатает тот же Chrome из картинок страниц.
+MusicXML — та же кнопка «Download → MusicXML», что на сайте: Chrome входит в аккаунт (`MS_EMAIL`, `MS_PASSWORD`),
+cookies входа лежат в `data/cookies.json`, так что логин нужен редко.
 
-Chrome занимает около 300 МБ, пока работает, и закрывается после 10 минут без запросов.
+Chrome занимает до 1 ГБ памяти, пока работает, и закрывается после 10 минут без запросов.
 Если MuseScore поменяет сайт, сервис может сломаться — ошибка будет в ответе и в `docker compose logs score`.
 
 ## Установка (один раз)
 
 ```bash
-mkdir -p /srv/score-download && cp server/score-download/{Dockerfile,compose.yaml,server.py} /srv/score-download/
+mkdir -p /srv/score-download/data && cp server/score-download/{Dockerfile,compose.yaml,server.py} /srv/score-download/
 cd /srv/score-download
+chown 1000:1000 data                       # пользователь внутри образа FlareSolverr
 echo "KEY=$(openssl rand -hex 24)" > .env
+# для MusicXML — аккаунт MuseScore:
+echo "MS_EMAIL=почта@example.com" >> .env
+echo "MS_PASSWORD=пароль" >> .env
+chmod 600 .env
 docker compose up -d --build
 curl http://127.0.0.1:8790/health          # → ok
 ```

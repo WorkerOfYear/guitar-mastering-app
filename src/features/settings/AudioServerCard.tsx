@@ -63,7 +63,7 @@ export function ScoreServerCard() {
   const { scoreServer, setScoreServer } = useSettings();
   return (
     <ServerCard
-      text="Свой сервер скачивает ноты с MuseScore (PDF, MIDI, звук) по ссылке, прикреплённой к песне. Настраивается один раз на каждом устройстве."
+      text="Свой сервер скачивает ноты с MuseScore по ссылке, прикреплённой к песне: MusicXML (сразу в табы, только бесплатные ноты), PDF, MIDI, звук. Настраивается один раз на каждом устройстве."
       server={scoreServer}
       onChange={setScoreServer}
       checkIt={checkScoreServer}

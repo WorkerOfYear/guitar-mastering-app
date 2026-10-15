@@ -1,4 +1,4 @@
-# The service listens on 127.0.0.1:8790 only; HTTPS comes from outside (Tailscale Funnel, your own reverse proxy…). See README.md.
+# The service listens on 127.0.0.1:8790 only; HTTPS comes from outside (Cloudflare tunnel, your own reverse proxy…). See README.md.
 #   docker compose up -d --build
 services:
   score:
@@ -6,4 +6,10 @@ services:
     restart: unless-stopped
     environment:
       KEY: ${KEY:?задай KEY в .env}
+      # A MuseScore account for MusicXML (free scores only); without it pdf, midi and mp3 still work.
+      MS_EMAIL: ${MS_EMAIL:-}
+      MS_PASSWORD: ${MS_PASSWORD:-}
+    volumes:
+      # The account's cookies, so it doesn't log in on every download. Owned by the image's user (uid 1000).
+      - ./data:/data
     ports: ["127.0.0.1:${PORT:-8790}:8080"]

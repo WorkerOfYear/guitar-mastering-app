@@ -1,6 +1,6 @@
 """
-MuseScore downloads for the guitar app: GET /score?url=<musescore.com link>&type=pdf|midi|mp3 with
-"Authorization: Bearer <KEY>" returns the file. Only musescore.com score links and three formats are
+MuseScore downloads for the guitar app: GET /score?url=<musescore.com link>&type=pdf|midi|mp3|musicxml with
+"Authorization: Bearer <KEY>" returns the file. Only musescore.com score links and four formats are
 accepted, so the server can't be used to fetch arbitrary URLs. Personal use: one key, one download at a time.
 
 MuseScore sits behind Cloudflare, which lets a real browser in but not curl or Node (dl-librescore gets 403
@@ -8,6 +8,8 @@ even from a home connection). So the score page is opened in FlareSolverr's Chro
 and the rest is dl-librescore's method run inside that page: the API key is md5(id + type + page + a suffix
 from the site's script), /api/jmuse answers with a link to the file on MuseScore's storage, which has no check.
 PDF: every page's image, printed by the same Chrome.
+MusicXML isn't in that API: it's the site's own Download button, which needs an account (MS_EMAIL, MS_PASSWORD)
+and works for free scores only. The session's cookies are kept in /data, so the account logs in rarely.
 """
 
 import base64
@@ -15,7 +17,9 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -28,15 +32,19 @@ sys.path.insert(0, "/app")
 import utils  # FlareSolverr: get_webdriver() starts Chrome so that Cloudflare lets it in
 from flaresolverr_service import click_verify
 from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.by import By
 
 KEY = os.environ.get("KEY", "")
 PORT = int(os.environ.get("PORT", "8080"))
 MAX_PAGES = int(os.environ.get("MAX_PAGES", "150"))
-IDLE_SECONDS = 600  # the browser takes ~300 MB, so it closes when nobody downloads
+IDLE_SECONDS = 600  # the browser takes up to 1 GB, so it closes when nobody downloads
 SCORE_URL = re.compile(r"^https://(?:(?:s|www)\.)?musescore\.com/\S+$")
 FILE_HOSTS = re.compile(r"^https://([a-z0-9-]+\.)*(musescore\.com|ustatik\.com)/")
-TYPES = {"pdf": "application/pdf", "midi": "audio/midi", "mp3": "audio/mpeg"}
-EXT = {"pdf": "pdf", "midi": "mid", "mp3": "mp3"}
+TYPES = {"pdf": "application/pdf", "midi": "audio/midi", "mp3": "audio/mpeg", "musicxml": "application/vnd.recordare.musicxml"}
+EXT = {"pdf": "pdf", "midi": "mid", "mp3": "mp3", "musicxml": "mxl"}
+MS_EMAIL = os.environ.get("MS_EMAIL", "")
+MS_PASSWORD = os.environ.get("MS_PASSWORD", "")
+COOKIES = "/data/cookies.json"
 
 browser_lock = threading.Lock()
 driver = None
@@ -51,7 +59,24 @@ def get_driver():
     global driver
     if driver is None:
         driver = utils.get_webdriver()
+        driver.set_page_load_timeout(20)
     return driver
+
+
+def go(d, url):
+    """Opens a musescore.com page, waiting out Cloudflare's check (clicking its checkbox if it shows one)."""
+    # The page's ads can keep it "loading" for minutes; what's needed here comes with the HTML.
+    try:
+        d.get(url)
+    except TimeoutException:
+        pass
+    for i in range(60):
+        if d.title != "Just a moment...":
+            return
+        if i % 8 == 7:
+            click_verify(d)
+        time.sleep(1)
+    raise Failure("MuseScore не открылся: проверка Cloudflare не пройдена")
 
 
 def close_driver():
@@ -75,14 +100,9 @@ def close_when_idle():
 
 
 def open_score(d, url):
-    """Opens the score page, waiting out Cloudflare's check (clicking its checkbox if it shows one)."""
-    # The page's ads can keep it "loading" for minutes; the meta tags needed here come with the HTML.
-    d.set_page_load_timeout(20)
-    try:
-        d.get(url)
-    except TimeoutException:
-        pass
-    for i in range(90):
+    """Opens the score page; its id and title."""
+    go(d, url)
+    for _ in range(30):
         info = d.execute_script("""
             const m = (p) => document.querySelector(`meta[property='${p}']`)?.content ?? '';
             const id = (m('al:ios:url').match(/(\\d+)$/) || [])[1];
@@ -90,10 +110,8 @@ def open_score(d, url):
         """)
         if info:
             return info
-        if i % 8 == 7 and d.title == "Just a moment...":
-            click_verify(d)
         time.sleep(1)
-    raise Failure("MuseScore не открылся: проверка Cloudflare не пройдена" if d.title == "Just a moment..." else "Это не страница нот MuseScore")
+    raise Failure("Это не страница нот MuseScore")
 
 
 def api_suffix(d):
@@ -197,6 +215,107 @@ def make_pdf(d, pages):
     return base64.b64decode(r["data"])
 
 
+def file_name(info):
+    return re.sub(r'[\\/:*?"<>|]+', "", info["title"]).strip() or f"score-{info['id']}"
+
+
+def logged_in(d):
+    """The header has "Profile menu for <user>" when signed in, a "Log in" button when not; waits for either."""
+    for _ in range(15):
+        state = d.execute_script("""
+            const buttons = [...document.querySelectorAll('header button')];
+            if (buttons.some((b) => (b.getAttribute('aria-label') || '').startsWith('Profile menu'))) return 'in';
+            if (buttons.some((b) => b.innerText.trim() === 'Log in')) return 'out';
+            return null;
+        """)
+        if state:
+            return state == "in"
+        time.sleep(1)
+    return False
+
+
+def log_in(d):
+    """Makes the browser signed in to the account: saved cookies first, the login form when they don't work."""
+    if not MS_EMAIL or not MS_PASSWORD:
+        raise Failure("Для MusicXML серверу нужен аккаунт MuseScore (MS_EMAIL и MS_PASSWORD в .env)")
+    go(d, "https://musescore.com/")
+    if logged_in(d):
+        return
+    try:
+        with open(COOKIES) as f:
+            for c in json.load(f):
+                c.pop("sameSite", None)
+                try:
+                    d.add_cookie(c)
+                except Exception:
+                    pass
+        go(d, "https://musescore.com/")
+        if logged_in(d):
+            return
+    except (OSError, ValueError):
+        pass
+    go(d, "https://musescore.com/user/login")
+    d.find_element(By.ID, "username").send_keys(MS_EMAIL)
+    d.find_element(By.ID, "password").send_keys(MS_PASSWORD)
+    d.find_element(By.XPATH, "//button[@type='submit' and normalize-space()='Log in']").click()
+    for _ in range(20):
+        time.sleep(1)
+        if "/user/login" not in d.current_url:
+            break
+    go(d, "https://musescore.com/")
+    if not logged_in(d):
+        raise Failure("Не получилось войти в аккаунт MuseScore — проверь логин и пароль в .env")
+    print("logged in to MuseScore", flush=True)
+    try:
+        with open(COOKIES, "w") as f:
+            json.dump(d.get_cookies(), f)
+        os.chmod(COOKIES, 0o600)
+    except OSError as e:
+        print(f"cookies not saved: {e}", flush=True)
+
+
+def click_text(d, selector, text):
+    for el in d.find_elements(By.CSS_SELECTOR, selector):
+        if el.is_displayed() and el.text.strip().split("\n")[0].strip() == text:
+            el.click()
+            return True
+    return False
+
+
+def download_musicxml(d, url):
+    """The site's Download → MusicXML, signed in; the file the browser saves."""
+    log_in(d)
+    info = open_score(d, url)
+    folder = tempfile.mkdtemp()
+    try:
+        d.execute_cdp_cmd("Browser.setDownloadBehavior", {"behavior": "allow", "downloadPath": folder})
+        for _ in range(10):
+            if click_text(d, "button", "Download"):
+                break
+            time.sleep(1)
+        else:
+            raise Failure("На странице нот нет кнопки Download")
+        for _ in range(10):
+            time.sleep(1)
+            if click_text(d, "[role=dialog] button", "MusicXML"):
+                break
+            if d.execute_script("return /Buy this score|Unlock this score/.test(document.querySelector('[role=dialog]')?.innerText ?? '')"):
+                raise Failure("Эти ноты на MuseScore платные — MusicXML без покупки не скачать")
+        else:
+            raise Failure("MuseScore не предложил MusicXML")
+        for _ in range(30):
+            time.sleep(1)
+            if d.execute_script("return /Buy this score|Unlock this score/.test(document.querySelector('[role=dialog]')?.innerText ?? '')"):
+                raise Failure("Эти ноты на MuseScore платные — MusicXML без покупки не скачать")
+            files = [f for f in os.listdir(folder) if not f.endswith(".crdownload")]
+            if files:
+                with open(os.path.join(folder, files[0]), "rb") as f:
+                    return f.read(), info
+        raise Failure("MuseScore не отдал MusicXML")
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
 def fetch_score(url, kind):
     """(file bytes, file name) of the score in one format."""
     global last_used
@@ -204,10 +323,13 @@ def fetch_score(url, kind):
         last_used = time.time()
         try:
             d = get_driver()
+            if kind == "musicxml":
+                data, info = download_musicxml(d, url)
+                return data, f"{file_name(info)}.mxl"
             info = open_score(d, url)
             suffix = api_suffix(d)
             ua = d.execute_script("return navigator.userAgent")
-            name = re.sub(r'[\\/:*?"<>|]+', "", info["title"]).strip() or f"score-{info['id']}"
+            name = file_name(info)
             if kind != "pdf":
                 link = file_links(d, info["id"], kind, [0], suffix)[0]
                 if not link:
@@ -273,7 +395,7 @@ class Handler(BaseHTTPRequestHandler):
         kind = q.get("type", [""])[0]
         link = q.get("url", [""])[0]
         if kind not in TYPES:
-            return self.fail(400, "Формат: pdf, midi или mp3")
+            return self.fail(400, "Формат: pdf, midi, mp3 или musicxml")
         if not SCORE_URL.match(link):
             return self.fail(400, "Нужна ссылка на ноты с musescore.com")
         try:

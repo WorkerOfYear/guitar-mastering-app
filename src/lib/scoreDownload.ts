@@ -2,7 +2,9 @@
 // MuseScore sits behind a Cloudflare check that cloud hosting can't pass, so the app can't do it itself.
 import type { AudioServer } from "./youtubeAudio";
 
-export type ScoreFormat = "pdf" | "midi" | "mp3";
+/** MusicXML needs a MuseScore account on the server and works for free scores only. */
+export type ScoreFormat = "pdf" | "midi" | "mp3" | "musicxml";
+const EXT: Record<ScoreFormat, string> = { pdf: "pdf", midi: "mid", mp3: "mp3", musicxml: "mxl" };
 
 /** A link to a score on musescore.com, or null. */
 export const museScoreLink = (links: string[]) => links.find((l) => /^https:\/\/(?:(?:s|www)\.)?musescore\.com\/\S+$/.test(l)) ?? null;
@@ -30,7 +32,7 @@ export async function fetchScore(link: string, format: ScoreFormat, server: Audi
     throw new Error("Сервер не отвечает — проверь адрес в настройках");
   }
   if (!r.ok) throw new Error(await failure(r));
-  const name = decodeURIComponent(r.headers.get("X-Name") ?? "") || `score.${format === "midi" ? "mid" : format}`;
+  const name = decodeURIComponent(r.headers.get("X-Name") ?? "") || `score.${EXT[format]}`;
   return { data: await r.arrayBuffer(), name };
 }
 
