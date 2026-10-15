@@ -1,7 +1,9 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { m as motion } from "motion/react";
-import { Check, Hand, Minus, Play, Plus, Square, Volume2 } from "lucide-react";
-import { Button, Card, Chip, IconButton, ScrollRow, Segmented, Slider, Toggle, NumberField } from "@/components/ui";
+import { Slider as SliderPrimitive } from "radix-ui";
+import { Check, ChevronsDown, ChevronsUp, Minus, Play, Plus, Square, Volume2 } from "lucide-react";
+import { Card, IconButton, Slider, Toggle, NumberField } from "@/components/ui";
+import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { haptic } from "@/app/telegram";
 import { previewClick, tapTempo, toggleMetronome } from "@/audio/metronome";
 import { CLICKS } from "@/audio/clicks";
@@ -21,45 +23,24 @@ import type { Subdivision } from "@/shared/types";
 
 export { NumberField } from "@/components/ui";
 
-function BeatDots({ size = "md", interactive }: { size?: "sm" | "md"; interactive?: boolean }) {
+const SUBDIVISIONS: Subdivision[] = [1, 2, 3, 4, 6];
+const SUB_SHORT: Record<Subdivision, string> = { 1: "♩", 2: "♫", 3: "3", 4: "16", 6: "6" };
+
+function BeatDots() {
   const { beats, beat, accents } = useMetronome();
-  const toggleAccent = (n: number) => {
-    haptic();
-    const { accents: cur, set } = useMetronome.getState();
-    set({ accents: (cur.includes(n) ? cur.filter((a) => a !== n) : [...cur, n]).sort((x, y) => x - y) });
-  };
   return (
-    <div className={cn("flex flex-wrap justify-center", size === "sm" ? "gap-2" : "gap-3")} aria-hidden={!interactive}>
+    <div className="flex flex-wrap justify-center gap-2" aria-hidden>
       {Array.from({ length: beats }, (_, i) => {
         const on = beat === i;
-        const accented = accents.includes(i + 1);
-        const color = accented ? "var(--root)" : "var(--chord)";
-        const dot = (
+        const color = accents.includes(i + 1) ? "var(--root)" : "var(--chord)";
+        return (
           <motion.span
-            className={cn("block rounded-full", size === "sm" ? "size-3" : "size-5", accented && !on && "ring-2 ring-offset-2 ring-offset-surface")}
+            key={i}
+            className="size-3 rounded-full"
             animate={{ scale: on ? 1.35 : 1 }}
             transition={{ type: "spring", stiffness: 700, damping: 22 }}
-            style={{
-              background: on ? color : "var(--surface-2)",
-              boxShadow: on ? `0 0 12px ${color}` : undefined,
-              // the ring takes the accent colour; without an accent there is none
-              ["--tw-ring-color" as string]: accented ? "var(--root)" : undefined,
-            }}
+            style={{ background: on ? color : "var(--surface-2)", boxShadow: on ? `0 0 12px ${color}` : undefined }}
           />
-        );
-        return interactive ? (
-          <button
-            key={i}
-            type="button"
-            onClick={() => toggleAccent(i + 1)}
-            aria-pressed={accented}
-            aria-label={`Доля ${i + 1}: акцент ${accented ? "включён" : "выключен"}`}
-            className="flex size-9 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-          >
-            {dot}
-          </button>
-        ) : (
-          <span key={i}>{dot}</span>
         );
       })}
     </div>
@@ -107,9 +88,6 @@ function BpmNumber({ bpm, className }: { bpm: number; className?: string }) {
   );
 }
 
-const SUBDIVISIONS: Subdivision[] = [1, 2, 3, 4, 6];
-const SUB_SHORT: Record<Subdivision, string> = { 1: "♩", 2: "♫", 3: "3", 4: "16", 6: "6" };
-
 const nudge = (d: number) => {
   const { bpm, set } = useMetronome.getState();
   set({ bpm: clampBpm(bpm + d) });
@@ -145,15 +123,6 @@ function useHoldRepeat(delta: number) {
   };
 }
 
-function HoldButton({ delta, children }: { delta: number; children: ReactNode }) {
-  const hold = useHoldRepeat(delta);
-  return (
-    <Button variant="secondary" size="icon" aria-label={delta > 0 ? `+${delta}` : `−${-delta}`} className="min-w-11 w-auto px-3 select-none touch-none" {...hold}>
-      {children}
-    </Button>
-  );
-}
-
 /** Space — start/stop, arrows — tempo ±1 (Shift: ±5). Use on the metronome page. */
 export function useMetronomeKeys() {
   useEffect(() => {
@@ -182,133 +151,311 @@ export function useMetronomeKeys() {
   }, []);
 }
 
-/** The beats of a rhythm as a strip: tall bar — sounds, short — rest. */
-function RhythmGlyph({ rhythm }: { rhythm: Rhythm }) {
+// ---------- the metronome screen, laid out like metronom.us
+
+const BASE = import.meta.env.BASE_URL;
+const rhythmImage = (r: Rhythm, unit: 4 | 8) => `${BASE}metronome/r${unit}-${r.id}.png`;
+/** Patterns shown on the site; the sextuplet is only used by the practice plan. */
+const PICKABLE = RHYTHMS.filter((r) => r.id !== "x6");
+
+const CIRCLE =
+  "flex shrink-0 select-none items-center justify-center rounded-full border-2 border-[#555657] bg-[#202020] text-[#8f8f8f] shadow-[0_0_10px_#0000004d] outline-none [-webkit-tap-highlight-color:transparent] transition-transform active:scale-95 focus-visible:ring-2 focus-visible:ring-[#75b2c9]";
+const SERIF = "font-['Noto_Serif',Georgia,serif]";
+
+function RhythmImage({ rhythm, unit, className }: { rhythm: Rhythm; unit: 4 | 8; className?: string }) {
+  return <img src={rhythmImage(rhythm, unit)} alt="" draggable={false} className={cn("pointer-events-none object-contain", className)} />;
+}
+
+function Beats() {
+  const { beats, beat, accents, running } = useMetronome();
+  const toggle = (n: number) => {
+    haptic();
+    const cur = useMetronome.getState().accents;
+    useMetronome.setState({ accents: (cur.includes(n) ? cur.filter((a) => a !== n) : [...cur, n]).sort((x, y) => x - y) });
+  };
   return (
-    <span className="flex h-6 items-end gap-0.5" aria-hidden>
-      {Array.from({ length: rhythm.grid }, (_, i) => (
-        <span key={i} className={cn("w-1.5 rounded-sm bg-current", rhythm.play.includes(i + 1) ? "h-6" : "h-1.5 opacity-30")} />
-      ))}
-    </span>
+    <div className="flex min-h-14 flex-wrap items-start justify-center gap-x-5 gap-y-1">
+      {Array.from({ length: beats }, (_, i) => {
+        const accented = accents.includes(i + 1);
+        const on = running && beat === i;
+        return (
+          <button
+            key={i}
+            type="button"
+            onClick={() => toggle(i + 1)}
+            aria-pressed={accented}
+            aria-label={`Доля ${i + 1}${accented ? ", акцент" : ""}`}
+            className="flex w-8 flex-col items-center gap-0.5 pt-1 outline-none [-webkit-tap-highlight-color:transparent] focus-visible:ring-2 focus-visible:ring-[#75b2c9]"
+          >
+            <span
+              className="block size-5 rounded-full border bg-[#202020] transition-colors duration-75"
+              style={{ borderColor: on ? (accented ? "#f90" : "#75b2c9") : "#404040" }}
+            />
+            <span className={cn("text-sm font-bold leading-none text-[#555]", !accented && "invisible")}>↑</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
-function Label({ children }: { children: ReactNode }) {
-  return <div className="px-1 pb-2 text-xs font-semibold uppercase tracking-wider text-muted">{children}</div>;
+const HINT_BPMS = [20, 60, 100, 140, 180, 220, 260, 300];
+
+function TempoSlider() {
+  const bpm = useMetronome((s) => s.bpm);
+  const up = useHoldRepeat(1);
+  const down = useHoldRepeat(-1);
+  return (
+    <div className="flex items-center justify-between">
+      <button type="button" aria-label="Темп −1" className={cn(CIRCLE, "size-9 text-[#aaabbc] touch-none")} {...down}>
+        <ChevronsDown className="size-5" />
+      </button>
+      <div className="mx-5 grow">
+        <SliderPrimitive.Root
+          min={BPM_MIN}
+          max={BPM_MAX}
+          step={1}
+          value={[bpm]}
+          onValueChange={([v]) => useMetronome.setState({ bpm: v })}
+          aria-label="Темп"
+          className="relative flex h-9 w-full touch-none select-none items-center"
+        >
+          <SliderPrimitive.Track className="relative h-[5px] grow rounded-[3px] bg-[#101010]">
+            <SliderPrimitive.Range className="absolute h-full rounded-[3px] bg-gradient-to-b from-[#555657] to-[#767780]" />
+          </SliderPrimitive.Track>
+          <SliderPrimitive.Thumb className="block size-9 rounded-full border-[5px] border-[#75b2c9] bg-[#202020] shadow-[0_0_2px_#0006] outline-none focus-visible:ring-2 focus-visible:ring-[#75b2c9]/50" />
+        </SliderPrimitive.Root>
+        <div className="relative mt-1 h-4 text-xs font-medium text-[#565656]" aria-hidden>
+          {HINT_BPMS.map((v) => (
+            <button
+              key={v}
+              type="button"
+              tabIndex={-1}
+              onClick={() => useMetronome.setState({ bpm: v })}
+              className={cn("absolute -translate-x-1/2", v % 120 !== 20 && v % 120 !== 60 && "max-[450px]:hidden")}
+              style={{ left: `${((v - BPM_MIN) / (BPM_MAX - BPM_MIN)) * 100}%` }}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+      </div>
+      <button type="button" aria-label="Темп +1" className={cn(CIRCLE, "size-9 text-[#aaabbc] touch-none")} {...up}>
+        <ChevronsUp className="size-5" />
+      </button>
+    </div>
+  );
+}
+
+/** The big round start button: the tempo sits inside, the ring spins. */
+function StartButton() {
+  const { bpm, running, beat } = useMetronome();
+  return (
+    <div className="relative mx-auto my-6 size-[180px] max-[360px]:size-[150px]">
+      <motion.button
+        type="button"
+        whileTap={{ scale: 0.97 }}
+        onClick={() => {
+          haptic();
+          toggleMetronome();
+        }}
+        aria-label={running ? "Остановить метроном" : "Запустить метроном"}
+        className="absolute inset-0 select-none rounded-full shadow-[0_0_30px_#0006] outline-none [-webkit-tap-highlight-color:transparent] focus-visible:ring-2 focus-visible:ring-[#75b2c9]"
+      >
+        <span className="absolute inset-0 animate-[spin_1.5s_linear_infinite] rounded-full bg-gradient-to-br from-[#dc143c] to-[#f90]" />
+        <span
+          className={cn(
+            "absolute inset-0 animate-[spin_3s_linear_infinite] rounded-full bg-gradient-to-br from-[#828fc2] to-[#4ce5a0] transition-opacity duration-500",
+            running && "opacity-0",
+          )}
+        />
+        <span className="absolute inset-[4%] flex flex-col items-center justify-center rounded-full bg-[#202020]">
+          <motion.span
+            key={running ? beat : "idle"}
+            initial={{ scale: running ? 1.08 : 1 }}
+            animate={{ scale: 1 }}
+            transition={{ duration: 0.08 }}
+            className={cn(
+              "-mt-6 bg-gradient-to-br bg-clip-text text-[60px] font-semibold leading-none tabular-nums text-transparent",
+              running ? "from-[#dc143c] to-[#f90]" : "from-[#828fc2] to-[#4ce5a0]",
+            )}
+          >
+            {bpm}
+          </motion.span>
+          <span className="absolute mt-[50px] text-sm text-[#565656]">ударов в мин.</span>
+          <span className="absolute mt-[105px] text-[#565656]" aria-hidden>
+            {running ? <Square className="size-4" fill="currentColor" /> : <Play className="size-4" fill="currentColor" />}
+          </span>
+        </span>
+      </motion.button>
+      <button
+        type="button"
+        aria-label="Tap — отстучи темп"
+        onClick={() => {
+          haptic();
+          tapTempo();
+        }}
+        className="absolute left-[154px] top-[154px] flex size-[52px] select-none items-center justify-center rounded-full border border-[#404040] bg-[#323433] text-[11px] font-semibold text-[#aaa] shadow-[0_0_10px_#000000b3] outline-none active:translate-x-px active:translate-y-px max-[360px]:left-[124px] max-[360px]:top-[124px]"
+      >
+        TAP
+      </button>
+    </div>
+  );
+}
+
+function SheetTitle({ children }: { children: ReactNode }) {
+  return (
+    <>
+      <DrawerTitle className="text-center text-base font-normal text-[#ccc]">{children}</DrawerTitle>
+      <DrawerDescription className="sr-only">Выбор параметров метронома</DrawerDescription>
+    </>
+  );
+}
+
+const SHEET = "border-[#2d2e30] bg-[#1a1b1d] pb-0 text-[#ccc]";
+
+/** Time signature: numerals on a staff with − / +, and the usual ones underneath. */
+function MeterSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { beats, beatUnit, set } = useMetronome();
+  const [b, setB] = useState(beats);
+  const [u, setU] = useState<4 | 8>(beatUnit);
+  useEffect(() => {
+    if (open) {
+      setB(beats);
+      setU(beatUnit);
+    }
+  }, [open, beats, beatUnit]);
+  const apply = (nb: number, nu: 4 | 8) => {
+    haptic();
+    set({ beats: nb, beatUnit: nu, accents: defaultAccents(nb, nu) });
+    onClose();
+  };
+  const step = (disabled: boolean, onClick: () => void, icon: ReactNode, label: string) => (
+    <button type="button" aria-label={label} disabled={disabled} onClick={onClick} className="flex size-10 items-center justify-center rounded-full text-white opacity-70 outline-none disabled:opacity-20 active:scale-95">
+      {icon}
+    </button>
+  );
+  return (
+    <Drawer open={open} onOpenChange={(o) => !o && onClose()}>
+      <DrawerContent className={SHEET}>
+        <SheetTitle>Музыкальный размер</SheetTitle>
+        <div className="relative my-4 flex h-52 items-center justify-center">
+          <div className="absolute inset-x-0 top-6 h-40" aria-hidden>
+            {[0, 25, 50, 75, 100].map((t) => (
+              <div key={t} className="absolute h-0.5 w-full bg-white/5" style={{ top: `calc(${t}% - 1px)` }} />
+            ))}
+          </div>
+          <div className="relative flex flex-col items-center gap-0">
+            {[
+              { v: b, dec: () => setB(b - 1), inc: () => setB(b + 1), min: b <= BEATS_MIN, max: b >= BEATS_MAX, l: "Долей" },
+              { v: u, dec: () => setU(4), inc: () => setU(8), min: u === 4, max: u === 8, l: "Длительность доли" },
+            ].map((row) => (
+              <div key={row.l} className="flex items-center">
+                {step(row.min, row.dec, <Minus className="size-6" />, `${row.l}: меньше`)}
+                <div className={cn(SERIF, "w-24 text-center text-[88px] leading-[0.85] text-white tabular-nums")}>{row.v}</div>
+                {step(row.max, row.inc, <Plus className="size-6" />, `${row.l}: больше`)}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="flex justify-center pb-4">
+          <button type="button" onClick={() => apply(b, u)} className="rounded-[10px] bg-gradient-to-br from-[#828fc2] to-[#4ce5a0] p-0.5 outline-none">
+            <span className="block rounded-[10px] bg-[#202020] px-8 pb-2 pt-1.5 text-white">Ok</span>
+          </button>
+        </div>
+        <div className="-mx-4 border-t border-[#1c1c1c] bg-[#151719] px-6 pb-[max(env(safe-area-inset-bottom),1rem)] pt-6">
+          <div className="flex flex-wrap justify-center gap-3">
+            {SIGNATURE_PRESETS.map(([pb, pu]) => {
+              const active = pb === beats && pu === beatUnit;
+              return (
+                <button
+                  key={`${pb}/${pu}`}
+                  type="button"
+                  onClick={() => apply(pb, pu)}
+                  className={cn(SERIF, "flex size-14 flex-col items-center justify-center rounded-full border text-lg font-bold leading-none outline-none", active ? "border-2 border-[#f90] text-white" : "border-[#444] text-[#666] hover:opacity-80")}
+                >
+                  <span>{pb}</span>
+                  <span className="-mt-0.5">{pu}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </DrawerContent>
+    </Drawer>
+  );
+}
+
+/** Rhythm patterns: a grid of round buttons with notation. */
+function RhythmSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { rhythm, beatUnit, set } = useMetronome();
+  return (
+    <Drawer open={open} onOpenChange={(o) => !o && onClose()}>
+      <DrawerContent className={SHEET}>
+        <SheetTitle>Ритмический рисунок</SheetTitle>
+        <div className="flex flex-wrap justify-center gap-x-2 gap-y-1 overflow-y-auto pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-2" role="radiogroup" aria-label="Ритмический рисунок">
+          {PICKABLE.map((r) => {
+            const active = r.id === rhythm;
+            return (
+              <button
+                key={r.id}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                aria-label={r.name}
+                title={r.name}
+                onClick={() => {
+                  haptic();
+                  set({ rhythm: r.id });
+                  onClose();
+                }}
+                className={cn(CIRCLE, "m-2 size-[70px] min-[450px]:size-20", active && "border-[#f90] text-[#f90]")}
+              >
+                <RhythmImage rhythm={r} unit={beatUnit} className={cn("size-full p-3.5", active ? "opacity-100" : "opacity-70")} />
+              </button>
+            );
+          })}
+        </div>
+      </DrawerContent>
+    </Drawer>
+  );
 }
 
 /** Full metronome: tempo, tap, meter, accents, rhythm pattern, speed trainer. */
 export function MetronomePanel() {
   const m = useMetronome();
   const rhythm = rhythmById(m.rhythm);
-  const setMeter = (beats: number, beatUnit: 4 | 8) => m.set({ beats, beatUnit, accents: defaultAccents(beats, beatUnit) });
+  const [sheet, setSheet] = useState<"meter" | "rhythm" | null>(null);
+  const picked = PICKABLE.includes(rhythm);
+  const bgStyle: CSSProperties = { backgroundImage: `url(${BASE}metronome/linen.png)` };
   return (
     <div className="space-y-4">
-      <Card className="space-y-5 py-6">
-        <div className="text-center">
-          <BpmNumber bpm={m.bpm} className="text-8xl" />
-          <div className="mt-2 text-sm text-muted">
-            ударов в минуту · {m.beats}/{m.beatUnit}
+      <section className="select-none overflow-hidden rounded-3xl bg-[#282a2f] px-5 pb-6 pt-6" style={bgStyle}>
+        <div className="flex justify-center gap-10">
+          <div className="flex flex-col items-center">
+            <span className="mb-2.5 text-xs text-[#565656]">Размер</span>
+            <button type="button" onClick={() => setSheet("meter")} aria-label={`Размер ${m.beats}/${m.beatUnit}`} className={cn(CIRCLE, SERIF, "size-[60px] flex-col text-lg font-bold leading-none")}>
+              <span>{m.beats}</span>
+              <span className="-mt-0.5">{m.beatUnit}</span>
+            </button>
+          </div>
+          <div className="flex flex-col items-center">
+            <span className="mb-2.5 text-xs text-[#565656]">Рисунок</span>
+            <button type="button" onClick={() => setSheet("rhythm")} aria-label={`Рисунок: ${rhythm.name}`} className={cn(CIRCLE, "size-[60px]")}>
+              {picked ? <RhythmImage rhythm={rhythm} unit={m.beatUnit} className="size-full p-3 opacity-50" /> : <span className="text-sm">{SUB_SHORT[6]}</span>}
+            </button>
           </div>
         </div>
-        <BeatDots interactive />
-        <p className="-mt-2 text-center text-xs text-muted">Нажми на долю, чтобы выделить её акцентом</p>
-        <div className="flex items-center justify-center gap-2">
-          <IconButton label="−5" onClick={() => nudge(-5)}>
-            −5
-          </IconButton>
-          <HoldButton delta={-1}>
-            <Minus />
-          </HoldButton>
-          <PlayButton big />
-          <HoldButton delta={1}>
-            <Plus />
-          </HoldButton>
-          <IconButton label="+5" onClick={() => nudge(5)}>
-            +5
-          </IconButton>
+
+        <div className="mt-6">
+          <Beats />
         </div>
-        <Slider min={BPM_MIN} max={BPM_MAX} value={[m.bpm]} onValueChange={([bpm]) => m.set({ bpm })} aria-label="Темп" />
-        <motion.button
-          type="button"
-          whileTap={{ scale: 0.97 }}
-          onClick={() => {
-            haptic();
-            tapTempo();
-          }}
-          className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-line bg-surface-2/50 text-base font-semibold"
-        >
-          <Hand className="size-5 text-muted" />
-          Tap — отстучи темп
-        </motion.button>
-        <p className="text-center text-xs text-muted">Пробел — старт/стоп · стрелки — темп ±1 (Shift — ±5)</p>
-      </Card>
 
-      <div>
-        <Label>Размер</Label>
-        <Card className="space-y-3 p-3">
-          <div className="flex items-center gap-3">
-            <div className="w-20 text-center text-3xl font-bold tabular-nums">
-              {m.beats}/{m.beatUnit}
-            </div>
-            <IconButton label="Меньше долей" disabled={m.beats <= BEATS_MIN} onClick={() => m.set({ beats: m.beats - 1, accents: m.accents.filter((a) => a < m.beats) })}>
-              <Minus />
-            </IconButton>
-            <IconButton label="Больше долей" disabled={m.beats >= BEATS_MAX} onClick={() => m.set({ beats: m.beats + 1 })}>
-              <Plus />
-            </IconButton>
-            <Segmented
-              className="ml-auto"
-              size="sm"
-              value={String(m.beatUnit) as "4" | "8"}
-              options={[
-                { value: "4", label: "¼" },
-                { value: "8", label: "⅛" },
-              ]}
-              onChange={(u) => setMeter(m.beats, u === "8" ? 8 : 4)}
-            />
-          </div>
-          <ScrollRow>
-            {SIGNATURE_PRESETS.map(([b, u]) => (
-              <Chip key={`${b}/${u}`} active={m.beats === b && m.beatUnit === u} onClick={() => setMeter(b, u)} className="min-w-14">
-                {b}/{u}
-              </Chip>
-            ))}
-          </ScrollRow>
-        </Card>
-      </div>
+        <StartButton />
 
-      <div>
-        <Label>Рисунок доли · {rhythm.name}</Label>
-        <Card className="p-3">
-          <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label="Ритмический рисунок">
-            {RHYTHMS.map((r) => {
-              const active = r.id === m.rhythm;
-              return (
-                <button
-                  key={r.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  aria-label={r.name}
-                  title={r.name}
-                  onClick={() => {
-                    haptic();
-                    m.set({ rhythm: r.id });
-                  }}
-                  className={cn(
-                    "flex h-14 items-center justify-center rounded-2xl border outline-none transition-[background-color,border-color,transform] active:scale-95 focus-visible:ring-2 focus-visible:ring-ring/60",
-                    active ? "border-accent bg-accent text-on-accent" : "border-line bg-surface hover:bg-surface-2",
-                  )}
-                >
-                  <RhythmGlyph rhythm={r} />
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-2 text-center text-xs text-muted">Высокая полоска — звучит, низкая — пауза</p>
-        </Card>
-      </div>
+        <TempoSlider />
+        <p className="mt-3 text-center text-xs text-[#565656]">Пробел — старт/стоп · стрелки — темп · нажми на долю — акцент</p>
+      </section>
 
       <Card className="divide-y divide-line/60 py-1">
         <Toggle label="Вспышка экрана на долю" checked={m.flash} onChange={(flash) => m.set({ flash })} />
@@ -328,8 +475,15 @@ export function MetronomePanel() {
           )}
         </div>
       </Card>
+
+      <MeterSheet open={sheet === "meter"} onClose={() => setSheet(null)} />
+      <RhythmSheet open={sheet === "rhythm"} onClose={() => setSheet(null)} />
     </div>
   );
+}
+
+function Label({ children }: { children: ReactNode }) {
+  return <div className="px-1 pb-2 text-xs font-semibold uppercase tracking-wider text-muted">{children}</div>;
 }
 
 /** Click sound and volume. */
@@ -411,7 +565,7 @@ export function CompactMetronome() {
         <PlayButton />
       </div>
       <div className="mt-3 flex items-center justify-between gap-2">
-        <BeatDots size="sm" />
+        <BeatDots />
         <div className="flex gap-1 rounded-xl bg-surface-2 p-0.5">
           {SUBDIVISIONS.map((s) => (
             <button
