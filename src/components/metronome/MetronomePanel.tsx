@@ -5,7 +5,7 @@ import { Check, Minus, Play, Plus, Square, Volume2 } from "lucide-react";
 import { Card, IconButton, Slider, Toggle, NumberField } from "@/components/ui";
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { haptic } from "@/app/telegram";
-import { previewClick, tapTempo, toggleMetronome } from "@/audio/metronome";
+import { previewClick, toggleMetronome } from "@/audio/metronome";
 import { CLICKS } from "@/audio/clicks";
 import {
   BEATS_MAX,
@@ -333,17 +333,6 @@ function StartButton() {
           />
         </span>
       </motion.button>
-      <button
-        type="button"
-        aria-label="Tap — отстучи темп"
-        onClick={() => {
-          haptic();
-          tapTempo();
-        }}
-        className="absolute left-[154px] top-[154px] flex size-[52px] select-none items-center justify-center rounded-full border border-line bg-surface-2 text-[11px] font-semibold text-muted shadow-md outline-none active:translate-x-px active:translate-y-px max-[360px]:left-[124px] max-[360px]:top-[124px]"
-      >
-        TAP
-      </button>
     </div>
   );
 }
@@ -498,7 +487,6 @@ export function MetronomePanel() {
         <StartButton />
 
         <TempoSlider />
-        <p className="mt-4 text-center text-xs text-muted">Нажми на долю, чтобы выделить её акцентом</p>
       </section>
 
       <Card className="divide-y divide-line/60 py-1">
