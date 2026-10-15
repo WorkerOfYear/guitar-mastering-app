@@ -215,6 +215,7 @@ function Beats() {
 }
 
 const HINT_BPMS = [20, 60, 100, 140, 180, 220, 260, 300];
+const TICKS = Array.from({ length: (BPM_MAX - BPM_MIN) / 10 + 1 }, (_, i) => BPM_MIN + i * 10);
 const THUMB = 36;
 /** Where the centre of the thumb sits for `bpm` — the thumb never leaves the track, so it is inset by half its width. */
 const thumbLeft = (bpm: number) => `calc(${THUMB / 2}px + (100% - ${THUMB}px) * ${(bpm - BPM_MIN) / (BPM_MAX - BPM_MIN)})`;
@@ -242,7 +243,7 @@ function TempoSlider() {
   const up = useHoldRepeat(1);
   const down = useHoldRepeat(-1);
   return (
-    <div className="mt-6">
+    <div className="mt-12">
       <KeyHint />
       <div className="flex items-center gap-4">
         <button type="button" aria-label="Темп −1" className={cn(CIRCLE, "size-10 touch-none")} {...down}>
@@ -266,16 +267,19 @@ function TempoSlider() {
           <Plus className="size-5" />
         </button>
       </div>
-      {/* same width and inset as the slider, so every number sits under its own spot on the track */}
-      <div className="mx-[56px] mt-1 text-xs font-medium text-muted" aria-hidden>
-        <div className="relative h-4">
+      {/* the ruler: same width and inset as the slider, so every mark sits under its own spot on the track */}
+      <div className="mx-[56px] mt-2 text-xs font-medium text-muted" aria-hidden>
+        <div className="relative h-8">
+          {TICKS.map((v) => (
+            <span key={v} className="absolute top-0 h-1.5 w-px -translate-x-1/2 bg-line" style={{ left: thumbLeft(v) }} />
+          ))}
           {HINT_BPMS.map((v) => (
             <button
               key={v}
               type="button"
               tabIndex={-1}
               onClick={() => useMetronome.setState({ bpm: v })}
-              className={cn("absolute -translate-x-1/2 tabular-nums", v % 120 !== 20 && v % 120 !== 60 && "max-[450px]:hidden")}
+              className={cn("absolute top-2.5 -translate-x-1/2 tabular-nums", v % 120 !== 20 && v % 120 !== 60 && "max-[450px]:hidden")}
               style={{ left: thumbLeft(v) }}
             >
               {v}
