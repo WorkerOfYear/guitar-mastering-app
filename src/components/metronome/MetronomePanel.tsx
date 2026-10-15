@@ -200,9 +200,9 @@ function Beats() {
             <span
               className="block size-5 rounded-full border bg-surface-2"
               style={{
-                // only the rim lights up; the inside stays as it is
+                // only the rim lights up, no glow; the inside stays as it is
                 borderColor: on ? color : "var(--border)",
-                boxShadow: on ? `0 0 0 1px ${color}, 0 0 8px ${color}` : undefined,
+                boxShadow: on ? `0 0 0 1px ${color}` : undefined,
                 transition: on ? "none" : "box-shadow 120ms, border-color 120ms",
               }}
             />
