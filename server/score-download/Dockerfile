@@ -1,6 +1,5 @@
-FROM node:22-slim
-RUN npm install -g dl-librescore@latest && npm cache clean --force
-WORKDIR /app
-COPY server.mjs .
+# FlareSolverr's image: Chrome that Cloudflare lets through, and its Python code to start it.
+FROM ghcr.io/flaresolverr/flaresolverr:latest
+COPY server.py /score/server.py
 EXPOSE 8080
-CMD ["node", "server.mjs"]
+CMD ["python", "-u", "/score/server.py"]

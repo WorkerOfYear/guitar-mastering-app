@@ -1,4 +1,4 @@
-// Sheet music from MuseScore, via the user's own server (server/score-download) that runs dl-librescore.
+// Sheet music from MuseScore, via the user's own server (server/score-download): a real browser opens the score page.
 // MuseScore sits behind a Cloudflare check that cloud hosting can't pass, so the app can't do it itself.
 import type { AudioServer } from "./youtubeAudio";
 

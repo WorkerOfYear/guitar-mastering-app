@@ -1,34 +1,53 @@
 # Ноты с MuseScore — свой сервер
 
-MuseScore закрыт проверкой Cloudflare, и облака вроде Vercel её не проходят. Поэтому ноты скачивает отдельный маленький сервис
-на своём сервере: он запускает [dl-librescore](https://github.com/LibreScore/dl-librescore). Приложение ходит к нему напрямую из браузера.
+Сервис скачивает ноты с MuseScore по ссылке: PDF, MIDI или mp3. Приложение ходит к нему напрямую из браузера.
 
 - `GET /score?url=<ссылка на ноты musescore.com>&type=pdf|midi|mp3` с заголовком `Authorization: Bearer <KEY>` → файл.
 - Принимает только ссылки `https://musescore.com/…` и три формата — сервер нельзя заставить качать произвольные адреса.
-- Без ключа отвечает 401. Одновременно — не больше двух скачиваний.
-- По ссылке dl-librescore отдаёт только PDF, MIDI и mp3. MusicXML он делает лишь из файла `.mscz` на диске, поэтому
-  табы в приложение так не попадут: PDF и MIDI сохраняются файлом, mp3 становится записью песни.
+- Без ключа отвечает 401. Скачивает по одному запросу за раз. MIDI и mp3 — секунд 10, PDF на 70 страниц — около 25.
+- MusicXML так не получить, поэтому табы в приложение не попадут: PDF и MIDI сохраняются файлом, mp3 становится записью песни.
 - Скачивание нот обходит ограничения MuseScore — пользуйся для себя и на свой риск.
-- Работает ли сервер с твоего IP, зависит от Cloudflare: если MuseScore отдаёт проверку, скачивание не удастся.
+
+## Как устроено
+
+MuseScore закрыт проверкой Cloudflare. Браузер её проходит, а curl и Node (в том числе
+[dl-librescore](https://github.com/LibreScore/dl-librescore)) получают 403 — даже с домашнего интернета.
+Поэтому сервис собран на образе [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr): его Chrome открывает
+страницу нот и проходит проверку. Дальше — способ dl-librescore, но изнутри этой страницы: ключ API
+(`md5(id + тип + страница + суффикс из скрипта сайта)`), запрос `/api/jmuse` за ссылкой на файл, сам файл — с хранилища
+MuseScore, где проверки нет. PDF печатает тот же Chrome из картинок страниц.
+
+Chrome занимает около 300 МБ, пока работает, и закрывается после 10 минут без запросов.
+Если MuseScore поменяет сайт, сервис может сломаться — ошибка будет в ответе и в `docker compose logs score`.
 
 ## Установка (один раз)
 
 ```bash
-cd guitar-mastering-app/server/score-download
+mkdir -p /srv/score-download && cp server/score-download/{Dockerfile,compose.yaml,server.py} /srv/score-download/
+cd /srv/score-download
 echo "KEY=$(openssl rand -hex 24)" > .env
 docker compose up -d --build
 curl http://127.0.0.1:8790/health          # → ok
 ```
 
-Сервис слушает только `127.0.0.1:8790`. HTTPS снаружи — как у [звука из YouTube](../youtube-audio/README.md)
-(Tailscale Funnel: `tailscale funnel --bg 8790`, или свой reverse proxy на `127.0.0.1:8790`).
+Сервис слушает только `127.0.0.1:8790`. HTTPS снаружи — туннель Cloudflare, как у [звука из YouTube](../youtube-audio/README.md):
+
+```bash
+docker run -d --name score-tunnel --restart unless-stopped --network host cloudflare/cloudflared:latest tunnel --no-autoupdate --url http://127.0.0.1:8790
+docker logs score-tunnel 2>&1 | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1   # адрес
+```
+
+Адрес туннеля меняется при перезапуске контейнера `score-tunnel` или сервера.
 
 Потом в приложении: **Настройки → Остальные настройки → Ноты с MuseScore** — адрес (`https://…`) и `KEY` из `.env`, «Проверить».
-Ссылка на ноты MuseScore прикрепляется к песне (поиск табов → «Ноты на MuseScore»); в «Материалах» песни появятся кнопки PDF, MIDI, MP3.
+Ссылка на ноты MuseScore прикрепляется к песне (поиск табов → ноты MuseScore); в «Материалах» песни появятся кнопки PDF, MIDI, MP3.
 
 ## Обновление и логи
 
 ```bash
-cd guitar-mastering-app && git pull && cd server/score-download && docker compose build --no-cache && docker compose up -d
+cp server/score-download/{Dockerfile,compose.yaml,server.py} /srv/score-download/
+cd /srv/score-download && docker compose build --pull && docker compose up -d
 docker compose logs -f score
 ```
+
+`--pull` берёт свежий FlareSolverr — он догоняет изменения Cloudflare.

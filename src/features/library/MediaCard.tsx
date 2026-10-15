@@ -245,7 +245,7 @@ export function MediaCard({ item }: { item: Item }) {
     void grabAudio();
   }, []);
 
-  // Sheet music from the MuseScore link attached to the item, taken by the user's dl-librescore server.
+  // Sheet music from the MuseScore link attached to the item, taken by the user's server (server/score-download).
   const scoreServer = useSettings((s) => s.scoreServer);
   const scoreLink = museScoreLink(item.links);
   const [scoreBusy, setScoreBusy] = useState<ScoreFormat | null>(null);

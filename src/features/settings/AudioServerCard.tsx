@@ -58,7 +58,7 @@ export function AudioServerCard() {
   );
 }
 
-/** The server that downloads sheet music from MuseScore (dl-librescore). */
+/** The server that downloads sheet music from MuseScore (server/score-download). */
 export function ScoreServerCard() {
   const { scoreServer, setScoreServer } = useSettings();
   return (
