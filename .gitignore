@@ -9,3 +9,4 @@ public/soundfont
 dist-api
 # secrets: server/dev-stand/.env, server/youtube-audio/.env
 .env
+__pycache__/
