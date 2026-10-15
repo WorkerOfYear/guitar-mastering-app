@@ -71,16 +71,23 @@ export function loadSamples() {
   return loading;
 }
 
-function sample(time: number, file: string, gain: number): boolean {
+function sample(time: number, file: string, gain: number, maxDur: number): boolean {
   const buf = buffers.get(file);
   if (!buf) return false;
   const { ctx } = audio();
   const src = ctx.createBufferSource();
   const g = ctx.createGain();
   src.buffer = buf;
-  g.gain.value = gain;
+  // at fast tempos cut the tail with a short fade, so neighbouring clicks stay separate
+  const len = Math.min(buf.duration, maxDur);
+  g.gain.setValueAtTime(gain, time);
+  if (len < buf.duration) {
+    g.gain.setValueAtTime(gain, time + len * 0.6);
+    g.gain.linearRampToValueAtTime(0, time + len);
+  }
   src.connect(g).connect(out());
   src.start(time);
+  src.stop(time + len + 0.005);
   return true;
 }
 
@@ -88,6 +95,7 @@ function sample(time: number, file: string, gain: number): boolean {
 
 function blip(time: number, freq: number, level: number, attack: number, decay: number, type: OscillatorType = "sine") {
   const { ctx } = audio();
+  attack = Math.min(attack, decay / 2);
   const osc = ctx.createOscillator();
   const env = ctx.createGain();
   osc.type = type;
@@ -114,12 +122,12 @@ function noiseBuffer() {
   return noise;
 }
 
-function hat(time: number, kind: ClickKind, level: number) {
+function hat(time: number, kind: ClickKind, level: number, maxDur: number) {
   const { ctx } = audio();
   const src = ctx.createBufferSource();
   const hp = ctx.createBiquadFilter();
   const env = ctx.createGain();
-  const decay = kind === "accent" ? 0.07 : 0.035;
+  const decay = Math.min(kind === "accent" ? 0.07 : 0.035, maxDur);
   src.buffer = noiseBuffer();
   hp.type = "highpass";
   hp.frequency.value = kind === "accent" ? 6000 : 8000;
@@ -130,23 +138,24 @@ function hat(time: number, kind: ClickKind, level: number) {
   src.stop(time + decay + 0.01);
 }
 
-/** Play one click at audio-clock `time`. */
-export function playClick(id: string, time: number, kind: ClickKind, volume: number) {
+/** Play one click at audio-clock `time`; `maxDur` is the time until the next click, the sound is shortened to fit. */
+export function playClick(id: string, time: number, kind: ClickKind, volume: number, maxDur = Infinity) {
+  maxDur = Math.max(0.02, maxDur);
   const level = LEVEL[kind] * volume;
   switch (id) {
     case "metronomus": {
       const file = kind === "accent" ? SAMPLE_FILES.accent : SAMPLE_FILES.beat;
-      if (sample(time, file, level)) return;
+      if (sample(time, file, level, maxDur)) return;
       void loadSamples();
       break; // not decoded yet — fall through to the beep
     }
     case "wood":
-      blip(time, WOOD_FREQ[kind], level, 0.001, 0.05, "triangle");
-      blip(time, WOOD_FREQ[kind] * 2.4, level * 0.35, 0.001, 0.025);
+      blip(time, WOOD_FREQ[kind], level, 0.001, Math.min(0.05, maxDur), "triangle");
+      blip(time, WOOD_FREQ[kind] * 2.4, level * 0.35, 0.001, Math.min(0.025, maxDur));
       return;
     case "hat":
-      hat(time, kind, level);
+      hat(time, kind, level, maxDur);
       return;
   }
-  blip(time, CLASSIC_FREQ[kind], level, 0.002, 0.04);
+  blip(time, CLASSIC_FREQ[kind], level, 0.002, Math.min(0.04, maxDur));
 }

@@ -164,19 +164,20 @@ function RhythmImage({ rhythm, unit, className }: { rhythm: Rhythm; unit: 4 | 8;
   return <img src={rhythmImage(rhythm, unit)} alt="" draggable={false} className={cn("pointer-events-none object-contain [:root[data-theme=light]_&]:invert", className)} />;
 }
 
-/** How long a beat circle stays lit. */
-const FLASH_MS = 110;
+/** How long a beat circle stays lit: a short blink, shorter still when notes come quickly. */
+const flashMs = (bpm: number, grid: number) => Math.min(55, Math.max(25, (60000 / bpm / grid) * 0.5));
 
 function Beats() {
-  const { beats, accents, running, note } = useMetronome();
+  const { beats, accents, running, note, bpm, rhythm } = useMetronome();
+  const flash = flashMs(bpm, rhythmById(rhythm).grid);
   const [lit, setLit] = useState(-1);
   // every sounding note lights the circle of its beat — only for an instant, then it goes dark again
   useEffect(() => {
     if (!running || note.beat < 0) return setLit(-1);
     setLit(note.beat);
-    const t = setTimeout(() => setLit(-1), FLASH_MS);
+    const t = setTimeout(() => setLit(-1), flash);
     return () => clearTimeout(t);
-  }, [note.id, note.beat, running]);
+  }, [note.id, note.beat, running, flash]);
   const toggle = (n: number) => {
     haptic();
     const cur = useMetronome.getState().accents;
@@ -203,7 +204,7 @@ function Beats() {
                 // only the rim lights up, no glow; the inside stays as it is
                 borderColor: on ? color : "var(--border)",
                 boxShadow: on ? `0 0 0 1px ${color}` : undefined,
-                transition: on ? "none" : "box-shadow 120ms, border-color 120ms",
+                transition: on ? "none" : "box-shadow 60ms, border-color 60ms",
               }}
             />
             <span className={cn("text-sm font-bold leading-none text-muted", !accented && "invisible")}>↑</span>

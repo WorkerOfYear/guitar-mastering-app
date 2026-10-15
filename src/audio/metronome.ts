@@ -27,7 +27,9 @@ function schedule() {
     }
     const pos = tick % perBar;
     const { beat, tick: sub, kind } = planTick(rhythm, beats, accents, pos);
-    if (kind) playClick(click, nextTime, kind, volume);
+    const gap = 60 / bpm / rhythm.grid;
+    // a click may last until just before the next tick, so fast tempos stay crisp
+    if (kind) playClick(click, nextTime, kind, volume, gap * 0.85);
     if (kind || !sub) {
       const delay = Math.max(0, (nextTime - ctx.currentTime) * 1000);
       setTimeout(() => {
@@ -36,7 +38,7 @@ function schedule() {
         useMetronome.setState((s) => ({ ...(sub ? {} : { beat }), ...(kind ? { note: { beat, id: s.note.id + 1 } } : {}) }));
       }, delay);
     }
-    nextTime += 60 / bpm / rhythm.grid;
+    nextTime += gap;
     tick++;
   }
 }
