@@ -29,7 +29,23 @@ const ugResults = [
   { song_name: "Fuzz Universe", artist_name: "Paul Gilbert", type: "Video", votes: 500, tab_access_type: "public", tab_url: "https://tabs.ultimate-guitar.com/v" },
 ];
 
-afterEach(() => vi.unstubAllGlobals());
+// Web search results from musescore.com: scores, plus pages that aren't one.
+const webResults = {
+  results: [
+    { title: "Fuzz Universe – Paul Gilbert Sheet music for Guitar (Solo) | Musescore.com", url: "https://musescore.com/user/3044216/scores/5193702" },
+    { title: "Paul Gilbert sheet music | Play, print, and download in PDF or MIDI", url: "https://musescore.com/sheetmusic/artists/paul-gilbert" },
+    { title: "Fuzz Universe &amp; <strong>more</strong> Sheet music for Guitar, Bass guitar (Mixed Duet) | Musescore.com", url: "https://musescore.com/fuzzfan/scores/1234/" },
+    { title: "Fuzz Universe – Paul Gilbert Sheet music for Guitar (Solo) | Musescore.com", url: "http://musescore.com/user/3044216/scores/5193702" },
+    { title: "joeyyang28 | Free sheet music | Download PDF or print on ...", url: "https://musescore.com/user/36104006" },
+    { title: "Fuzz Universe by Paul Gilbert sheet music", url: "https://musescore.com/song/fuzz_universe-1650534" },
+    { title: "Nothing Else Matters Band - Metallica", url: "https://musescore.com/4yourdrumscore_com/nothing-else-matters-band-metallica" },
+  ],
+};
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
 
 describe("tab search", () => {
   it("builds Songsterr links with the difficulty of the most viewed guitar part", () => {
@@ -67,6 +83,81 @@ describe("tab search", () => {
     expect(body.results).toHaveLength(1);
     expect(body.failed).toEqual(["ug"]);
     expect((await tabs.GET(new Request("https://guitar.test/api/tabs?q=a"))).status).toBe(400);
+  });
+
+  it("takes MuseScore scores from search results, without duplicates or pages that aren't a score", () => {
+    expect(tabs.parseMuseScore(webResults.results.slice(4)).map((r) => r.url)).toEqual([
+      "https://musescore.com/4yourdrumscore_com/nothing-else-matters-band-metallica",
+    ]);
+    expect(tabs.parseMuseScore(webResults.results)).toEqual([
+      {
+        source: "musescore",
+        artist: "",
+        title: "Fuzz Universe – Paul Gilbert",
+        kind: "Ноты",
+        url: "https://musescore.com/user/3044216/scores/5193702",
+        parts: "Guitar (Solo)",
+      },
+      { source: "musescore", artist: "", title: "Fuzz Universe & more", kind: "Ноты", url: "https://musescore.com/fuzzfan/scores/1234", parts: "Guitar, Bass guitar (Mixed Duet)" },
+    ]);
+  });
+
+  it("reads a score's rating, instrument and level from its page", () => {
+    // Pieces of real pages as Tavily returns them.
+    const page = (stats: string, level = "Beginner") =>
+      `[Tools](https://musescore.com/tools)\n\n# Nothing Else Matters (by Metallica)\n\n[![Image 13: burberry18's profile picture](https://musescore.com/a.png) burberry18](https://musescore.com/user/14429466)\n\n${stats}\n\nPiano\n\n${level}\n\nDownload Print Save score Share\n\n## Other versions of this score\n\n1.9K votes`;
+    expect(tabs.museScoreStats(page("[87.6K](https://musescore.com/user/1/scores/2)3K[39](https://musescore.com/user/1/scores/2#comments)4.5 (414)"))).toEqual({
+      rating: 4.5,
+      votes: 414,
+      parts: "Piano · начальный уровень",
+    });
+    expect(tabs.museScoreStats(page("[1.7K](https://musescore.com/a/b)26[3](https://musescore.com/a/b#comments)5 (1.2K)", "Select level"))).toEqual({
+      rating: 5,
+      votes: 1200,
+      parts: "Piano",
+    });
+    // Nobody rated it yet.
+    expect(tabs.museScoreStats(page("[422](https://musescore.com/a/b)2[0](https://musescore.com/a/b#comments)", "Advanced"))).toEqual({
+      parts: "Piano · продвинутый уровень",
+    });
+    expect(tabs.museScoreStats("Just a moment...")).toEqual({});
+  });
+
+  it("searches MuseScore only with a key, through Tavily or Serper, and puts its scores after Songsterr", async () => {
+    const asked: string[] = [];
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      asked.push(url);
+      if (url.includes("songsterr")) return new Response(JSON.stringify(songsterr));
+      const headers = init?.headers as Record<string, string>;
+      const body = JSON.parse((init?.body as string) ?? "null");
+      if (url.includes("tavily")) {
+        expect(headers.Authorization).toBe("Bearer t");
+        expect(body).toMatchObject({ query: "Paul Gilbert Fuzz Universe", include_domains: ["musescore.com"], include_raw_content: true });
+        return new Response(JSON.stringify(webResults));
+      }
+      if (url.includes("serper")) {
+        expect(headers["X-API-KEY"]).toBe("s");
+        expect(body.q).toBe("Paul Gilbert Fuzz Universe site:musescore.com");
+        return new Response(JSON.stringify({ organic: webResults.results.map((r) => ({ title: r.title, link: r.url })) }));
+      }
+      return new Response(ugPage(ugResults));
+    });
+    const sources = async () => {
+      const body = (await (await tabs.GET(new Request("https://guitar.test/api/tabs?q=Paul%20Gilbert%20Fuzz%20Universe"))).json()) as { results: { source: string }[] };
+      return body.results.map((r) => r.source);
+    };
+    const withScores = ["songsterr", "musescore", "musescore", "ug", "ug", "ug"];
+
+    vi.stubEnv("TAVILY_API_KEY", "");
+    vi.stubEnv("SERPER_API_KEY", "");
+    expect(await sources()).toEqual(["songsterr", "ug", "ug", "ug"]);
+    expect(asked.some((u) => /tavily|serper/.test(u))).toBe(false);
+
+    vi.stubEnv("SERPER_API_KEY", "s");
+    expect(await sources()).toEqual(withScores);
+    vi.stubEnv("TAVILY_API_KEY", "t");
+    expect(await sources()).toEqual(withScores);
+    expect(asked.filter((u) => /tavily|serper/.test(u)).map((u) => new URL(u).host)).toEqual(["google.serper.dev", "api.tavily.com"]);
   });
 
   it("turns a video title into a search query", () => {

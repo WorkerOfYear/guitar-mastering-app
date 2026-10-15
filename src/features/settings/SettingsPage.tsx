@@ -12,7 +12,7 @@ import { exportData, useData, type DataState } from "@/store/data";
 import { useSettings } from "@/store/settings";
 import { BLOCK_META, type BlockKind } from "@/shared/types";
 import { SyncCard } from "./SyncCard";
-import { AudioServerCard } from "./AudioServerCard";
+import { AudioServerCard, ScoreServerCard } from "./AudioServerCard";
 
 const DAY_LABELS = ["ВС", "ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ"];
 const SECTIONS: [string, string, LucideIcon][] = [
@@ -155,6 +155,9 @@ export function SettingsPage() {
 
           <SectionTitle>Звук из YouTube</SectionTitle>
           <AudioServerCard />
+
+          <SectionTitle>Ноты с MuseScore</SectionTitle>
+          <ScoreServerCard />
 
           <SectionTitle>Синхронизация и Telegram</SectionTitle>
           <SyncCard />

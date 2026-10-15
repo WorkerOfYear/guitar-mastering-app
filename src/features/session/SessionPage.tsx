@@ -11,6 +11,7 @@ import { ItemBoard } from "@/components/fretboard/ItemBoard";
 import type { PlayerControl } from "@/components/tab/TabPlayer";
 import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
 import { audio } from "@/audio/player";
+import { rhythmForSubdivision } from "@/audio/rhythms";
 import { signal, startMetronome, stopMetronome } from "@/audio/metronome";
 import { haptic, tg } from "@/app/telegram";
 import { ImprovPanel } from "@/features/improv/ImprovPanel";
@@ -88,7 +89,7 @@ export function SessionPage() {
       const it = data.items.find((i) => i.id === entry.itemId);
       useMetronome.getState().set({
         bpm: startingBpm(data.log, it, entry, localDate()),
-        ...(it?.subdivision ? { subdivision: it.subdivision } : {}),
+        ...(it?.subdivision ? { rhythm: rhythmForSubdivision(it.subdivision) } : {}),
       });
     }
     if (phase === "paused") return;

@@ -35,6 +35,7 @@ import { deleteAudioFile, deleteTabFile, loadAudioFile, loadTabFile, saveAudioFi
 import { audioBlob, downloadAudio } from "@/lib/audioType";
 import { AudioSync, detectSync } from "./AudioSync";
 import { fetchYoutubeAudio, serverReady } from "@/lib/youtubeAudio";
+import { fetchScore, museScoreLink, type ScoreFormat } from "@/lib/scoreDownload";
 import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
 import { cn } from "@/lib/utils";
@@ -248,6 +249,31 @@ export function MediaCard({ item }: { item: Item }) {
     void grabAudio();
   }, []);
 
+  // Sheet music from the MuseScore link attached to the item, taken by the user's server (server/score-download).
+  const scoreServer = useSettings((s) => s.scoreServer);
+  const scoreLink = museScoreLink(item.links);
+  const [scoreBusy, setScoreBusy] = useState<ScoreFormat | null>(null);
+  const grabScore = async (format: ScoreFormat) => {
+    if (!scoreLink) return;
+    if (!serverReady(scoreServer)) return toast.error("Укажи сервер для нот MuseScore в настройках");
+    setScoreBusy(format);
+    try {
+      const { data, name } = await fetchScore(scoreLink, format, scoreServer);
+      if (format === "mp3") return await setRecording(data, { name, size: data.byteLength });
+      if (format === "musicxml") return await setTab(data, name);
+      const url = URL.createObjectURL(new Blob([data]));
+      const a = Object.assign(document.createElement("a"), { href: url, download: name });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (e) {
+      toast.error("Не удалось скачать с MuseScore", { description: (e as Error).message });
+    } finally {
+      setScoreBusy(null);
+    }
+  };
+
   const removeAudio = async () => {
     await deleteAudioFile(item.id);
     setAudioData(null);
@@ -255,14 +281,17 @@ export function MediaCard({ item }: { item: Item }) {
     updateItem(item.id, { audioFile: undefined, audioSync: undefined, audioUnrepeat: undefined });
   };
 
-  const upload = async (f: File) => {
-    if (f.size > TAB_MAX) return toast.error("Файл больше 5 МБ — это точно табы?");
-    const data = await f.arrayBuffer();
+  const setTab = async (data: ArrayBuffer, name: string) => {
     await saveTabFile(item.id, data);
     setFile(data);
     setMissing((m) => ({ ...m, tab: false }));
     setScore(null);
-    updateItem(item.id, { tabFile: { name: f.name, size: f.size } });
+    updateItem(item.id, { tabFile: { name, size: data.byteLength } });
+  };
+
+  const upload = async (f: File) => {
+    if (f.size > TAB_MAX) return toast.error("Файл больше 5 МБ — это точно табы?");
+    await setTab(await f.arrayBuffer(), f.name);
   };
 
   const removeFile = async () => {
@@ -487,6 +516,22 @@ export function MediaCard({ item }: { item: Item }) {
           )}
           <AddRow icon={<Headphones />} title="Своя запись" sub="mp3, m4a, wav" accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)} />
         </>
+      )}
+      {scoreLink && (
+        <MaterialRow
+          icon={<FileMusic />}
+          title="Ноты с MuseScore"
+          sub="XML — в табы, mp3 — как запись, PDF и MIDI — файлом"
+          actions={
+            <>
+              {(["musicxml", "pdf", "midi", "mp3"] as const).map((f) => (
+                <Button key={f} variant="ghost" size="sm" disabled={!!scoreBusy} onClick={() => void grabScore(f)} className="px-2 text-xs uppercase">
+                  {scoreBusy === f ? <LoaderCircle className="size-4 animate-spin" /> : f === "musicxml" ? "xml" : f}
+                </Button>
+              ))}
+            </>
+          }
+        />
       )}
     </div>
   );

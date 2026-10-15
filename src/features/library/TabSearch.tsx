@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ExternalLink, LoaderCircle, Plus, Search, Star } from "lucide-react";
+import { Check, ChevronDown, ExternalLink, LoaderCircle, Plus, Search, Star } from "lucide-react";
 import { Badge, Button, Input } from "@/components/ui";
 import { haptic } from "@/app/telegram";
 import { cn } from "@/lib/utils";
 import { searchPage, searchTabs, SOURCE_NAME, type TabResult, type TabSource } from "@/lib/tabSearch";
 
+/** Results shown at first and added by each «Показать ещё». */
+const PAGE = 6;
+
 /**
- * Finds the song's tabs on Songsterr and Ultimate Guitar and lets the user pick links to attach;
- * MuseScore (sheet music) is a search link, its site doesn't let a server read it.
+ * Finds the song's tabs on Songsterr and Ultimate Guitar and its scores on MuseScore, and lets the user pick links
+ * to attach; each site's search page is a link too, for what the server didn't find.
  * `query` follows the video or item title until the user edits it; `auto` searches as soon as it arrives.
  */
 export function TabSearch({ query, auto, picked, onToggle }: { query: string; auto: boolean; picked: string[]; onToggle: (url: string) => void }) {
@@ -16,6 +19,7 @@ export function TabSearch({ query, auto, picked, onToggle }: { query: string; au
   const [busy, setBusy] = useState(false);
   const [found, setFound] = useState<{ q: string; results: TabResult[]; failed: TabSource[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [shown, setShown] = useState(PAGE);
   const ctl = useRef<AbortController | null>(null);
 
   const run = async (text: string) => {
@@ -27,7 +31,10 @@ export function TabSearch({ query, auto, picked, onToggle }: { query: string; au
     setError(null);
     try {
       const r = await searchTabs(text, c.signal);
-      if (!c.signal.aborted) setFound({ q: text, ...r });
+      if (!c.signal.aborted) {
+        setFound({ q: text, ...r });
+        setShown(PAGE);
+      }
     } catch (e) {
       if (!c.signal.aborted) setError((e as Error).message);
     } finally {
@@ -76,9 +83,23 @@ export function TabSearch({ query, auto, picked, onToggle }: { query: string; au
       {found && (
         <div className="space-y-1.5">
           {found.results.length === 0 && !found.failed.length && <p className="px-1 text-xs text-muted">Ничего не нашлось — попробуй уточнить запрос</p>}
-          {found.results.map((r) => (
+          {found.results.slice(0, shown).map((r) => (
             <ResultRow key={r.url} r={r} picked={picked.includes(r.url)} onToggle={() => onToggle(r.url)} />
           ))}
+          {found.results.length > shown && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-muted"
+              onClick={() => {
+                haptic();
+                setShown((n) => n + PAGE);
+              }}
+            >
+              Показать ещё · осталось {found.results.length - shown}
+              <ChevronDown className="size-4" />
+            </Button>
+          )}
           {found.failed.length > 0 && (
             <p className="px-1 text-xs text-muted">{found.failed.map((s) => SOURCE_NAME[s]).join(" и ")} сейчас не ответил — открой поиск ниже</p>
           )}
@@ -104,11 +125,11 @@ function ResultRow({ r, picked, onToggle }: { r: TabResult; picked: boolean; onT
     <div className={cn("flex items-center gap-2 rounded-2xl border py-1.5 pl-3 pr-1.5 transition-colors", picked ? "border-accent bg-accent/10" : "border-line")}>
       <a href={r.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold">
-          {r.artist} — {r.title}
+          {[r.artist, r.title].filter(Boolean).join(" — ")}
         </div>
         <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
           <span>{SOURCE_NAME[r.source]}</span>
-          <Badge variant={r.kind === "Guitar Pro" || r.kind === "Таб + плеер" ? "soft" : "secondary"} className="px-2 py-0 text-[10px]">
+          <Badge variant={r.kind === "Guitar Pro" || r.kind === "Таб + плеер" || r.kind === "Ноты" ? "soft" : "secondary"} className="px-2 py-0 text-[10px]">
             {r.kind}
           </Badge>
           {r.rating != null && (
@@ -119,6 +140,7 @@ function ResultRow({ r, picked, onToggle }: { r: TabResult; picked: boolean; onT
             </span>
           )}
           {r.difficulty != null && <span>сложность {r.difficulty}</span>}
+          {r.parts && <span className="truncate">{r.parts}</span>}
         </div>
       </a>
       <Button
