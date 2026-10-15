@@ -32,6 +32,9 @@ interface SettingsStore {
   /** The user's server that takes the audio out of YouTube videos (kept on this device only) */
   audioServer: AudioServer;
   setAudioServer: (s: AudioServer) => void;
+  /** The user's server that downloads sheet music from MuseScore (kept on this device only) */
+  scoreServer: AudioServer;
+  setScoreServer: (s: AudioServer) => void;
   setTabView: (view: TabView) => void;
   setFretboard: (patch: Partial<FretboardSettings>) => void;
   setTheory: (patch: Partial<TheoryState>) => void;
@@ -45,6 +48,8 @@ export const useSettings = create<SettingsStore>()(
       tabView: "tab",
       audioServer: { url: "", key: "" },
       setAudioServer: (audioServer) => set({ audioServer }),
+      scoreServer: { url: "", key: "" },
+      setScoreServer: (scoreServer) => set({ scoreServer }),
       setTabView: (tabView) => set({ tabView }),
       setFretboard: (patch) => set((s) => ({ fretboard: { ...s.fretboard, ...patch } })),
       setTheory: (patch) => set((s) => ({ theory: { ...s.theory, ...patch } })),

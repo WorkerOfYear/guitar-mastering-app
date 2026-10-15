@@ -9,13 +9,15 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - /srv/guitar-dev:/srv
-  # Functions from api/ that work without Vercel (tab search), bundled into /srv/guitar-dev/api/api.js by the workflow,
+  # Functions from api/ that work without Vercel (tab search), bundled into /srv/guitar-dev/api/api.js by up.sh,
   # which restarts the container after each deploy. Until the first deploy it waits for the file.
   api:
     image: node:22-alpine
     container_name: guitar-dev-api
     restart: unless-stopped
     working_dir: /srv/api
+    # TAVILY_API_KEY=… (or SERPER_API_KEY=…) here turns on MuseScore scores in tab search (see the main README). Not in git.
+    env_file: [{ path: .env, required: false }]
     command: ["sh", "-c", "until [ -f api.js ]; do sleep 5; done; exec node api.js"]
     volumes:
       # Only the api folder (docker creates it on the host if it isn't there yet), read-only.
