@@ -296,9 +296,9 @@ function TempoSlider() {
       </div>
       {/* the ruler: same width and inset as the slider, so every mark sits under its own spot on the track */}
       <div className="mx-[56px] mt-2 text-xs font-medium text-muted" aria-hidden>
-        <div className="relative h-8">
+        <div className="relative h-9">
           {TICKS.map((v) => (
-            <span key={v} className="absolute top-0 h-1.5 w-px -translate-x-1/2 bg-line" style={{ left: thumbLeft(v) }} />
+            <span key={v} className={cn("absolute top-0 w-px -translate-x-1/2 bg-line", HINT_BPMS.includes(v) ? "h-3" : "h-1.5")} style={{ left: thumbLeft(v) }} />
           ))}
           {HINT_BPMS.map((v) => (
             <button
@@ -306,7 +306,7 @@ function TempoSlider() {
               type="button"
               tabIndex={-1}
               onClick={() => useMetronome.setState({ bpm: v })}
-              className={cn("absolute top-2.5 -translate-x-1/2 tabular-nums", v % 120 !== 20 && v % 120 !== 60 && "max-[450px]:hidden")}
+              className={cn("absolute top-4 -translate-x-1/2 tabular-nums", v % 120 !== 20 && v % 120 !== 60 && "max-[450px]:hidden")}
               style={{ left: thumbLeft(v) }}
             >
               {v}
