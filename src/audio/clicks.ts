@@ -23,6 +23,31 @@ export const clickById = (id: string) => CLICKS.find((c) => c.id === id) ?? CLIC
 
 const LEVEL: Record<ClickKind, number> = { accent: 1, beat: 0.8, sub: 0.4 };
 
+// ---------- output bus
+
+// Clicks are scheduled a little ahead of time. Everything goes through one gain node, so that Stop
+// can cut the ones still waiting in the audio graph instead of letting them sound after the button.
+let bus: GainNode | null = null;
+function out() {
+  const { ctx, out: master } = audio();
+  if (!bus) {
+    bus = ctx.createGain();
+    bus.connect(master);
+  }
+  return bus;
+}
+
+/** Drop every click that has been scheduled but has not sounded yet. */
+export function silenceClicks() {
+  if (!bus) return;
+  bus.gain.cancelScheduledValues(0);
+  bus.gain.value = 0;
+  bus.disconnect();
+  bus = null;
+}
+
+export const samplesReady = () => buffers.size === Object.keys(SAMPLE_FILES).length;
+
 // ---------- recordings
 
 const SAMPLE_FILES = { accent: "pingpong2.mp3", beat: "finger_click.mp3" } as const;
@@ -49,12 +74,12 @@ export function loadSamples() {
 function sample(time: number, file: string, gain: number): boolean {
   const buf = buffers.get(file);
   if (!buf) return false;
-  const { ctx, out } = audio();
+  const { ctx } = audio();
   const src = ctx.createBufferSource();
   const g = ctx.createGain();
   src.buffer = buf;
   g.gain.value = gain;
-  src.connect(g).connect(out);
+  src.connect(g).connect(out());
   src.start(time);
   return true;
 }
@@ -62,7 +87,7 @@ function sample(time: number, file: string, gain: number): boolean {
 // ---------- synthesized
 
 function blip(time: number, freq: number, level: number, attack: number, decay: number, type: OscillatorType = "sine") {
-  const { ctx, out } = audio();
+  const { ctx } = audio();
   const osc = ctx.createOscillator();
   const env = ctx.createGain();
   osc.type = type;
@@ -70,7 +95,7 @@ function blip(time: number, freq: number, level: number, attack: number, decay: 
   env.gain.setValueAtTime(0.0001, time);
   env.gain.exponentialRampToValueAtTime(Math.max(0.001, level), time + attack);
   env.gain.exponentialRampToValueAtTime(0.0001, time + decay);
-  osc.connect(env).connect(out);
+  osc.connect(env).connect(out());
   osc.start(time);
   osc.stop(time + decay + 0.01);
 }
@@ -90,7 +115,7 @@ function noiseBuffer() {
 }
 
 function hat(time: number, kind: ClickKind, level: number) {
-  const { ctx, out } = audio();
+  const { ctx } = audio();
   const src = ctx.createBufferSource();
   const hp = ctx.createBiquadFilter();
   const env = ctx.createGain();
@@ -100,7 +125,7 @@ function hat(time: number, kind: ClickKind, level: number) {
   hp.frequency.value = kind === "accent" ? 6000 : 8000;
   env.gain.setValueAtTime(Math.max(0.001, level), time);
   env.gain.exponentialRampToValueAtTime(0.0001, time + decay);
-  src.connect(hp).connect(env).connect(out);
+  src.connect(hp).connect(env).connect(out());
   src.start(time);
   src.stop(time + decay + 0.01);
 }

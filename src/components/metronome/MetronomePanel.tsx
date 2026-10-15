@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { m as motion } from "motion/react";
 import { Slider as SliderPrimitive } from "radix-ui";
 import { Check, Minus, Play, Plus, Square, Volume2 } from "lucide-react";
-import { Card, IconButton, Slider, Toggle, NumberField } from "@/components/ui";
+import { Card, IconButton, Slider, Toggle } from "@/components/ui";
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { haptic } from "@/app/telegram";
 import { previewClick, toggleMetronome } from "@/audio/metronome";
@@ -20,8 +20,6 @@ import {
 import { cn } from "@/lib/utils";
 import { BPM_MAX, BPM_MIN, clampBpm, useMetronome } from "@/store/metronome";
 import type { Subdivision } from "@/shared/types";
-
-export { NumberField } from "@/components/ui";
 
 const SUBDIVISIONS: Subdivision[] = [1, 2, 3, 4, 6];
 const SUB_SHORT: Record<Subdivision, string> = { 1: "♩", 2: "♫", 3: "3", 4: "16", 6: "6" };
@@ -291,7 +289,7 @@ function TempoSlider() {
 
 /** The big round start button: the tempo sits inside, the ring spins. */
 function StartButton() {
-  const { bpm, running, beat } = useMetronome();
+  const { bpm, running } = useMetronome();
   return (
     <div className="relative mx-auto my-6 size-[180px] max-[360px]:size-[150px]">
       <motion.button
@@ -312,18 +310,14 @@ function StartButton() {
           )}
         />
         <span className="absolute inset-[4%] flex flex-col items-center justify-center rounded-full bg-surface-2">
-          <motion.span
-            key={running ? beat : "idle"}
-            initial={{ scale: running ? 1.08 : 1 }}
-            animate={{ scale: 1 }}
-            transition={{ duration: 0.08 }}
+          <span
             className={cn(
               "-mt-6 bg-gradient-to-br bg-clip-text text-[60px] font-semibold leading-none tabular-nums text-transparent",
               running ? "from-[var(--guide)] to-[var(--root)]" : "from-[var(--accent)] to-[var(--chord)]",
             )}
           >
             {bpm}
-          </motion.span>
+          </span>
           <span className="absolute mt-[50px] text-sm text-muted">ударов в мин.</span>
           <img
             src={`${BASE}metronome/hint-space.png`}
@@ -455,7 +449,7 @@ function RhythmSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
   );
 }
 
-/** Full metronome: tempo, tap, meter, accents, rhythm pattern, speed trainer. */
+/** Full metronome: tempo, meter, accents, rhythm pattern. */
 export function MetronomePanel() {
   const m = useMetronome();
   const rhythm = rhythmById(m.rhythm);
@@ -489,25 +483,6 @@ export function MetronomePanel() {
         <TempoSlider />
       </section>
 
-      <Card className="divide-y divide-line/60 py-1">
-        <Toggle label="Вспышка экрана на долю" checked={m.flash} onChange={(flash) => m.set({ flash })} />
-        <div>
-          <Toggle
-            label="Speed trainer"
-            hint="Темп растёт сам каждые N тактов"
-            checked={m.trainer.enabled}
-            onChange={(enabled) => m.set({ trainer: { ...m.trainer, enabled } })}
-          />
-          {m.trainer.enabled && (
-            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="grid grid-cols-3 gap-2 overflow-hidden pb-3">
-              <NumberField label="+bpm" value={m.trainer.step} onChange={(step) => m.set({ trainer: { ...m.trainer, step } })} />
-              <NumberField label="каждые N тактов" value={m.trainer.everyBars} onChange={(everyBars) => m.set({ trainer: { ...m.trainer, everyBars } })} />
-              <NumberField label="до bpm" value={m.trainer.target} onChange={(target) => m.set({ trainer: { ...m.trainer, target } })} />
-            </motion.div>
-          )}
-        </div>
-      </Card>
-
       <MeterSheet open={sheet === "meter"} onClose={() => setSheet(null)} />
       <RhythmSheet open={sheet === "rhythm"} onClose={() => setSheet(null)} />
     </div>
@@ -518,9 +493,9 @@ function Label({ children }: { children: ReactNode }) {
   return <div className="px-1 pb-2 text-xs font-semibold uppercase tracking-wider text-muted">{children}</div>;
 }
 
-/** Click sound and volume. */
-export function SoundPanel() {
-  const { click, volume, set } = useMetronome();
+/** Metronome settings: click sound, volume, screen flash. */
+export function SettingsPanel() {
+  const { click, volume, flash, set } = useMetronome();
   return (
     <div className="space-y-4">
       <div>
@@ -566,6 +541,9 @@ export function SoundPanel() {
           <Volume2 className="size-5 shrink-0 text-muted" aria-hidden />
           <span className="shrink-0">Громкость</span>
           <Slider min={0.1} max={1} step={0.05} value={[volume]} onValueChange={([v]) => set({ volume: v })} onValueCommit={() => previewClick(click)} aria-label="Громкость" />
+        </div>
+        <div className="border-t border-line/60">
+          <Toggle label="Вспышка экрана на долю" checked={flash} onChange={(f) => set({ flash: f })} />
         </div>
       </Card>
     </div>

@@ -1,5 +1,5 @@
 import { audio } from "./player";
-import { loadSamples, playClick, type ClickKind } from "./clicks";
+import { loadSamples, playClick, samplesReady, silenceClicks, type ClickKind } from "./clicks";
 import { planTick, rhythmById } from "./rhythms";
 import { clampBpm, useMetronome } from "@/store/metronome";
 
@@ -12,13 +12,12 @@ const TIMER_MS = 25;
 let timer: ReturnType<typeof setInterval> | null = null;
 let nextTime = 0;
 let tick = 0;
-let bars = 0;
 let lastPerBar = 0;
 
 function schedule() {
   const { ctx } = audio();
   while (nextTime < ctx.currentTime + LOOKAHEAD_SEC) {
-    const { bpm, beats, rhythm: rhythmId, accents, click, volume, trainer } = useMetronome.getState();
+    const { bpm, beats, rhythm: rhythmId, accents, click, volume } = useMetronome.getState();
     const rhythm = rhythmById(rhythmId);
     const perBar = beats * rhythm.grid;
     if (perBar !== lastPerBar) {
@@ -35,31 +34,34 @@ function schedule() {
     }
     nextTime += 60 / bpm / rhythm.grid;
     tick++;
-    if (pos === perBar - 1) {
-      bars++;
-      if (trainer.enabled && bars % trainer.everyBars === 0 && bpm < trainer.target) {
-        useMetronome.setState({ bpm: clampBpm(Math.min(trainer.target, bpm + trainer.step)) });
-      }
-    }
   }
 }
 
-export function startMetronome() {
-  if (timer) return;
+function begin() {
   const { ctx } = audio();
   tick = 0;
-  bars = 0;
   lastPerBar = 0;
-  void loadSamples();
   nextTime = ctx.currentTime + 0.08;
-  useMetronome.setState({ running: true, beat: -1 });
   schedule();
   timer = setInterval(schedule, TIMER_MS);
+}
+
+export function startMetronome() {
+  if (timer || useMetronome.getState().running) return;
+  audio(); // create/resume the context inside the tap
+  useMetronome.setState({ running: true, beat: -1 });
+  if (useMetronome.getState().click === "metronomus" && !samplesReady()) {
+    // The first click must already be the chosen sound, not the stand-in beep: wait for the recordings.
+    void loadSamples().finally(() => useMetronome.getState().running && !timer && begin());
+    return;
+  }
+  begin();
 }
 
 export function stopMetronome() {
   if (timer) clearInterval(timer);
   timer = null;
+  silenceClicks();
   useMetronome.setState({ running: false, beat: -1 });
 }
 

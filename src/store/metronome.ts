@@ -4,13 +4,6 @@ import { DEFAULT_RHYTHM, rhythmForSubdivision } from "@/audio/rhythms";
 import { DEFAULT_CLICK } from "@/audio/clicks";
 import type { Subdivision } from "@/shared/types";
 
-export interface TrainerConfig {
-  enabled: boolean;
-  step: number; // bpm added…
-  everyBars: number; // …every N bars
-  target: number; // stop here
-}
-
 export interface MetronomeState {
   bpm: number;
   /** Beats per bar (numerator of the time signature) */
@@ -25,7 +18,6 @@ export interface MetronomeState {
   click: string;
   volume: number;
   flash: boolean;
-  trainer: TrainerConfig;
   running: boolean;
   /** Current beat (0-based) while running, −1 when stopped */
   beat: number;
@@ -47,7 +39,6 @@ export const useMetronome = create<MetronomeState>()(
       click: DEFAULT_CLICK,
       volume: 0.8,
       flash: false,
-      trainer: { enabled: false, step: 2, everyBars: 4, target: 140 },
       running: false,
       beat: -1,
       set: (patch) => set(patch),
