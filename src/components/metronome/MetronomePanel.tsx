@@ -13,6 +13,7 @@ import {
   RHYTHMS,
   SIGNATURE_PRESETS,
   defaultAccents,
+  minNoteGap,
   rhythmById,
   rhythmForSubdivision,
   type Rhythm,
@@ -165,18 +166,20 @@ function RhythmImage({ rhythm, unit, className }: { rhythm: Rhythm; unit: 4 | 8;
 }
 
 /**
- * One blink of a beat circle, fade-out included, is a fraction of the gap between two notes — so it follows
- * the tempo and the rhythm pattern (a sextuplet at 200 bpm blinks faster than a quarter at 60). 15–60 ms.
+ * One blink of a beat circle, fade-out included. It takes under half of the time to the next note, so a dark
+ * gap is always left between two blinks and fast notes stay readable. The gap comes from the tempo and the
+ * pattern (closest two notes, measured in ticks). 15–60 ms.
  */
-function blink(bpm: number, grid: number) {
-  const total = Math.min(60, Math.max(15, (60000 / bpm / grid) * 0.25));
-  const hold = total * 0.4;
+function blink(bpm: number, rhythm: Rhythm) {
+  const gap = (60000 / bpm / rhythm.grid) * minNoteGap(rhythm);
+  const total = Math.min(60, Math.max(15, gap * 0.4));
+  const hold = total * 0.6;
   return { hold, fade: total - hold };
 }
 
 function Beats() {
   const { beats, accents, running, note, bpm, rhythm } = useMetronome();
-  const { hold, fade } = blink(bpm, rhythmById(rhythm).grid);
+  const { hold, fade } = blink(bpm, rhythmById(rhythm));
   const [lit, setLit] = useState(-1);
   // every sounding note lights the circle of its beat — only for an instant, then it goes dark again
   useEffect(() => {

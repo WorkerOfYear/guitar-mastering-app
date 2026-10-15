@@ -56,6 +56,13 @@ export function planTick(rhythm: Rhythm, beats: number, accents: number[], pos: 
   return { beat, tick, kind: accents.includes(beat + 1) ? "accent" : "beat" };
 }
 
+/** The shortest time between two sounding notes of a pattern (also across the beat boundary), in ticks. */
+export function minNoteGap(rhythm: Rhythm): number {
+  const t = [...rhythm.play].sort((a, b) => a - b);
+  const gaps = t.map((n, i) => (i < t.length - 1 ? t[i + 1] - n : rhythm.grid - n + t[0]));
+  return Math.min(...gaps);
+}
+
 // ---------- time signatures
 
 export const SIGNATURE_PRESETS: [beats: number, unit: 4 | 8][] = [

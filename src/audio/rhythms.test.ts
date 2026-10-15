@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultAccents, planTick, rhythmById, rhythmForSubdivision, RHYTHMS } from "./rhythms";
+import { defaultAccents, minNoteGap, planTick, rhythmById, rhythmForSubdivision, RHYTHMS } from "./rhythms";
 
 describe("planTick", () => {
   it("accents the chosen beats and softens the rest", () => {
@@ -41,5 +41,16 @@ describe("rhythms", () => {
     expect(defaultAccents(12, 8)).toEqual([1, 4, 7, 10]);
     expect(defaultAccents(4, 4)).toEqual([1]);
     expect(defaultAccents(3, 8)).toEqual([1]);
+  });
+});
+
+describe("minNoteGap", () => {
+  it("measures the closest pair of notes, wrapping over the beat", () => {
+    expect(minNoteGap(rhythmById("q"))).toBe(4); // one note per beat — a whole beat apart
+    expect(minNoteGap(rhythmById("s4"))).toBe(1);
+    expect(minNoteGap(rhythmById("d8s"))).toBe(1); // 1 and 4 → 4 to the next beat's 1
+    expect(minNoteGap(rhythmById("ss8"))).toBe(1);
+    expect(minNoteGap(rhythmById("rtr"))).toBe(3);
+    expect(minNoteGap(rhythmById("e2"))).toBe(2);
   });
 });
