@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { m as motion } from "motion/react";
 import { Slider as SliderPrimitive } from "radix-ui";
 import { Check, Minus, Play, Plus, Square, Volume2 } from "lucide-react";
@@ -248,6 +248,11 @@ function KeyHint() {
 
 function TempoSlider() {
   const bpm = useMetronome((s) => s.bpm);
+  const running = useMetronome((s) => s.running);
+  // the colours of the start-button ring, toned down towards the surface so the slider stays calm
+  const calm = (c: string) => `color-mix(in oklab, ${c} 55%, var(--surface-2))`;
+  const ring = running ? ["var(--guide)", "var(--root)"] : ["var(--accent)", "var(--chord)"];
+  const tone = { "--s1": calm(ring[0]), "--s2": calm(ring[1]) } as CSSProperties;
   const up = useHoldRepeat(1);
   const down = useHoldRepeat(-1);
   return (
@@ -265,11 +270,12 @@ function TempoSlider() {
           onValueChange={([v]) => useMetronome.setState({ bpm: v })}
           aria-label="Темп"
           className="relative flex h-9 min-w-0 flex-1 touch-none select-none items-center"
+          style={tone}
         >
           <SliderPrimitive.Track className="relative h-1.5 grow rounded-full bg-surface-2">
-            <SliderPrimitive.Range className="absolute h-full rounded-full bg-accent" />
+            <SliderPrimitive.Range className="absolute h-full rounded-full bg-gradient-to-r from-[var(--s1)] to-[var(--s2)]" />
           </SliderPrimitive.Track>
-          <SliderPrimitive.Thumb className="block size-9 rounded-full border-[5px] border-accent bg-surface shadow-md outline-none transition-transform focus-visible:ring-4 focus-visible:ring-accent/30 active:scale-105" />
+          <SliderPrimitive.Thumb className="block size-9 rounded-full border-[5px] border-transparent bg-[linear-gradient(var(--surface),var(--surface))_padding-box,linear-gradient(135deg,var(--s1),var(--s2))_border-box] shadow-md outline-none transition-transform focus-visible:ring-4 focus-visible:ring-ring/30 active:scale-105" />
         </SliderPrimitive.Root>
         <button type="button" aria-label="Темп +1" className={cn(CIRCLE, "size-10 touch-none")} {...up}>
           <Plus className="size-5" />
