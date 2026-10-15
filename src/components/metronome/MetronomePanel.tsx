@@ -278,7 +278,10 @@ function TempoSlider() {
           <SliderPrimitive.Track className="relative h-1.5 grow rounded-full bg-surface-2">
             <SliderPrimitive.Range className="absolute h-full rounded-full bg-gradient-to-r from-[var(--s1)] to-[var(--s2)]" />
           </SliderPrimitive.Track>
-          <SliderPrimitive.Thumb className="block size-9 rounded-full border-[5px] border-transparent bg-[linear-gradient(var(--surface),var(--surface))_padding-box,linear-gradient(135deg,var(--s1),var(--s2))_border-box] shadow-md outline-none transition-transform focus-visible:ring-4 focus-visible:ring-ring/30 active:scale-105" />
+          <SliderPrimitive.Thumb className="block size-9 rounded-full border-[5px] border-transparent shadow-md outline-none transition-transform focus-visible:ring-4 focus-visible:ring-ring/30 active:scale-105"
+            // filled with the surface colour inside, the toned-down ring gradient on the rim
+            style={{ background: "linear-gradient(var(--surface), var(--surface)) padding-box, linear-gradient(135deg, var(--s1), var(--s2)) border-box" }}
+          />
         </SliderPrimitive.Root>
         <button type="button" aria-label="Темп +1" className={cn(CIRCLE, "size-10 touch-none")} {...up}>
           <Plus className="size-5" />
