@@ -1,8 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { Fretboard } from "./Fretboard";
 import { FullscreenBoard } from "./FullscreenBoard";
-import { ChevronLeft, ChevronRight, Maximize2, ZoomIn, ZoomOut } from "lucide-react";
-import { Button, Card, IconButton, Segmented } from "@/components/ui";
+import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
+import { Card, IconButton, Segmented } from "@/components/ui";
+import { haptic } from "@/app/telegram";
+import { cn } from "@/lib/utils";
 import { playNote } from "@/audio/player";
 import { fretNotes, STRING_NAMES, type ChordHighlight, type FretNote, type Pattern } from "@/music/fretboard";
 import type { Tone } from "@/music/scales";
@@ -23,7 +25,7 @@ interface Props {
   chordOnly?: boolean;
 }
 
-/** Fretboard card: tones, board, tapped-note info, position stepper, label switch, legend, fullscreen. */
+/** Fretboard card: tones, board, tapped-note info, position blocks, label switch, legend, fullscreen. */
 export function ScaleBoard({ title, subtitle, tones, chord, patterns, position: rawPosition, onPosition, chordOnly }: Props) {
   const { fretboard, setFretboard } = useSettings();
   const [selected, setSelected] = useState<FretNote | null>(null);
@@ -137,16 +139,11 @@ export function ScaleBoard({ title, subtitle, tones, chord, patterns, position: 
         )}
       </div>
 
-      <div className="mt-2 flex items-center gap-2 px-4">
-        <IconButton label="Предыдущая позиция" onClick={() => step(-1)}>
-          <ChevronLeft />
-        </IconButton>
-        <Button variant="secondary" onClick={togglePosition} className="h-11 flex-1">
-          {positionLabel}
-        </Button>
-        <IconButton label="Следующая позиция" onClick={() => step(1)}>
-          <ChevronRight />
-        </IconButton>
+      <div role="radiogroup" aria-label="Позиция" className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(4.25rem,1fr))] gap-1.5 px-4">
+        <PositionBlock active={position < 0} onClick={() => onPosition(-1)} title="Весь" sub="гриф" />
+        {patterns.map((p, i) => (
+          <PositionBlock key={i} active={position === i} onClick={() => onPosition(i)} title={String(i + 1)} sub={fretRange(p)} />
+        ))}
       </div>
 
       <div className="mt-2 px-4">
@@ -155,6 +152,32 @@ export function ScaleBoard({ title, subtitle, tones, chord, patterns, position: 
 
       <Legend hasChord={!!chord} chordOnly={!!chordOnly} />
     </Card>
+  );
+}
+
+/** "лады 5–8", or "откр.–3" for a box that starts on open strings. */
+const fretRange = (p: Pattern) => `${p.minFret === 0 ? "откр." : p.minFret}–${p.maxFret}`;
+
+/** One fingering box (or the whole neck) as a tappable block. */
+function PositionBlock({ active, onClick, title, sub }: { active: boolean; onClick: () => void; title: string; sub: string }) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      aria-label={title === "Весь" ? "Весь гриф" : `Позиция ${title}, лады ${sub}`}
+      onClick={() => {
+        haptic();
+        onClick();
+      }}
+      className={cn(
+        "flex h-14 flex-col items-center justify-center rounded-2xl border transition-[background-color,border-color,transform] active:scale-[0.97]",
+        active ? "border-accent bg-accent/12 text-accent" : "border-line text-fg hover:bg-surface-2",
+      )}
+    >
+      <span className="text-base font-bold leading-tight">{title}</span>
+      <span className={cn("text-[11px] leading-tight", active ? "text-accent" : "text-muted")}>{sub}</span>
+    </button>
   );
 }
 

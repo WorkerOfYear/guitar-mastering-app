@@ -1,8 +1,6 @@
-import { Chip, ScrollRow, Segmented } from "@/components/ui";
-import { CHORD_TYPES } from "@/music/chords";
-import { SCALES } from "@/music/scales";
-import { TONICS, noteName, parseNote } from "@/music/notes";
+import { Segmented } from "@/components/ui";
 import type { TheoryLink } from "@/shared/types";
+import { ChordSelect, ScaleSelect, TonicSelect } from "./TheorySelects";
 
 /** Pick what an exercise shows on the neck: a scale or a chord, and its tonic. */
 export function TheoryPicker({ value, onChange }: { value: TheoryLink; onChange: (v: TheoryLink) => void }) {
@@ -18,30 +16,14 @@ export function TheoryPicker({ value, onChange }: { value: TheoryLink; onChange:
           { value: "chord", label: "Аккорд" },
         ]}
       />
-      <ScrollRow>
-        {TONICS.map((t) => (
-          <Chip key={t} active={t === value.tonic} onClick={() => set({ tonic: t })}>
-            {noteName(parseNote(t))}
-          </Chip>
-        ))}
-      </ScrollRow>
-      {value.tab === "scale" ? (
-        <ScrollRow>
-          {SCALES.map((s) => (
-            <Chip key={s.id} active={s.id === value.scaleId} sub={s.group} onClick={() => set({ scaleId: s.id, diatonic: 0 })}>
-              {s.name}
-            </Chip>
-          ))}
-        </ScrollRow>
-      ) : (
-        <ScrollRow>
-          {CHORD_TYPES.map((c) => (
-            <Chip key={c.id} active={c.id === value.chordType} onClick={() => set({ chordType: c.id })}>
-              {c.symbol || "maj"}
-            </Chip>
-          ))}
-        </ScrollRow>
-      )}
+      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-2">
+        <TonicSelect value={value.tonic} onChange={(tonic) => set({ tonic })} />
+        {value.tab === "scale" ? (
+          <ScaleSelect value={value.scaleId ?? "minor-pentatonic"} onChange={(scaleId) => set({ scaleId, diatonic: 0 })} />
+        ) : (
+          <ChordSelect value={value.chordType ?? "maj7"} onChange={(chordType) => set({ chordType })} />
+        )}
+      </div>
     </div>
   );
 }

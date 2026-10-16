@@ -1,19 +1,23 @@
 import { useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { ChordDiagram } from "@/components/fretboard/ChordDiagram";
 import { ScaleBoard } from "@/components/fretboard/ScaleBoard";
+import { ChordSelect, ScaleSelect, TonicSelect } from "@/components/fretboard/TheorySelects";
 import { Chip, ScrollRow, Segmented, SectionTitle } from "@/components/ui";
 import { strum } from "@/audio/player";
-import { CHORD_TYPES, voicings } from "@/music/chords";
+import { voicings } from "@/music/chords";
 import { STANDARD_TUNING } from "@/music/fretboard";
-import { SCALES } from "@/music/scales";
 import { theoryView } from "@/music/theoryView";
-import { TONICS, noteName, parseNote } from "@/music/notes";
 import { useSettings } from "@/store/settings";
 import { HeaderNav } from "@/app/Nav";
+import { Glossary } from "./Glossary";
 
 export function TheoryPage() {
   const { theory, setTheory } = useSettings();
   const { tab, tonic, scaleId, chordType, diatonic } = theory;
+  // The glossary is a view of its own, kept in the address so "back" returns to it.
+  const [params, setParams] = useSearchParams();
+  const terms = params.get("view") === "terms";
 
   const view = useMemo(() => theoryView({ tab, tonic, scaleId, chordType, diatonic }), [tab, tonic, scaleId, chordType, diatonic]);
 
@@ -21,16 +25,20 @@ export function TheoryPage() {
 
   return (
     <div className="space-y-3">
-      <header className="flex items-center justify-between gap-3 pt-2">
+      <header className="flex flex-wrap items-center justify-between gap-3 pt-2">
         <h1 className="text-[1.75rem] font-bold tracking-tight">Теория</h1>
         <div className="flex items-center gap-2">
-          <div className="w-52">
+          <div className="w-72 max-[420px]:w-64">
             <Segmented
-              value={tab}
-              onChange={(v) => setTheory({ tab: v, position: 0 })}
+              value={terms ? "terms" : tab}
+              onChange={(v) => {
+                setParams(v === "terms" ? { view: "terms" } : {}, { replace: true });
+                if (v !== "terms") setTheory({ tab: v, position: 0 });
+              }}
               options={[
                 { value: "scale", label: "Лады" },
                 { value: "chord", label: "Аккорды" },
+                { value: "terms", label: "Термины" },
               ]}
             />
           </div>
@@ -38,64 +46,53 @@ export function TheoryPage() {
         </div>
       </header>
 
-      <ScrollRow>
-        {TONICS.map((t) => (
-          <Chip key={t} active={t === tonic} onClick={() => setTheory({ tonic: t })}>
-            {noteName(parseNote(t))}
-          </Chip>
-        ))}
-      </ScrollRow>
-
-      {tab === "scale" ? (
-        <ScrollRow>
-          {SCALES.map((s) => (
-            <Chip key={s.id} active={s.id === scaleId} sub={s.group} onClick={() => setTheory({ scaleId: s.id, diatonic: 0, position: 0 })}>
-              {s.name}
-            </Chip>
-          ))}
-        </ScrollRow>
+      {terms ? (
+        <Glossary />
       ) : (
-        <ScrollRow>
-          {CHORD_TYPES.map((c) => (
-            <Chip key={c.id} active={c.id === chordType} onClick={() => setTheory({ chordType: c.id, position: 0 })}>
-              {c.symbol || "maj"}
-            </Chip>
-          ))}
-        </ScrollRow>
-      )}
-
-      <ScaleBoard
-        title={view.title}
-        subtitle={view.subtitle}
-        tones={view.tones}
-        chord={view.chord}
-        patterns={view.patterns}
-        position={theory.position}
-        onPosition={(position) => setTheory({ position })}
-        chordOnly={tab === "chord"}
-      />
-
-      {tab === "scale" && view.chords.length > 0 && (
         <>
-          <SectionTitle>Аккорды лада — нажми, чтобы подсветить</SectionTitle>
-          <ScrollRow>
-            {view.chords.map((c) => (
-              <Chip key={c.degree} active={c.degree === diatonic} sub={c.symbol} onClick={() => setTheory({ diatonic: c.degree === diatonic ? 0 : c.degree })}>
-                {c.roman}
-              </Chip>
-            ))}
-          </ScrollRow>
-        </>
-      )}
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-2">
+            <TonicSelect value={tonic} onChange={(t) => setTheory({ tonic: t })} />
+            {tab === "scale" ? (
+              <ScaleSelect value={scaleId} onChange={(id) => setTheory({ scaleId: id, diatonic: 0, position: 0 })} />
+            ) : (
+              <ChordSelect value={chordType} onChange={(id) => setTheory({ chordType: id, position: 0 })} />
+            )}
+          </div>
 
-      {vs.length > 0 && (
-        <>
-          <SectionTitle>Аппликатуры — нажми, чтобы сыграть</SectionTitle>
-          <ScrollRow>
-            {vs.map((v) => (
-              <ChordDiagram key={v.group} voicing={v} title={v.group} onPlay={() => strum(v.notes.map((n) => n.midi))} />
-            ))}
-          </ScrollRow>
+          <ScaleBoard
+            title={view.title}
+            subtitle={view.subtitle}
+            tones={view.tones}
+            chord={view.chord}
+            patterns={view.patterns}
+            position={theory.position}
+            onPosition={(position) => setTheory({ position })}
+            chordOnly={tab === "chord"}
+          />
+
+          {tab === "scale" && view.chords.length > 0 && (
+            <>
+              <SectionTitle>Аккорды лада — нажми, чтобы подсветить</SectionTitle>
+              <ScrollRow>
+                {view.chords.map((c) => (
+                  <Chip key={c.degree} active={c.degree === diatonic} sub={c.symbol} onClick={() => setTheory({ diatonic: c.degree === diatonic ? 0 : c.degree })}>
+                    {c.roman}
+                  </Chip>
+                ))}
+              </ScrollRow>
+            </>
+          )}
+
+          {vs.length > 0 && (
+            <>
+              <SectionTitle>Аппликатуры — нажми, чтобы сыграть</SectionTitle>
+              <ScrollRow>
+                {vs.map((v) => (
+                  <ChordDiagram key={v.group} voicing={v} title={v.group} onPlay={() => strum(v.notes.map((n) => n.midi))} />
+                ))}
+              </ScrollRow>
+            </>
+          )}
         </>
       )}
     </div>
