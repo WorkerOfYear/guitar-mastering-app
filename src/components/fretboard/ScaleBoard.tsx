@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { Fretboard } from "./Fretboard";
-import { FullscreenBoard } from "./FullscreenBoard";
-import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
-import { Card, IconButton, Segmented } from "@/components/ui";
+import { Card, Segmented } from "@/components/ui";
 import { haptic } from "@/app/telegram";
 import { cn } from "@/lib/utils";
 import { playNote } from "@/audio/player";
@@ -13,7 +11,8 @@ import { useSettings, type LabelMode } from "@/store/settings";
 export { highlightOf } from "@/music/theoryView";
 
 interface Props {
-  title: string;
+  /** Shown where nothing else names the scale (the Theory screen has its dropdowns instead) */
+  title?: string;
   tones: Tone[];
   chord: ChordHighlight | null;
   patterns: Pattern[];
@@ -24,11 +23,10 @@ interface Props {
   chordOnly?: boolean;
 }
 
-/** Fretboard card: tones, board (a tapped note sounds and lights up its twins), position blocks, label switch, legend, fullscreen. */
+/** Fretboard card: the board across the full width (a tapped note sounds and lights up its twins), position blocks, label switch, legend. */
 export function ScaleBoard({ title, tones, chord, patterns, position: rawPosition, onPosition, chordOnly }: Props) {
   const { fretboard, setFretboard } = useSettings();
   const [selected, setSelected] = useState<FretNote | null>(null);
-  const [fullscreen, setFullscreen] = useState(false);
 
   const position = rawPosition >= patterns.length ? 0 : rawPosition;
   const pattern = position >= 0 ? patterns[position] : null;
@@ -47,77 +45,22 @@ export function ScaleBoard({ title, tones, chord, patterns, position: rawPositio
     playNote(n.midi);
     setSelected((cur) => (cur?.key === n.key ? null : n));
   };
-  const step = (d: number) => {
-    const count = patterns.length;
-    onPosition(position < 0 ? (d > 0 ? 0 : count - 1) : (position + d + count) % count);
-  };
-  const positionLabel = position < 0 ? "Весь гриф" : `Позиция ${position + 1} из ${patterns.length}`;
-  const togglePosition = () => onPosition(position < 0 ? 0 : -1);
-  const rootChroma = chord?.tones[0].chroma ?? tones[0]?.chroma;
-
-  const boardProps = {
-    notes,
-    frets: fretboard.frets,
-    labelMode,
-    leftHanded: fretboard.leftHanded,
-    showOutside: fretboard.showOutside,
-    focus: pattern ? { min: pattern.minFret, max: pattern.maxFret } : { min: 0, max: 0 },
-    selectedChroma: selected?.chroma ?? null,
-    onTap: tap,
-  };
-
-  if (fullscreen) {
-    return (
-      <FullscreenBoard
-        title={title}
-        board={boardProps}
-        positionLabel={positionLabel}
-        onPrev={() => step(-1)}
-        onNext={() => step(1)}
-        onTogglePosition={togglePosition}
-        labelMode={labelMode}
-        labelOptions={labelOptions}
-        onLabelMode={(v) => setFretboard({ labelMode: v })}
-        onClose={() => setFullscreen(false)}
-      />
-    );
-  }
+  // The board fills the width: a position shows its frets (and one either side), "Весь гриф" the whole neck.
+  const range = pattern ? { min: Math.max(0, pattern.minFret - 1), max: Math.min(fretboard.frets, pattern.maxFret + 1) } : null;
 
   return (
     <Card className="px-0 pb-3">
-      <div className="flex items-start justify-between gap-2 px-4">
-        <div className="min-w-0 truncate text-lg font-bold">{title}</div>
-        <div className="flex shrink-0 gap-1.5">
-          <IconButton label="Во весь экран" onClick={() => setFullscreen(true)}>
-            <Maximize2 className="size-4" />
-          </IconButton>
-          <IconButton label="Уменьшить" onClick={() => setFretboard({ zoom: Math.max(0.6, +(fretboard.zoom - 0.15).toFixed(2)) })}>
-            <ZoomOut className="size-4" />
-          </IconButton>
-          <IconButton label="Увеличить" onClick={() => setFretboard({ zoom: Math.min(1.6, +(fretboard.zoom + 0.15).toFixed(2)) })}>
-            <ZoomIn className="size-4" />
-          </IconButton>
-        </div>
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-1.5 px-4">
-        {tones.map((t) => (
-          <span
-            key={t.name + t.interval.label}
-            className="rounded-full px-2.5 py-1 text-xs font-semibold"
-            style={{
-              background: t.chroma === rootChroma ? "var(--root)" : "var(--surface-2)",
-              color: t.chroma === rootChroma ? "var(--on-note)" : "var(--text)",
-            }}
-          >
-            {t.name} <span className="opacity-60">{t.interval.label}</span>
-          </span>
-        ))}
-      </div>
-
-      <div className="mt-3">
-        <Fretboard {...boardProps} zoom={fretboard.zoom} />
-      </div>
+      {title && <div className="truncate px-4 pb-2 text-lg font-bold">{title}</div>}
+      <Fretboard
+        notes={notes}
+        frets={fretboard.frets}
+        labelMode={labelMode}
+        leftHanded={fretboard.leftHanded}
+        showOutside={fretboard.showOutside}
+        range={range}
+        selectedChroma={selected?.chroma ?? null}
+        onTap={tap}
+      />
 
       <div role="radiogroup" aria-label="Позиция" className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(4.25rem,1fr))] gap-1.5 px-4">
         <PositionBlock active={position < 0} onClick={() => onPosition(-1)} title="Весь" sub="гриф" />

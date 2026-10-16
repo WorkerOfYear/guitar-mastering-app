@@ -12,7 +12,6 @@ interface FretboardSettings {
   labelMode: LabelMode;
   leftHanded: boolean;
   frets: number;
-  zoom: number;
   showOutside: boolean;
 }
 
@@ -47,7 +46,7 @@ interface SettingsStore {
 export const useSettings = create<SettingsStore>()(
   persist(
     (set) => ({
-      fretboard: { labelMode: "degree", leftHanded: false, frets: 15, zoom: 1, showOutside: true },
+      fretboard: { labelMode: "degree", leftHanded: false, frets: 15, showOutside: true },
       theory: { tab: "scale", tonic: "A", scaleId: "minor-pentatonic", chordType: "m7", diatonic: 0, position: 0 },
       tabView: "tab",
       theme: "auto",

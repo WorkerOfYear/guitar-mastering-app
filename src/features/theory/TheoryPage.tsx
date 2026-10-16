@@ -60,7 +60,6 @@ export function TheoryPage() {
           </div>
 
           <ScaleBoard
-            title={view.title}
             tones={view.tones}
             chord={view.chord}
             patterns={view.patterns}

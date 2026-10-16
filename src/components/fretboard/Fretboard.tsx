@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 import type { FretNote } from "@/music/fretboard";
 import { STRING_NAMES } from "@/music/fretboard";
 import type { LabelMode } from "@/store/settings";
@@ -8,11 +8,10 @@ interface Props {
   frets: number;
   labelMode: LabelMode;
   leftHanded?: boolean;
-  zoom?: number;
   /** Dimmed notes outside the selected position are drawn only when true */
   showOutside?: boolean;
-  /** Fret range to scroll into view (the selected position) */
-  focus?: { min: number; max: number } | null;
+  /** Frets to show (the selected position); the whole neck when missing. Either way the board fills the width. */
+  range?: { min: number; max: number } | null;
   selectedChroma?: number | null;
   onTap?: (note: FretNote) => void;
 }
@@ -53,13 +52,12 @@ function label(n: FretNote, mode: LabelMode) {
   }
 }
 
-/** Natural size of the board in SVG units (before zoom). */
+/** Natural size of the whole board in SVG units. */
 export function fretboardSize(frets: number) {
   return { width: wirePositions(frets)[frets] + 18, height: TOP + GAP * 5 + 40 };
 }
 
-export function Fretboard({ notes, frets, labelMode, leftHanded = false, zoom = 1, showOutside = true, focus, selectedChroma, onTap }: Props) {
-  const scroller = useRef<HTMLDivElement>(null);
+export function Fretboard({ notes, frets, labelMode, leftHanded = false, showOutside = true, range, selectedChroma, onTap }: Props) {
   const wires = useMemo(() => wirePositions(frets), [frets]);
   const { width: W, height: H } = fretboardSize(frets);
   const flip = (x: number) => (leftHanded ? W - x : x);
@@ -67,28 +65,19 @@ export function Fretboard({ notes, frets, labelMode, leftHanded = false, zoom = 
   const y = (s: number) => TOP + (5 - s) * GAP; // high e on top, like tab
   const midY = (a: number) => TOP + a * GAP;
 
-  // Keep the selected position centred when it changes.
-  useEffect(() => {
-    const el = scroller.current;
-    if (!el || !focus) return;
-    let a = noteX(focus.min) - R - 20;
-    let b = noteX(Math.min(frets, focus.max)) + R + 20;
-    if (leftHanded) [a, b] = [W - b, W - a];
-    const left = a * zoom - Math.max(0, (el.clientWidth - (b - a) * zoom) / 2);
-    el.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
-  }, [focus?.min, focus?.max, zoom, leftHanded, frets]);
+  // The part of the board in view: from the wire before the first fret to just past the last one.
+  let [left, right] = range ? [range.min <= 0 ? 0 : wires[range.min - 1] - 6, range.max >= frets ? W : wires[range.max] + 10] : [0, W];
+  if (leftHanded) [left, right] = [W - right, W - left];
 
   const visible = notes.filter((n) => n.fret <= frets && (showOutside || n.inPosition));
   // Draw notes of the selected position last so they sit on top.
   const ordered = [...visible].sort((a, b) => Number(a.inPosition) - Number(b.inPosition));
 
   return (
-    <div ref={scroller} className="no-scrollbar overflow-x-auto overscroll-x-contain" style={{ touchAction: "pan-x pan-y" }}>
+    <div>
       <svg
-        width={W * zoom}
-        height={H * zoom}
-        viewBox={`0 0 ${W} ${H}`}
-        className="block select-none"
+        viewBox={`${left} 0 ${right - left} ${H}`}
+        className="block h-auto w-full select-none"
         role="img"
         aria-label="Гриф гитары"
       >
