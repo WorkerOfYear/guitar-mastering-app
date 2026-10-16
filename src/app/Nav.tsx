@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { DropdownMenu } from "radix-ui";
 import {
@@ -130,19 +130,29 @@ function BarItem({ to, icon: Icon, label, active }: { to: string; icon: LucideIc
 export function SectionsMenu() {
   const { pathname } = useLocation();
   const current = sectionOf(pathname);
+  // Each open and each close turns the icon another 45° clockwise: square → diamond → square, never back.
+  const [turns, setTurns] = useState(0);
+  // Opened by mouse or finger: don't hand the focus back to the button on close, or its focus ring lights up.
+  const byPointer = useRef(false);
   return (
-    <DropdownMenu.Root>
+    <DropdownMenu.Root onOpenChange={() => setTurns((t) => t + 1)}>
       {/* No press-shrink here: the menu opens on press and is placed by the trigger, so a shrunken
-          trigger made it jump a few pixels when the press ended. */}
-      <DropdownMenu.Trigger asChild>
-        {/* Icon only (the section's name is already the page title); while the list is open the square
-            of the icon turns 45° into a diamond. */}
-        <Button variant="secondary" size="icon" aria-label="Разделы" title="Разделы" className="group size-11 active:scale-100">
-          <LayoutGrid className="!size-5 transition-transform duration-300 ease-out group-data-[state=open]:rotate-45" />
+          trigger made it jump a few pixels when the press ended. Icon only: the section's name is already the page title. */}
+      <DropdownMenu.Trigger
+        asChild
+        onPointerDown={() => (byPointer.current = true)}
+        onKeyDown={() => (byPointer.current = false)}
+      >
+        <Button variant="secondary" size="icon" aria-label="Разделы" title="Разделы" className="size-11 active:scale-100">
+          <LayoutGrid className="!size-5 transition-transform duration-300 ease-out" style={{ rotate: `${turns * 45}deg` }} />
         </Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content align="end" sideOffset={6} className="z-50 min-w-56 rounded-2xl border border-line bg-surface p-1.5 text-fg shadow-xl">
+        <DropdownMenu.Content
+          align="end"
+          sideOffset={6}
+          onCloseAutoFocus={(e) => byPointer.current && e.preventDefault()}
+          className="z-50 min-w-56 rounded-2xl border border-line bg-surface p-1.5 text-fg shadow-xl">
           {SECTIONS.map((s) => (
             <DropdownMenu.Item key={s.to} asChild>
               <Link
