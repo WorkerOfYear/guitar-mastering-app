@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
+import { DropdownMenu } from "radix-ui";
 import { toast } from "sonner";
 import {
   Check,
@@ -692,32 +693,42 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
       <input ref={audioInput} type="file" accept={AUDIO_ACCEPT} hidden onChange={(e) => e.target.files?.[0] && void uploadAudio(e.target.files[0])} />
     );
     const videoTitle = grabbing ? `Беру звук из видео…${grabAttempt > 1 ? ` (${grabAttempt})` : ""}` : "Из видео";
-    const bindTiles = !bound && (
-      <div className="space-y-2">
-        <div className="px-1 text-xs font-semibold text-muted">Под какой звук играть табы</div>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            disabled={!videoOk || grabbing}
-            onClick={() => void grabAudio()}
-            className="flex flex-col items-center gap-1 rounded-2xl border border-line px-2 py-3 text-center transition-colors hover:bg-surface-2 disabled:opacity-50 [&_svg]:size-6"
-          >
-            <span className="text-accent">{grabbing ? <LoaderCircle className="animate-spin" /> : <Video />}</span>
-            <span className="text-sm font-semibold">{videoTitle}</span>
-            <span className="text-[11px] leading-tight text-muted">{videoHint}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => audioInput.current?.click()}
-            className="flex flex-col items-center gap-1 rounded-2xl border border-line px-2 py-3 text-center transition-colors hover:bg-surface-2 [&_svg]:size-6"
-          >
-            <span className="text-accent">
-              <Headphones />
-            </span>
-            <span className="text-sm font-semibold">Свой файл</span>
-            <span className="text-[11px] leading-tight text-muted">mp3, m4a, wav</span>
-          </button>
-        </div>
+    // "Привязать аудио ▾" opens the two ways: the video's sound or a file of one's own.
+    const bindMenu = !bound && (
+      <div className="flex">
+        <DropdownMenu.Root modal={false}>
+          <DropdownMenu.Trigger asChild>
+            <Button variant="dashed" size="sm" className="group h-10 active:scale-100">
+              {grabbing ? <LoaderCircle className="size-4 animate-spin" /> : <Link2 className="size-4" />} {grabbing ? videoTitle : "Привязать аудио"}
+              <ChevronDown className="size-4 text-muted transition-transform group-data-[state=open]:rotate-180" />
+            </Button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content align="start" sideOffset={6} className="z-50 w-72 rounded-2xl border border-line bg-surface p-1.5 text-fg shadow-xl">
+              <DropdownMenu.Item
+                disabled={!videoOk}
+                onSelect={() => void grabAudio()}
+                className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2 outline-none data-[disabled]:cursor-default data-[disabled]:opacity-50 data-[highlighted]:bg-surface-2"
+              >
+                <Video className="size-5 shrink-0 text-accent" />
+                <span>
+                  <span className="block text-sm font-semibold">Звук из видео</span>
+                  <span className="block text-xs text-muted">{videoHint}</span>
+                </span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                onSelect={() => audioInput.current?.click()}
+                className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2 outline-none data-[highlighted]:bg-surface-2"
+              >
+                <Headphones className="size-5 shrink-0 text-accent" />
+                <span>
+                  <span className="block text-sm font-semibold">Свой файл</span>
+                  <span className="block text-xs text-muted">mp3, m4a, wav с устройства</span>
+                </span>
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
       </div>
     );
     const strip = <SectionStrip item={item} />;
@@ -739,7 +750,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
         {strip}
         {fileRow}
         {audioFileInput}
-        {audioRow || bindTiles}
+        {audioRow || bindMenu}
         {museRow}
       </div>
     );
