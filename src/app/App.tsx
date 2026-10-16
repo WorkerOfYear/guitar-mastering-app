@@ -73,17 +73,15 @@ function Shell() {
         <Backdrop />
         <TelegramBack />
         <main
-          className={`mx-auto max-w-3xl px-4 pt-[max(env(safe-area-inset-top),0.5rem)] ${location.pathname === "/session" ? "pb-10" : "pb-28 md:pb-10"}`}
+          className={`relative mx-auto max-w-3xl px-4 pt-[max(env(safe-area-inset-top),0.5rem)] ${location.pathname === "/session" ? "pb-10" : "pb-28 md:pb-10"}`}
         >
-          <div className="flex items-center gap-2">
-            <BackButton />
-            {/* Inner screens (a card, a form): the sections menu sits in the back row; main screens have it by the title. */}
-            {location.pathname !== "/session" && !TAB_ROOTS.includes(location.pathname) && (
-              <div className="ml-auto hidden pt-2 md:block">
-                <SectionsMenu />
-              </div>
-            )}
-          </div>
+          {/* Wide screens: the sections menu always in the same spot, top right, on every screen (page titles leave room for it). */}
+          {location.pathname !== "/session" && (
+            <div className="absolute right-4 top-[max(env(safe-area-inset-top),0.5rem)] z-10 hidden md:block">
+              <SectionsMenu />
+            </div>
+          )}
+          <BackButton />
           {/* Opacity only: a transform here would break position: fixed inside the pages. */}
           <m.div key={location.pathname} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2, ease: "easeOut" }}>
             <Suspense fallback={null}>

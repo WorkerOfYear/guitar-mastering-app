@@ -127,17 +127,6 @@ function BarItem({ to, icon: Icon, label, active }: { to: string; icon: LucideIc
   );
 }
 
-/** Wide screens, in the title row of a section's main screen: the sections menu. */
-export function HeaderNav() {
-  const { pathname } = useLocation();
-  if (!SECTION_ROOTS.includes(pathname)) return null;
-  return (
-    <div className="hidden md:block">
-      <SectionsMenu />
-    </div>
-  );
-}
-
 /** Wide screens: a dropdown with every section. */
 export function SectionsMenu() {
   const { pathname } = useLocation();
@@ -147,8 +136,11 @@ export function SectionsMenu() {
       {/* No press-shrink here: the menu opens on press and is placed by the trigger, so a shrunken
           trigger made it jump a few pixels when the press ended. */}
       <DropdownMenu.Trigger asChild>
-        <Button variant="secondary" className="h-11 active:scale-100">
-          <LayoutGrid className="size-4" /> {current?.label ?? "Разделы"} <ChevronDown className="size-4 text-muted" />
+        {/* Icon only (the section's name is already the page title), one width everywhere so it never moves;
+            the arrow turns over while the list is open. */}
+        <Button variant="secondary" aria-label="Разделы" title="Разделы" className="group h-11 w-[4.5rem] gap-1.5 px-0 active:scale-100">
+          <LayoutGrid className="size-5" />
+          <ChevronDown className="size-4 text-muted transition-transform group-data-[state=open]:rotate-180" />
         </Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
