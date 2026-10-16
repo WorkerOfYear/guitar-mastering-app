@@ -375,7 +375,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
   const sectionCount = item.sections?.length ?? 0;
   const empty = !item.tabFile && !item.tab && !item.audioFile && (scoreOnly || (!item.video && !item.theory));
   const [showSync, setShowSync] = useState(false);
-  const [audioMenu, setAudioMenu] = useState(false);
+  const audioInput = useRef<HTMLInputElement>(null);
   const tabView = useSettings((s) => s.tabView);
   const setTabView = useSettings((s) => s.setTabView);
 
@@ -648,21 +648,6 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
       </Select>
     );
     const bound = !!item.audioFile;
-    // The recording the notes play along with: how it's bound, or the way to bind one.
-    const audioOptions = !bound && audioMenu && (
-      <div className="space-y-2">
-        {item.video && (
-          <AddRow
-            icon={<WandSparkles />}
-            title={grabbing ? `Беру звук из видео…${grabAttempt > 1 ? ` (попытка ${grabAttempt})` : ""}` : "Звук из видео"}
-            sub="табы пойдут за записью из видео"
-            busy={grabbing}
-            onClick={() => void grabAudio()}
-          />
-        )}
-        <AddRow icon={<Headphones />} title="Свой файл" sub="mp3, m4a, wav" accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)} />
-      </div>
-    );
     const audioRow = bound && (
       <div className="space-y-2">
         <MaterialRow
@@ -700,10 +685,40 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
         )}
       </div>
     );
-    const bindBtn = !bound && (
-      <Button variant={audioMenu ? "secondary" : "dashed"} size="sm" onClick={() => setAudioMenu(!audioMenu)} className="h-10">
-        <Link2 className="size-4" /> Привязать аудио
-      </Button>
+    // Two ways to bind the sound: from the item's video, or a file of one's own.
+    const videoOk = !!item.video && serverReady(audioServer);
+    const videoHint = !item.video ? "сначала добавь блок «Видео»" : !serverReady(audioServer) ? "нужен сервер звука в настройках" : "табы пойдут за записью из видео";
+    const audioFileInput = (
+      <input ref={audioInput} type="file" accept={AUDIO_ACCEPT} hidden onChange={(e) => e.target.files?.[0] && void uploadAudio(e.target.files[0])} />
+    );
+    const videoTitle = grabbing ? `Беру звук из видео…${grabAttempt > 1 ? ` (${grabAttempt})` : ""}` : "Из видео";
+    const bindTiles = !bound && (
+      <div className="space-y-2">
+        <div className="px-1 text-xs font-semibold text-muted">Под какой звук играть табы</div>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            disabled={!videoOk || grabbing}
+            onClick={() => void grabAudio()}
+            className="flex flex-col items-center gap-1 rounded-2xl border border-line px-2 py-3 text-center transition-colors hover:bg-surface-2 disabled:opacity-50 [&_svg]:size-6"
+          >
+            <span className="text-accent">{grabbing ? <LoaderCircle className="animate-spin" /> : <Video />}</span>
+            <span className="text-sm font-semibold">{videoTitle}</span>
+            <span className="text-[11px] leading-tight text-muted">{videoHint}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => audioInput.current?.click()}
+            className="flex flex-col items-center gap-1 rounded-2xl border border-line px-2 py-3 text-center transition-colors hover:bg-surface-2 [&_svg]:size-6"
+          >
+            <span className="text-accent">
+              <Headphones />
+            </span>
+            <span className="text-sm font-semibold">Свой файл</span>
+            <span className="text-[11px] leading-tight text-muted">mp3, m4a, wav</span>
+          </button>
+        </div>
+      </div>
     );
     const strip = <SectionStrip item={item} />;
 
@@ -723,12 +738,8 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
         )}
         {strip}
         {fileRow}
-        {audioRow || (
-          <>
-            <div className="flex">{bindBtn}</div>
-            {audioOptions}
-          </>
-        )}
+        {audioFileInput}
+        {audioRow || bindTiles}
         {museRow}
       </div>
     );

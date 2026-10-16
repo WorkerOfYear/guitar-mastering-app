@@ -260,7 +260,7 @@ export default function TabPlayer({
         <div ref={host} className="at-host px-2" />
       </div>
       {(loading || (!ready && !error)) && (
-        <div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <span className="flex items-center gap-1.5 rounded-full bg-surface-2/90 px-3 py-1 text-xs text-muted shadow-sm backdrop-blur">
             <LoaderCircle className="size-3.5 animate-spin" />
             {loading ? "Загружаю таб…" : "Загружаю звук гитары…"}
