@@ -1,48 +1,49 @@
 @import "tailwindcss";
 @import "@fontsource-variable/inter";
 
-/* Design tokens. Dark is the default (phone on a music stand); inside Telegram they follow its theme. */
+/* Design tokens. Warm neutrals with a blue accent; notes on the neck: coral tonic, red guide tones, teal chord.
+   Dark is the default (phone on a music stand); inside Telegram they follow its theme. */
 :root {
-  --bg: #111214;
-  --surface: #1b1d21;
-  --surface-2: #25282d;
-  --border: #33373d;
-  --text: #f1f3f5;
-  --muted: #9aa1a9;
-  --accent: #f59f00;
-  --on-accent: #1a1a1a;
-  --root: #f59f00;
-  --guide: #ff6b6b;
-  --chord: #4dabf7;
-  --scale: #c3c8ce;
-  --on-note: #101113;
-  --good: #51cf66;
-  --fret-wood: #2a2420;
-  --fret-wire: #8c8f93;
-  --string: #c9ccd0;
-  --inlay: #4a4540;
+  --bg: #1f1e1d;
+  --surface: #262624;
+  --surface-2: #30302e;
+  --border: #3d3c38;
+  --text: #f0eee6;
+  --muted: #a19f96;
+  --accent: #378add;
+  --on-accent: #ffffff;
+  --root: #d85a30;
+  --guide: #e24b4a;
+  --chord: #1d9e75;
+  --scale: #b4b2a9;
+  --on-note: #ffffff;
+  --good: #639922;
+  --fret-wood: #2b2723;
+  --fret-wire: #8c8a84;
+  --string: #c9c6bd;
+  --inlay: #4a4640;
   color-scheme: dark;
 }
 
 :root[data-theme="light"] {
-  --bg: #f4f5f7;
+  --bg: #f5f4ef;
   --surface: #ffffff;
-  --surface-2: #eef0f3;
-  --border: #dde1e6;
-  --text: #16181b;
-  --muted: #697078;
-  --accent: #e67700;
+  --surface-2: #efede6;
+  --border: #e3e0d6;
+  --text: #1f1e1d;
+  --muted: #6b6963;
+  --accent: #2b78c6;
   --on-accent: #ffffff;
-  --root: #e67700;
-  --guide: #e03131;
-  --chord: #1c7ed6;
-  --scale: #495057;
+  --root: #d85a30;
+  --guide: #d33f3e;
+  --chord: #138a66;
+  --scale: #5f5e5a;
   --on-note: #ffffff;
-  --good: #2b8a3e;
-  --fret-wood: #efe6dc;
-  --fret-wire: #a0a4a8;
-  --string: #6c7177;
-  --inlay: #d6cabd;
+  --good: #3b6d11;
+  --fret-wood: #efe9df;
+  --fret-wire: #a5a29a;
+  --string: #6e6c66;
+  --inlay: #d8d0c2;
   color-scheme: light;
 }
 
@@ -62,7 +63,7 @@
   --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
   /* shadcn/ui names, so components added with `npx shadcn add` pick up the same theme.
-     Our own names win where they clash: `text-muted` is a text color, `accent` is the orange. */
+     Our own names win where they clash: `text-muted` is a text color, `accent` is the blue. */
   --color-background: var(--bg);
   --color-foreground: var(--text);
   --color-card: var(--surface);

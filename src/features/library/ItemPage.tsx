@@ -1,17 +1,18 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { TempoChart } from "@/components/charts/TempoChart";
-import { Check, ExternalLink, Pencil, Plus, SearchX, Trash2, X } from "lucide-react";
-import { Badge, Button, Card, Chip, Input, NumberField, ScrollRow, SectionTitle, Textarea } from "@/components/ui";
+import { Check, Dumbbell, ExternalLink, Pencil, Plus, SearchX, Trash2, X } from "lucide-react";
+import { Badge, Button, Card, Input, NumberField, SectionTitle, Textarea } from "@/components/ui";
 import { TYPE_ICON } from "@/components/ui/icons";
 import { linkLabel } from "@/features/session/EntryCard";
 import { MediaCard } from "./MediaCard";
 import { ItemBoard } from "@/components/fretboard/ItemBoard";
-import { isMastered, masteredPatch } from "@/lib/library";
+import { hasBlock, isExercise, isMastered, masteredPatch } from "@/lib/library";
+import { ExerciseBlocks } from "./ExerciseBlocks";
 import { cleanBpm, entriesFor } from "@/lib/progress";
 import { formatDay, localDate } from "@/lib/date";
 import { useData } from "@/store/data";
-import { STATUS_META, SUBDIVISION_META, TYPE_META, type ItemStatus, type Section, type Subdivision } from "@/shared/types";
+import { STATUS_META, TYPE_META, type ItemStatus, type Section } from "@/shared/types";
 
 const NEXT_STATUS: Record<ItemStatus, ItemStatus> = { queue: "active", active: "rotation", rotation: "queue", archived: "queue" };
 const SECTION_STYLE: Record<ItemStatus, string> = {
@@ -39,7 +40,8 @@ export function ItemPage() {
         Элемент не найден
       </div>
     );
-  const TypeIcon = TYPE_ICON[item.type];
+  const exercise = isExercise(item);
+  const TypeIcon = exercise ? Dumbbell : TYPE_ICON[item.type];
 
   const update = (patch: Parameters<typeof data.updateItem>[1]) => data.updateItem(item.id, patch);
   const today = localDate();
@@ -54,7 +56,7 @@ export function ItemPage() {
     <div className="space-y-3 pt-2">
       <div className="flex flex-wrap gap-1.5">
         <Badge variant="soft">
-          <TypeIcon /> {TYPE_META[item.type].title}
+          <TypeIcon /> {exercise ? "Упражнение" : TYPE_META[item.type].title}
         </Badge>
         {item.category && <Badge>{item.category}</Badge>}
       </div>
@@ -86,8 +88,14 @@ export function ItemPage() {
         <Check /> {isMastered(item) ? "Разобрано — вернуть в работу" : "Отметить разобранным"}
       </Button>
 
-      <MediaCard item={item} />
-      {item.theory && <ItemBoard link={item.theory} />}
+      {exercise ? (
+        <ExerciseBlocks item={item} />
+      ) : (
+        <>
+          <MediaCard item={item} />
+          {item.theory && <ItemBoard link={item.theory} />}
+        </>
+      )}
 
       {isSong && (
         <>
@@ -160,54 +168,43 @@ export function ItemPage() {
         </>
       )}
 
-      {!isSong && (
+      {(!exercise || hasBlock(item, "metronome") || history.length > 0) && (
         <>
-          <SectionTitle>Темп</SectionTitle>
-          <Card className="space-y-3">
-            <div className="grid grid-cols-2 gap-2">
-              <NumberField label="Стартовый bpm" min={0} value={item.startBpm ?? 0} onChange={(v) => update({ startBpm: v || null })} />
-              <NumberField label="Целевой bpm" min={0} value={item.targetBpm ?? 0} onChange={(v) => update({ targetBpm: v || null })} />
-            </div>
-            <ScrollRow>
-              {([1, 2, 3, 4, 6] as Subdivision[]).map((s) => (
-                <Chip key={s} active={item.subdivision === s} onClick={() => update({ subdivision: s })}>
-                  {SUBDIVISION_META[s]}
-                </Chip>
-              ))}
-            </ScrollRow>
+          <SectionTitle>Прогресс{section ? `: ${section.title}` : ""}</SectionTitle>
+          <Card>
+            <TempoChart entries={history} target={section?.targetBpm ?? (isSong ? null : item.targetBpm)} />
+            {history.length > 0 && (
+              <div className="mt-2 divide-y divide-line/60">
+                {history.slice(0, 8).map((t) => (
+                  <div key={t.at} className="flex items-center gap-2 py-2 text-sm">
+                    <span className={`size-2 shrink-0 rounded-full ${RESULT_DOT[t.result]}`} />
+                    <span className="w-16 shrink-0 text-muted">{formatDay(t.date)}</span>
+                    <span className="min-w-0 flex-1 truncate text-right">
+                      <b className="tabular-nums">{t.bpm ?? "—"}</b> · {RESULT[t.result]}
+                      {t.note && <span className="text-muted"> · {t.note}</span>}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
         </>
       )}
 
-      <SectionTitle>Прогресс{section ? `: ${section.title}` : ""}</SectionTitle>
-      <Card>
-        <TempoChart entries={history} target={section?.targetBpm ?? (isSong ? null : item.targetBpm)} />
-        {history.length > 0 && (
-          <div className="mt-2 divide-y divide-line/60">
-            {history.slice(0, 8).map((t) => (
-              <div key={t.at} className="flex items-center gap-2 py-2 text-sm">
-                <span className={`size-2 shrink-0 rounded-full ${RESULT_DOT[t.result]}`} />
-                <span className="w-16 shrink-0 text-muted">{formatDay(t.date)}</span>
-                <span className="min-w-0 flex-1 truncate text-right">
-                  <b className="tabular-nums">{t.bpm ?? "—"}</b> · {RESULT[t.result]}
-                  {t.note && <span className="text-muted"> · {t.note}</span>}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      <SectionTitle>Описание и заметки</SectionTitle>
-      <Card className="space-y-2">
-        <Textarea value={item.description ?? ""} onChange={(e) => update({ description: e.target.value })} rows={3} placeholder="Что и как играть" />
-        <Textarea
-          value={item.notes ?? ""}
-          onChange={(e) => update({ notes: e.target.value })}
-          rows={3}
-          placeholder="Заметки: на что обратить внимание, где ошибаюсь"
-        />
-      </Card>
+      {!exercise && (
+        <>
+          <SectionTitle>Описание и заметки</SectionTitle>
+          <Card className="space-y-2">
+            <Textarea value={item.description ?? ""} onChange={(e) => update({ description: e.target.value })} rows={3} placeholder="Что и как играть" />
+            <Textarea
+              value={item.notes ?? ""}
+              onChange={(e) => update({ notes: e.target.value })}
+              rows={3}
+              placeholder="Заметки: на что обратить внимание, где ошибаюсь"
+            />
+          </Card>
+        </>
+      )}
 
       <SectionTitle>Ссылки</SectionTitle>
       <Card className="space-y-2">
@@ -259,7 +256,7 @@ export function ItemPage() {
         </div>
       ) : (
         <Button variant="destructive-ghost" onClick={() => setConfirmDelete(true)} className="w-full">
-          <Trash2 className="size-4" /> Удалить элемент
+          <Trash2 className="size-4" /> {exercise ? "Удалить упражнение" : "Удалить произведение"}
         </Button>
       )}
     </div>

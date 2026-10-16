@@ -12,7 +12,8 @@ import { TodayPage } from "@/features/today/TodayPage";
 const page = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) => lazy(() => load().then((m) => ({ default: m[name] })));
 const LibraryPage = page(() => import("@/features/library/LibraryPage"), "LibraryPage");
 const ItemPage = page(() => import("@/features/library/ItemPage"), "ItemPage");
-const NewItemPage = page(() => import("@/features/library/NewItemPage"), "NewItemPage");
+const NewExercisePage = page(() => import("@/features/library/NewExercisePage"), "NewExercisePage");
+const NewPiecePage = page(() => import("@/features/library/NewPiecePage"), "NewPiecePage");
 const TheoryPage = page(() => import("@/features/theory/TheoryPage"), "TheoryPage");
 const ProgressPage = page(() => import("@/features/progress/ProgressPage"), "ProgressPage");
 const SettingsPage = page(() => import("@/features/settings/SettingsPage"), "SettingsPage");
@@ -76,7 +77,9 @@ function Shell() {
               <Routes location={location}>
                 <Route path="/" element={<StartPage />} />
                 <Route path="/library" element={<LibraryPage />} />
-                <Route path="/library/new" element={<NewItemPage />} />
+                <Route path="/library/new" element={<Navigate to="/library/new/exercise" replace />} />
+                <Route path="/library/new/exercise" element={<NewExercisePage />} />
+                <Route path="/library/new/piece" element={<NewPiecePage />} />
                 <Route path="/library/:id" element={<ItemPage />} />
                 <Route path="/theory" element={<TheoryPage />} />
                 <Route path="/progress" element={<ProgressPage />} />

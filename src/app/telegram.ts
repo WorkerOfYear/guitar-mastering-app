@@ -30,18 +30,14 @@ export function initTelegram() {
   tg.ready();
   tg.expand();
   tg.disableVerticalSwipes?.(); // horizontal fretboard scrolling shouldn't close the app
+  // Light or dark follows Telegram; the colors are the app's own, and Telegram's header takes the app's background.
   const apply = () => {
     const root = document.documentElement;
-    const p = tg.themeParams;
     root.dataset.theme = tg.colorScheme;
-    const set = (name: string, value?: string) => value && root.style.setProperty(name, value);
-    set("--bg", p.secondary_bg_color || p.bg_color);
-    set("--surface", p.section_bg_color || p.bg_color);
-    set("--text", p.text_color);
-    set("--muted", p.hint_color);
-    if (p.secondary_bg_color) {
-      tg.setHeaderColor?.(p.secondary_bg_color);
-      tg.setBackgroundColor?.(p.secondary_bg_color);
+    const bg = getComputedStyle(root).getPropertyValue("--bg").trim();
+    if (bg) {
+      tg.setHeaderColor?.(bg);
+      tg.setBackgroundColor?.(bg);
     }
   };
   apply();

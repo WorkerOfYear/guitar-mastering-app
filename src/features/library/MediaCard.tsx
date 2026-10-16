@@ -163,8 +163,11 @@ function FileAction({ label, accept, onFile }: { label: string; accept: string; 
   );
 }
 
-/** Video, tabs and recording of an item: the players up front, everything else in the "Материалы" sheet. */
-export function MediaCard({ item }: { item: Item }) {
+/**
+ * Video, tabs and recording of an item: the players up front, everything else in the "Материалы" sheet.
+ * `scoreOnly`: just the notes and their recording — an exercise's "Ноты" block (its video and neck are blocks of their own).
+ */
+export function MediaCard({ item, scoreOnly = false }: { item: Item; scoreOnly?: boolean }) {
   const { updateItem } = useData();
   const [file, setFile] = useState<ArrayBuffer | null>(null);
   const fileRef = useRef<ArrayBuffer | null>(null);
@@ -342,17 +345,17 @@ export function MediaCard({ item }: { item: Item }) {
 
   const synced = !!item.audioSync?.length;
   const sectionCount = item.sections?.length ?? 0;
-  const empty = !item.video && !item.tabFile && !item.tab && !item.audioFile && !item.theory;
+  const empty = !item.tabFile && !item.tab && !item.audioFile && (scoreOnly || (!item.video && !item.theory));
   const [showSync, setShowSync] = useState(false);
 
   const badges = (
     <>
-      {item.theory && (
+      {item.theory && !scoreOnly && (
         <Badge variant="soft">
           <Grid3x3 /> гриф
         </Badge>
       )}
-      {item.video && (
+      {item.video && !scoreOnly && (
         <Badge variant="soft">
           <Video /> видео
         </Badge>
@@ -385,7 +388,7 @@ export function MediaCard({ item }: { item: Item }) {
   const materials = (
     <div className="space-y-2">
       {/* Video */}
-      {item.video && !editVideo ? (
+      {scoreOnly ? null : item.video && !editVideo ? (
         <MaterialRow
           icon={<Video />}
           title="Видео YouTube"
@@ -443,7 +446,7 @@ export function MediaCard({ item }: { item: Item }) {
       )}
 
       {/* The neck: a scale or a chord shown on the fretboard */}
-      {item.theory && !editBoard ? (
+      {scoreOnly ? null : item.theory && !editBoard ? (
         <MaterialRow
           icon={<Grid3x3 />}
           title="Гриф"
@@ -541,12 +544,14 @@ export function MediaCard({ item }: { item: Item }) {
       <Card className="space-y-3 p-3">
         {empty ? (
           <>
-            <div className="px-1 text-sm text-muted">Добавь видео, табы, запись или гриф — под них и будешь играть.</div>
+            <div className="px-1 text-sm text-muted">
+              {scoreOnly ? "Загрузи ноты (Guitar Pro, MusicXML) или запись — под них и будешь играть." : "Добавь видео, табы, запись или гриф — под них и будешь играть."}
+            </div>
             {materials}
           </>
         ) : (
           <>
-            {item.video && <YouTubePlayer videoId={item.video.youtubeId} start={item.video.start} playing={false} />}
+            {item.video && !scoreOnly && <YouTubePlayer videoId={item.video.youtubeId} start={item.video.start} playing={false} />}
             {hasTab && mediaReady && (
               <Suspense fallback={<div className="h-72 animate-pulse rounded-3xl border border-line bg-surface" />}>
                 <TabPlayer

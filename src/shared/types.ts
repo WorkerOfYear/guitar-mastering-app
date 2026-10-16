@@ -37,6 +37,9 @@ export interface TheoryLink {
   diatonic?: number;
 }
 
+/** Building blocks of an exercise, in the order they appear on its card (and open in a session). */
+export type BlockId = "video" | "score" | "board" | "metronome" | "notes" | "recorder";
+
 export interface Item {
   id: string;
   type: ItemType;
@@ -66,6 +69,8 @@ export interface Item {
   audioSync?: SyncPoint[];
   /** Repeats (by closing bar) the recording plays only once — switched off when playing along with it */
   audioUnrepeat?: number[];
+  /** An exercise's blocks; when missing they follow from the fields that are filled in */
+  blocks?: BlockId[];
   /** How long this item takes in a session; otherwise the block time is split evenly */
   minutes?: number;
   notes?: string;

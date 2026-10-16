@@ -18,7 +18,8 @@ import { ImprovPanel } from "@/features/improv/ImprovPanel";
 import { formatClock, useNow, useWakeLock } from "@/lib/hooks";
 import { localDate } from "@/lib/date";
 import { findSection, startingBpm, unitTitle } from "@/lib/progress";
-import { MATERIAL_LABEL, materialsOf, type Material } from "@/lib/library";
+import { MATERIAL_LABEL, hasBlock, materialsOf, withMetronome, type Material } from "@/lib/library";
+import { RecordButton } from "@/features/library/Takes";
 import { loadAudioFile, loadTabFile } from "@/lib/tabFiles";
 import { audioBlob } from "@/lib/audioType";
 import { SourceSwitch } from "@/features/library/MediaCard";
@@ -116,8 +117,8 @@ export function SessionPage() {
   const [picked, setPicked] = useState<{ slot: string; material: Material } | null>(null);
   const material = picked?.slot === slotKey && materials.includes(picked.material) ? picked.material : materials[0];
 
-  // Plain exercises (just a description or the neck) and improvisation play along with the metronome.
-  const usesMetronome = !!block && (block.kind === "improv" || (!!item && (!material || material === "board")));
+  // Improvisation, and exercises with the metronome block while nothing else plays (just the card or the neck).
+  const usesMetronome = !!block && (block.kind === "improv" || (!!item && (!material || material === "board") && withMetronome(item)));
   useEffect(() => {
     if (phase === "play" && usesMetronome) startMetronome();
     else stopMetronome();
@@ -231,6 +232,10 @@ export function SessionPage() {
         />
       )}
       <Stage block={block.kind} entry={entry} item={item} material={material} playing={playing} control={control} onBlocked={setBlocked} />
+
+      {block.kind !== "improv" && item && hasBlock(item, "recorder") && (
+        <RecordButton key={slotKey} itemId={item.id} bpm={withMetronome(item) ? useMetronome.getState().bpm : null} className="mt-3 w-full" />
+      )}
 
       {block.kind === "improv" && block.improv && (
         <div className="mt-3">
@@ -395,7 +400,7 @@ function Stage({ block, entry, item, material, playing, control, onBlocked }: St
         <Description item={item} />
       </div>
     );
-  if (material === "notes") {
+  if (material === "score") {
     // A Guitar Pro file with its recording comes first: the notes follow the sound.
     if (item.tabFile && item.audioFile) return <SongStage key={songKey} item={item} entry={entry} playing={playing} control={control} onBlocked={onBlocked} />;
     if (item.tab) return <TabStage key={item.id} item={item} playing={playing} control={control} onBlocked={onBlocked} />;
@@ -406,7 +411,7 @@ function Stage({ block, entry, item, material, playing, control, onBlocked }: St
     <div className="space-y-3">
       {material === "board" && item.theory && <ItemBoard link={item.theory} />}
       <EntryCard entry={entry} />
-      <CompactMetronome />
+      {withMetronome(item) && <CompactMetronome />}
     </div>
   );
 }

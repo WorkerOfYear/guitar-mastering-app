@@ -69,7 +69,7 @@ export function TodayPage() {
                 <div className="mt-0.5 text-sm text-muted">Добавь упражнения и песни — они появятся в плане</div>
               </div>
               <Button asChild>
-                <Link to="/library/new">
+                <Link to="/library">
                   <Plus /> Добавить
                 </Link>
               </Button>

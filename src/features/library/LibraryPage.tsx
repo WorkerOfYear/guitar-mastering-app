@@ -1,14 +1,19 @@
 import { Link, useSearchParams } from "react-router-dom";
 import { m } from "motion/react";
-import { Check, ChevronRight, Inbox, Pin, Plus } from "lucide-react";
+import { Check, ChevronRight, Dumbbell, Inbox, Pin, Plus } from "lucide-react";
 import { Button, Card, Chip, Progress, Segmented } from "@/components/ui";
 import { TYPE_ICON, IconTile } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/Placeholder";
 import { cleanBpm, targetBpm } from "@/lib/progress";
 import { localDate } from "@/lib/date";
-import { isMastered, tabOf, type LibraryTab } from "@/lib/library";
+import { blocksOf, isMastered, tabOf, type LibraryTab } from "@/lib/library";
+import { BLOCK_META } from "./blocks";
 import { useData } from "@/store/data";
-import { TYPE_META } from "@/shared/types";
+import { TYPE_META, type Item } from "@/shared/types";
+
+/** Under the title: what an exercise is made of ("Видео · Гриф · Метроном"), or the piece's kind. */
+const subtitle = (item: Item) =>
+  tabOf(item) === "exercises" ? blocksOf(item).map((b) => BLOCK_META[b].title).join(" · ") || "Упражнение" : TYPE_META[item.type].title;
 
 type Filter = "all" | "open" | "done";
 const FILTERS: { value: Filter; label: string }[] = [
@@ -44,8 +49,8 @@ export function LibraryPage() {
         title="Библиотека"
         action={
           <Button asChild className="h-11">
-            <Link to={`/library/new?type=${tab === "pieces" ? "song" : "technique"}`}>
-              <Plus /> Добавить
+            <Link to={tab === "pieces" ? "/library/new/piece" : "/library/new/exercise"}>
+              <Plus /> {tab === "pieces" ? "Произведение" : "Упражнение"}
             </Link>
           </Button>
         }
@@ -89,14 +94,14 @@ export function LibraryPage() {
               <m.div key={item.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 10) * 0.03 }}>
                 <Link to={`/library/${item.id}`} className="block">
                   <Card className="flex items-center gap-3 p-3 transition-transform active:scale-[0.99]">
-                    <IconTile icon={TYPE_ICON[item.type]} />
+                    <IconTile icon={tabOf(item) === "exercises" ? Dumbbell : TYPE_ICON[item.type]} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1 truncate font-semibold">
                         {item.pinned && <Pin className="size-3.5 shrink-0 text-accent" />}
                         <span className="truncate">{item.title}</span>
                       </div>
                       <div className="truncate text-xs text-muted">
-                        {sections.length ? `Разделы: ${done} из ${sections.length} выучено` : (item.category ?? TYPE_META[item.type].title)}
+                        {sections.length ? `Разделы: ${done} из ${sections.length} выучено` : (item.category ?? subtitle(item))}
                       </div>
                       {target ? <Progress className="mt-2 h-1.5" value={((clean ?? 0) / target) * 100} /> : null}
                     </div>

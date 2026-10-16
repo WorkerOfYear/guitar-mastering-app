@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isMastered, masteredPatch, materialsOf, tabOf } from "./library";
+import { addBlockPatch, blocksOf, isMastered, masteredPatch, materialsOf, removeBlockPatch, tabOf } from "./library";
 import type { Item } from "@/shared/types";
 
 const item = (p: Partial<Item>): Item => ({ id: "a", type: "technique", title: "A", status: "active", links: [], createdAt: 0, ...p });
@@ -24,11 +24,36 @@ describe("library", () => {
     expect(isMastered({ ...done, ...masteredPatch(done, false) })).toBe(false);
   });
 
-  it("lists what an exercise is played with, in the order it opens", () => {
-    expect(materialsOf(item({}))).toEqual([]);
-    expect(materialsOf(item({ theory: { tab: "scale", tonic: "A" } }))).toEqual(["board"]);
-    expect(materialsOf(item({ video: { youtubeId: "x" }, tab: "...", theory: { tab: "chord", tonic: "C" } }))).toEqual(["video", "notes", "board"]);
+  it("an old exercise gets its blocks from its fields", () => {
+    expect(blocksOf(item({}))).toEqual([]);
+    const old = item({ video: { youtubeId: "x" }, tab: "...", theory: { tab: "scale", tonic: "A" }, targetBpm: 120, description: "d" });
+    expect(blocksOf(old)).toEqual(["video", "score", "board", "metronome", "notes"]);
+  });
+
+  it("adds and removes blocks", () => {
+    let ex = item({});
+    ex = { ...ex, ...addBlockPatch(ex, "board") };
+    ex = { ...ex, ...addBlockPatch(ex, "metronome") };
+    expect(ex.blocks).toEqual(["board", "metronome"]);
+    expect(ex.targetBpm).toBe(120);
+    ex = { ...ex, ...removeBlockPatch(ex, "metronome") };
+    expect(ex.blocks).toEqual(["board"]);
+    expect(ex.targetBpm).toBeNull();
+    // An empty block list stays empty instead of falling back to the fields.
+    ex = { ...ex, ...removeBlockPatch(ex, "board"), video: { youtubeId: "x" } };
+    expect(blocksOf(ex)).toEqual([]);
+  });
+
+  it("an exercise opens its materials in block order", () => {
+    const theory = { tab: "chord" as const, tonic: "C" };
+    expect(materialsOf(item({ theory, video: { youtubeId: "x" }, blocks: ["board", "metronome", "video"] }))).toEqual(["board", "video"]);
+    // A block with nothing in it yet isn't something to play.
+    expect(materialsOf(item({ blocks: ["video", "score"] }))).toEqual([]);
+  });
+
+  it("a piece opens a tab with its recording first", () => {
     const synced = { tabFile: { name: "a.gp", size: 1 }, audioFile: { name: "a.mp3", size: 1 } };
-    expect(materialsOf(item({ video: { youtubeId: "x" }, ...synced }))).toEqual(["notes", "video"]);
+    expect(materialsOf(item({ type: "song", video: { youtubeId: "x" }, ...synced }))).toEqual(["score", "video"]);
+    expect(materialsOf(item({ type: "song", video: { youtubeId: "x" }, tab: "..." }))).toEqual(["video", "score"]);
   });
 });
