@@ -8,7 +8,8 @@ export function PageHeader({ title, subtitle, action }: { title: ReactNode; subt
         <h1 className="truncate text-[1.75rem] font-bold leading-tight tracking-tight">{title}</h1>
         {subtitle && <div className="text-sm text-muted">{subtitle}</div>}
       </div>
-      {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
+      {/* As tall as the sections menu (44px), so a small action sits on the same line as it. */}
+      {action && <div className="flex h-11 shrink-0 items-center gap-2">{action}</div>}
     </header>
   );
 }

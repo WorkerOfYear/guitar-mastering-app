@@ -46,7 +46,7 @@ export function LibraryPage() {
 
   // Small and quiet: the open tab already says what gets added.
   const addButton = (
-    <Button asChild variant="secondary" size="sm" className="h-9 gap-1 px-3">
+    <Button asChild variant="secondary" size="sm" className="h-9 gap-1 px-3 hover:bg-accent/15 hover:text-accent">
       <Link to={pieces ? "/library/new/piece" : "/library/new/exercise"}>
         <Plus className="size-4" /> {pieces ? "Произведение" : "Упражнение"}
       </Link>
