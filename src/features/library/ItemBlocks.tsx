@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "react-router-dom";
-import { Check, Pencil, Video } from "lucide-react";
+import { Check, Pencil, RefreshCw, Video } from "lucide-react";
 import { Button, Input, NumberField, SectionTitle, Textarea } from "@/components/ui";
 import { ItemBoard } from "@/components/fretboard/ItemBoard";
 import { DEFAULT_BOARD, TheoryPicker } from "@/components/fretboard/TheoryPicker";
@@ -131,7 +131,7 @@ export function VideoBlock({ item, update }: { item: Item; update: (patch: Parti
       <div className="space-y-2">
         <YouTubePlayer videoId={item.video.youtubeId} start={item.video.start} playing={false} />
         <Button variant="ghost" size="sm" onClick={() => setEdit(true)} className="w-full">
-          <Pencil className="size-4" /> Другое видео
+          <RefreshCw className="size-4" /> Заменить видео
         </Button>
       </div>
     );
