@@ -24,7 +24,7 @@ export function TheoryPage() {
 
   return (
     <div className="space-y-3">
-      <header className="flex flex-wrap items-center justify-between gap-3 pt-2 md:pr-[5.5rem]">
+      <header className="flex flex-wrap items-center justify-between gap-3 pt-2 md:pr-14">
         <h1 className="text-[1.75rem] font-bold tracking-tight">Теория</h1>
         <div className="flex items-center gap-2">
           <div className="w-72 max-[420px]:w-64">

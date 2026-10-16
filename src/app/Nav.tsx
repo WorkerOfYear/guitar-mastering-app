@@ -3,7 +3,6 @@ import { Link, useLocation } from "react-router-dom";
 import { DropdownMenu } from "radix-ui";
 import {
   BookOpen,
-  ChevronDown,
   Ellipsis,
   GraduationCap,
   Guitar,
@@ -136,11 +135,10 @@ export function SectionsMenu() {
       {/* No press-shrink here: the menu opens on press and is placed by the trigger, so a shrunken
           trigger made it jump a few pixels when the press ended. */}
       <DropdownMenu.Trigger asChild>
-        {/* Icon only (the section's name is already the page title), one width everywhere so it never moves;
-            the arrow turns over while the list is open. */}
-        <Button variant="secondary" aria-label="Разделы" title="Разделы" className="group h-11 w-[4.5rem] gap-1.5 px-0 active:scale-100">
-          <LayoutGrid className="size-5" />
-          <ChevronDown className="size-4 text-muted transition-transform group-data-[state=open]:rotate-180" />
+        {/* Icon only (the section's name is already the page title); while the list is open the square
+            of the icon turns 45° into a diamond. */}
+        <Button variant="secondary" size="icon" aria-label="Разделы" title="Разделы" className="group size-11 active:scale-100">
+          <LayoutGrid className="!size-5 transition-transform duration-300 ease-out group-data-[state=open]:rotate-45" />
         </Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
