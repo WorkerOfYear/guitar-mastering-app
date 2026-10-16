@@ -9,11 +9,10 @@ import { localDate } from "@/lib/date";
 import { blocksOf, isMastered, tabOf, type LibraryTab } from "@/lib/library";
 import { BLOCK_META } from "./blocks";
 import { useData } from "@/store/data";
-import { TYPE_META, type Item } from "@/shared/types";
+import type { Item } from "@/shared/types";
 
-/** Under the title: what an exercise is made of ("Видео · Гриф · Метроном"), or the piece's kind. */
-const subtitle = (item: Item) =>
-  tabOf(item) === "exercises" ? blocksOf(item).map((b) => BLOCK_META[b].title).join(" · ") || "Упражнение" : TYPE_META[item.type].title;
+/** Under the title: just what the item is made of ("Видео · Гриф · Метроном"); nothing when it has no blocks yet. */
+const subtitle = (item: Item) => blocksOf(item).map((b) => BLOCK_META[b].title).join(" · ");
 
 type Filter = "all" | "open" | "done";
 const FILTERS: { value: Filter; label: string }[] = [
@@ -90,8 +89,6 @@ export function LibraryPage() {
             // Tempo progress is for later; for now only pieces show it.
             const clean = pieces ? cleanBpm(log, { itemId: item.id }, today) : null;
             const target = pieces ? targetBpm(item) : null;
-            const sections = item.sections ?? [];
-            const done = sections.filter((s) => s.status === "rotation").length;
             const mastered = pieces && isMastered(item);
             return (
               <m.div key={item.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 10) * 0.03 }}>
@@ -103,9 +100,7 @@ export function LibraryPage() {
                         {item.pinned && <Pin className="size-3.5 shrink-0 text-accent" />}
                         <span className="truncate">{item.title}</span>
                       </div>
-                      <div className="truncate text-xs text-muted">
-                        {sections.length ? `Разделы: ${done} из ${sections.length} выучено` : (item.category ?? subtitle(item))}
-                      </div>
+                      {subtitle(item) && <div className="truncate text-xs text-muted">{subtitle(item)}</div>}
                       {target ? <Progress className="mt-2 h-1.5" value={((clean ?? 0) / target) * 100} /> : null}
                     </div>
                     {target ? (

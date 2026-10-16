@@ -50,7 +50,8 @@ function BackButton() {
   // Opened by a direct link there is no history to go back to — go home instead.
   const back = () => (location.key === "default" ? navigate("/") : navigate(-1));
   return (
-    <Button variant="ghost" size="sm" onClick={back} className="-ml-2 mb-1 gap-0.5 pl-1.5">
+    // Same height and line as page titles' row (pt-2, 44px), so it lines up with the sections menu.
+    <Button variant="ghost" size="sm" onClick={back} className="-ml-2 mb-1 mt-2 h-11 gap-0.5 pl-1.5">
       <ChevronLeft />
       Назад
     </Button>
@@ -77,7 +78,7 @@ function Shell() {
         >
           {/* Wide screens: the sections menu always in the same spot, top right, on every screen (page titles leave room for it). */}
           {location.pathname !== "/session" && (
-            <div className="absolute right-4 top-[max(env(safe-area-inset-top),0.5rem)] z-10 hidden md:block">
+            <div className="absolute right-4 top-[calc(max(env(safe-area-inset-top),0.5rem)+0.5rem)] z-10 hidden md:block">
               <SectionsMenu />
             </div>
           )}
