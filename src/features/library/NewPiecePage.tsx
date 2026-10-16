@@ -1,56 +1,59 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Headphones, LoaderCircle, Plus, Video } from "lucide-react";
-import { Button, Card, Input } from "@/components/ui";
+import { Headphones, LoaderCircle, Plus } from "lucide-react";
+import { Button, Input, Textarea } from "@/components/ui";
 import { PageHeader } from "@/components/ui/Placeholder";
 import { AUDIO_ACCEPT, AUDIO_MAX } from "./MediaCard";
-import { FileField, ScoreFields, SourceTile, VideoField, pickFile } from "./newItemParts";
+import { BlockPicker, BlockShell, PIECE_BLOCKS } from "./blocks";
+import { FileField, ScoreFields, VideoField, pickFile } from "./newItemParts";
 import { parseYouTube, withScheme } from "@/lib/youtubeLink";
 import { saveAudioFile, saveTabFile } from "@/lib/tabFiles";
 import { fileTitle, songQuery, youtubeTitle } from "@/lib/titles";
 import { serverReady } from "@/lib/youtubeAudio";
 import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
+import type { BlockId } from "@/shared/types";
 
-/** A piece (song): what to play along with — a video or a recording — and its tab or sheet music. */
+/** A piece (song), put together from blocks like an exercise: video, the original recording, notes, own notes, takes. */
 export function NewPiecePage() {
-  const { addItem, updateItem } = useData();
+  const { items, addItem, updateItem } = useData();
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
-  const [source, setSource] = useState<"video" | "audio">("video");
+  const [blocks, setBlocks] = useState<BlockId[]>([]);
   const [videoUrl, setVideoUrl] = useState("");
+  const [videoTitle, setVideoTitle] = useState<string | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [tabFile, setTabFile] = useState<File | null>(null);
-  const [busy, setBusy] = useState(false);
-  // Once the user types a title, suggestions no longer overwrite it.
-  const [titleTouched, setTitleTouched] = useState(false);
-  const [videoTitle, setVideoTitle] = useState<string | null>(null);
   // Tab and sheet-music links picked in the web search; they go into the item's links.
   const [tabLinks, setTabLinks] = useState<string[]>([]);
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const video = videoUrl.trim() ? parseYouTube(videoUrl) : null;
-  const videoError = !!videoUrl.trim() && !video;
-  const usesVideo = source === "video";
+  const has = (b: BlockId) => blocks.includes(b);
+  const video = has("video") && videoUrl.trim() ? parseYouTube(videoUrl) : null;
+  const videoError = has("video") && !!videoUrl.trim() && !video;
 
-  // No title typed: take the video's title, else the recording's or the tab's file name.
   useEffect(() => {
     setVideoTitle(null);
-    if (!video || !usesVideo) return;
+    if (!video) return;
     const ctl = new AbortController();
     void youtubeTitle(withScheme(videoUrl), ctl.signal).then((t) => !ctl.signal.aborted && setVideoTitle(t));
     return () => ctl.abort();
-  }, [video?.youtubeId, usesVideo]);
-  const suggestion = (usesVideo && videoTitle) || (!usesVideo && audioFile && fileTitle(audioFile.name)) || (tabFile && fileTitle(tabFile.name)) || "";
-  useEffect(() => {
-    if (!titleTouched) setTitle(suggestion);
-  }, [suggestion]);
+  }, [video?.youtubeId]);
+
+  // Left untitled: the video's title, the recording's or the notes file's name, else "Произведение N".
+  const suggestion =
+    (video && videoTitle) ||
+    (has("audio") && audioFile && fileTitle(audioFile.name)) ||
+    (has("score") && tabFile && fileTitle(tabFile.name)) ||
+    `Произведение ${items.filter((i) => i.type === "song").length + 1}`;
   const finalTitle = title.trim() || suggestion;
-  // The video's title says who plays what; otherwise search by the title typed for the item.
-  const videoQuery = usesVideo && videoTitle ? songQuery(videoTitle) : "";
+  // The video's title says who plays what; otherwise search by the title.
+  const query = video && videoTitle ? songQuery(videoTitle) : finalTitle;
 
   const create = async () => {
-    if (!finalTitle || (usesVideo && videoError)) return;
+    if (videoError) return;
     setBusy(true);
     try {
       const id = addItem({
@@ -58,20 +61,23 @@ export function NewPiecePage() {
         type: "song",
         // No queue/active choice any more: what gets played is set in the plan builder.
         status: "active",
-        links: [...(video && usesVideo ? [withScheme(videoUrl)] : []), ...tabLinks],
+        blocks,
         sections: [],
-        ...(video && usesVideo ? { video } : {}),
+        links: [...(video ? [withScheme(videoUrl)] : []), ...(has("score") ? tabLinks : [])],
+        ...(video ? { video } : {}),
+        ...(has("notes") ? { notes } : {}),
       });
-      if (tabFile) {
+      if (tabFile && has("score")) {
         await saveTabFile(id, await tabFile.arrayBuffer());
         updateItem(id, { tabFile: { name: tabFile.name, size: tabFile.size } });
       }
-      if (audioFile && !usesVideo) {
+      const ownAudio = !!audioFile && has("audio");
+      if (ownAudio) {
         await saveAudioFile(id, await audioFile.arrayBuffer());
         updateItem(id, { audioFile: { name: audioFile.name, size: audioFile.size } });
       }
-      // A video and our own audio server: the card takes the sound right away (and syncs it with the tab).
-      const grabAudio = usesVideo && !!video && serverReady(useSettings.getState().audioServer);
+      // A video, no recording of its own and our audio server: the card takes the sound from the video right away.
+      const grabAudio = !!video && !ownAudio && serverReady(useSettings.getState().audioServer);
       navigate(`/library/${id}`, { replace: true, state: { grabAudio } });
     } catch (e) {
       toast.error("Не удалось сохранить файл", { description: (e as Error).message });
@@ -79,33 +85,12 @@ export function NewPiecePage() {
     }
   };
 
-  return (
-    <div className="space-y-3">
-      <PageHeader title="Новое произведение" />
-      <Card>
-        <Input
-          autoFocus
-          value={title}
-          onChange={(e) => {
-            setTitle(e.target.value);
-            setTitleTouched(!!e.target.value);
-          }}
-          placeholder={suggestion || "Название — или возьмётся из видео либо файла"}
-        />
-      </Card>
-
-      <Card className="space-y-3">
-        <div>
-          <div className="font-semibold">Под что играть</div>
-          <div className="text-xs text-muted">Видео или запись, которая будет звучать на занятии</div>
-        </div>
-        <div role="radiogroup" aria-label="Под что играть" className="grid grid-cols-2 gap-2">
-          <SourceTile active={usesVideo} onClick={() => setSource("video")} icon={<Video />} title="YouTube" sub="ссылка на видео" />
-          <SourceTile active={!usesVideo} onClick={() => setSource("audio")} icon={<Headphones />} title="Аудиофайл" sub="mp3, m4a, wav" />
-        </div>
-        {usesVideo ? (
-          <VideoField value={videoUrl} onChange={setVideoUrl} error={videoError} />
-        ) : (
+  const body = (id: BlockId) => {
+    switch (id) {
+      case "video":
+        return <VideoField value={videoUrl} onChange={setVideoUrl} error={videoError} />;
+      case "audio":
+        return (
           <FileField
             icon={<Headphones />}
             file={audioFile}
@@ -115,26 +100,32 @@ export function NewPiecePage() {
           >
             Выбрать запись (mp3, m4a, wav)
           </FileField>
-        )}
-      </Card>
+        );
+      case "score":
+        return (
+          <ScoreFields file={tabFile} onFile={setTabFile} links={tabLinks} onLinks={setTabLinks} query={query} auto={!!(video && videoTitle)} initialMode="search" />
+        );
+      case "notes":
+        return <Textarea autoFocus value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Мысли по поводу произведения" />;
+      case "recorder":
+        return <p className="text-sm text-muted">Кнопка «Записать игру» появится на занятии и в карточке — записи можно будет послушать потом.</p>;
+      default:
+        return null;
+    }
+  };
 
-      <Card className="space-y-3">
-        <div>
-          <div className="font-semibold">Ноты</div>
-          <div className="text-xs text-muted">Свой файл или ссылки с сайтов табов</div>
-        </div>
-        <ScoreFields
-          file={tabFile}
-          onFile={setTabFile}
-          links={tabLinks}
-          onLinks={setTabLinks}
-          query={videoQuery || finalTitle}
-          auto={!!videoQuery}
-          initialMode="search"
-        />
-      </Card>
-
-      <Button size="lg" disabled={!finalTitle || (usesVideo && videoError) || busy} onClick={() => void create()} className="w-full">
+  return (
+    <div className="space-y-4">
+      <PageHeader title="Новое произведение" />
+      <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={suggestion} aria-label="Название" />
+      {blocks.map((id) => (
+        <BlockShell key={id} id={id} onRemove={() => setBlocks((b) => b.filter((x) => x !== id))}>
+          {body(id)}
+        </BlockShell>
+      ))}
+      {!blocks.length && <p className="px-1 text-sm text-muted">Собери произведение из блоков — добавь то, что нужно:</p>}
+      <BlockPicker from={PIECE_BLOCKS} have={blocks} onAdd={(id) => setBlocks((b) => [...b, id])} />
+      <Button size="lg" disabled={videoError || busy} onClick={() => void create()} className="w-full">
         {busy ? <LoaderCircle className="animate-spin" /> : <Plus />} Создать
       </Button>
     </div>

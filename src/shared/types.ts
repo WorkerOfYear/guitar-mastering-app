@@ -37,8 +37,8 @@ export interface TheoryLink {
   diatonic?: number;
 }
 
-/** Building blocks of an exercise, in the order they appear on its card (and open in a session). */
-export type BlockId = "video" | "score" | "board" | "metronome" | "notes" | "recorder";
+/** Building blocks of an exercise or a piece, in the order they appear on its card (and open in a session). */
+export type BlockId = "video" | "audio" | "score" | "board" | "metronome" | "notes" | "recorder";
 
 export interface Item {
   id: string;

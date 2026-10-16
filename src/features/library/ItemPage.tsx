@@ -5,7 +5,8 @@ import { Badge, Button, Card, Input, NumberField, SectionTitle, Textarea } from 
 import { TYPE_ICON } from "@/components/ui/icons";
 import { MediaCard } from "./MediaCard";
 import { ItemBoard } from "@/components/fretboard/ItemBoard";
-import { isExercise, isMastered, masteredPatch } from "@/lib/library";
+import { hasBlock, isExercise, isMastered, masteredPatch } from "@/lib/library";
+import { TakesList } from "./Takes";
 import { ExerciseBlocks } from "./ExerciseBlocks";
 import { cleanBpm } from "@/lib/progress";
 import { localDate } from "@/lib/date";
@@ -90,6 +91,14 @@ export function ItemPage() {
         <>
           <MediaCard item={item} />
           {item.theory && <ItemBoard link={item.theory} />}
+          {hasBlock(item, "recorder") && (
+            <>
+              <SectionTitle>Запись игры</SectionTitle>
+              <Card>
+                <TakesList itemId={item.id} />
+              </Card>
+            </>
+          )}
         </>
       )}
 

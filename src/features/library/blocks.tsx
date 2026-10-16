@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { ChevronDown, FileMusic, Grid3x3, Metronome, Mic, NotebookPen, Plus, Trash2, Video, type LucideIcon } from "lucide-react";
+import { ChevronDown, FileMusic, Headphones, Grid3x3, Metronome, Mic, NotebookPen, Plus, Trash2, Video, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui";
 import { haptic } from "@/app/telegram";
 import { cn } from "@/lib/utils";
@@ -10,6 +10,7 @@ import type { BlockId } from "@/shared/types";
 
 export const BLOCK_META: Record<BlockId, { title: string; icon: LucideIcon; hint: string }> = {
   video: { title: "Видео", icon: Video, hint: "Играть вместе с роликом YouTube" },
+  audio: { title: "Запись", icon: Headphones, hint: "mp3 оригинала — играть под него, ноты пойдут следом" },
   score: { title: "Ноты", icon: FileMusic, hint: "Guitar Pro или MusicXML — играют с курсором и звуком" },
   board: { title: "Гриф", icon: Grid3x3, hint: "Гамма, лад или аккорд по позициям" },
   metronome: { title: "Метроном", icon: Metronome, hint: "Темп: с какого начать и к какому прийти" },
@@ -19,15 +20,18 @@ export const BLOCK_META: Record<BlockId, { title: string; icon: LucideIcon; hint
 
 /** How many "add" chips show before "Ещё…": always this many while that many blocks are left to add. */
 const SHOWN = 4;
-const ALL = Object.keys(BLOCK_META) as BlockId[];
+
+/** What each kind of item is built from, in the order the chips offer them. */
+export const EXERCISE_BLOCKS: BlockId[] = ["video", "score", "board", "metronome", "notes", "recorder"];
+export const PIECE_BLOCKS: BlockId[] = ["video", "audio", "score", "notes", "recorder"];
 
 /**
  * Chips for the blocks not added yet, in a fixed order: the first four, then "Ещё…", which unfolds
  * the rest right here in the row. Adding one pulls the next one up, so there are always four.
  */
-export function BlockPicker({ have, onAdd }: { have: BlockId[]; onAdd: (id: BlockId) => void }) {
+export function BlockPicker({ have, onAdd, from = EXERCISE_BLOCKS }: { have: BlockId[]; onAdd: (id: BlockId) => void; from?: BlockId[] }) {
   const [all, setAll] = useState(false);
-  const missing = ALL.filter((b) => !have.includes(b));
+  const missing = from.filter((b) => !have.includes(b));
   if (!missing.length) return null;
   const shown = all ? missing : missing.slice(0, SHOWN);
   return (

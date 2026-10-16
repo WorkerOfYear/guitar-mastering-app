@@ -56,6 +56,8 @@ function blockSummary(id: BlockId, item: Item): string {
   switch (id) {
     case "video":
       return item.video ? `YouTube${item.video.start ? ` с ${Math.floor(item.video.start / 60)}:${String(Math.floor(item.video.start % 60)).padStart(2, "0")}` : ""}` : "ссылка не добавлена";
+    case "audio":
+      return item.audioFile?.name ?? "файл не загружен";
     case "score":
       return item.tabFile?.name ?? (item.tab ? "табы упражнения" : (item.audioFile?.name ?? "файл не загружен"));
     case "board":
@@ -74,6 +76,7 @@ function BlockBody({ id, item, update }: { id: BlockId; item: Item; update: (pat
     case "video":
       return <VideoBlock item={item} update={update} />;
     case "score":
+    case "audio":
       return <MediaCard item={item} scoreOnly />;
     case "board":
       return <BoardBlock item={item} update={update} />;
