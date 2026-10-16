@@ -106,15 +106,17 @@ function IconLabel({ icon: Icon, name }: { icon: LucideIcon; name: string }) {
   );
 }
 
-/** Only the chord colors need explaining: the tonic and the scale are plain to see. */
+/**
+ * Only the chord colors need explaining: the tonic and the scale are plain to see.
+ * Its line is kept (empty) without a chord, so highlighting one doesn't move anything.
+ */
 function Legend({ hasChord }: { hasChord: boolean }) {
-  if (!hasChord) return null;
   const items = [
     { color: "var(--guide)", label: "Терция и септима" },
     { color: "var(--chord)", label: "Звуки аккорда" },
   ];
   return (
-    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 px-4 text-xs text-muted">
+    <div aria-hidden={!hasChord} className={cn("mt-3 flex flex-wrap gap-x-4 gap-y-1 px-4 text-xs text-muted", !hasChord && "invisible")}>
       {items.map((i) => (
         <span key={i.label} className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded-full" style={{ background: i.color }} />

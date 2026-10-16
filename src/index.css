@@ -89,6 +89,12 @@ body,
   min-height: 100%;
 }
 
+/* Room for the scrollbar is kept even when the page doesn't scroll: a page growing a little
+   (the chord legend under the neck) must not narrow everything and make the full-width neck jump. */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   margin: 0;
   background: var(--bg);
