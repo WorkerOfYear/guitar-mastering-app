@@ -51,15 +51,17 @@ const ON_TAB = "opacity-70 transition-opacity duration-200 hover:opacity-100 foc
 
 /** The view switch is one button that steps tab → notes → both, marked the way music is: "TAB", a note, both. */
 const VIEW_NEXT = { tab: "score", score: "both", both: "tab" } as const;
+// The note and "TAB" are drawn the same height in every view, centred on one line, so switching doesn't jump.
 const TabMark = () => <span className="text-[13px] font-semibold leading-none">TAB</span>;
+const NoteMark = () => <Music2 className="!size-[15px]" />;
 const VIEW_META = {
   tab: { mark: <TabMark />, name: "Табы" },
-  score: { mark: <Music2 className="!size-5" />, name: "Ноты" },
+  score: { mark: <NoteMark />, name: "Ноты" },
   both: {
     mark: (
-      <span className="flex items-center gap-0.5">
-        <Music2 className="!size-4" />
-        <span className="text-sm font-medium leading-none text-muted">+</span>
+      <span className="flex items-center gap-1">
+        <NoteMark />
+        <span className="text-[13px] font-medium leading-none text-muted">+</span>
         <TabMark />
       </span>
     ),
