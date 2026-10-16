@@ -1,16 +1,14 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { TempoChart } from "@/components/charts/TempoChart";
-import { Check, Dumbbell, ExternalLink, Pencil, Plus, SearchX, Trash2, X } from "lucide-react";
+import { Check, Dumbbell, Pencil, SearchX, Trash2 } from "lucide-react";
 import { Badge, Button, Card, Input, NumberField, SectionTitle, Textarea } from "@/components/ui";
 import { TYPE_ICON } from "@/components/ui/icons";
-import { linkLabel } from "@/features/session/EntryCard";
 import { MediaCard } from "./MediaCard";
 import { ItemBoard } from "@/components/fretboard/ItemBoard";
-import { hasBlock, isExercise, isMastered, masteredPatch } from "@/lib/library";
+import { isExercise, isMastered, masteredPatch } from "@/lib/library";
 import { ExerciseBlocks } from "./ExerciseBlocks";
-import { cleanBpm, entriesFor } from "@/lib/progress";
-import { formatDay, localDate } from "@/lib/date";
+import { cleanBpm } from "@/lib/progress";
+import { localDate } from "@/lib/date";
 import { useData } from "@/store/data";
 import { STATUS_META, TYPE_META, type ItemStatus, type Section } from "@/shared/types";
 
@@ -21,15 +19,12 @@ const SECTION_STYLE: Record<ItemStatus, string> = {
   rotation: "bg-good text-on-accent",
   archived: "bg-surface-2 text-muted",
 };
-const RESULT_DOT = { clean: "bg-good", errors: "bg-root", fail: "bg-guide" } as const;
-const RESULT = { clean: "чисто", errors: "с ошибками", fail: "не вышло" } as const;
 
 export function ItemPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const data = useData();
   const item = data.items.find((i) => i.id === id);
-  const [newLink, setNewLink] = useState("");
   const [picked, setChartSection] = useState<string | undefined>();
   const [editTitle, setEditTitle] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -48,8 +43,6 @@ export function ItemPage() {
   const isSong = !!item.sections?.length || item.type === "song";
   // Sections can appear later (from the file's markers), so default to the first one.
   const chartSection = item.sections?.some((s) => s.id === picked) ? picked : item.sections?.[0]?.id;
-  const unit = { itemId: item.id, sectionId: isSong ? chartSection : undefined };
-  const history = entriesFor(data.log, unit).sort((a, b) => b.at - a.at);
   const section = item.sections?.find((s) => s.id === chartSection);
 
   return (
@@ -171,29 +164,6 @@ export function ItemPage() {
         </>
       )}
 
-      {(!exercise || hasBlock(item, "metronome") || history.length > 0) && (
-        <>
-          <SectionTitle>Прогресс{section ? `: ${section.title}` : ""}</SectionTitle>
-          <Card>
-            <TempoChart entries={history} target={section?.targetBpm ?? (isSong ? null : item.targetBpm)} />
-            {history.length > 0 && (
-              <div className="mt-2 divide-y divide-line/60">
-                {history.slice(0, 8).map((t) => (
-                  <div key={t.at} className="flex items-center gap-2 py-2 text-sm">
-                    <span className={`size-2 shrink-0 rounded-full ${RESULT_DOT[t.result]}`} />
-                    <span className="w-16 shrink-0 text-muted">{formatDay(t.date)}</span>
-                    <span className="min-w-0 flex-1 truncate text-right">
-                      <b className="tabular-nums">{t.bpm ?? "—"}</b> · {RESULT[t.result]}
-                      {t.note && <span className="text-muted"> · {t.note}</span>}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        </>
-      )}
-
       {!exercise && (
         <>
           <SectionTitle>Описание и заметки</SectionTitle>
@@ -208,38 +178,6 @@ export function ItemPage() {
           </Card>
         </>
       )}
-
-      <SectionTitle>Ссылки</SectionTitle>
-      <Card className="space-y-2">
-        {item.links.map((url) => (
-          <div key={url} className="flex items-center gap-2">
-            <a href={url} target="_blank" rel="noreferrer" className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm font-semibold text-accent">
-              <ExternalLink className="size-4 shrink-0" />
-              <span className="truncate">{linkLabel(url)}</span>
-            </a>
-            <Button variant="ghost" size="icon-sm" onClick={() => update({ links: item.links.filter((l) => l !== url) })} aria-label="Удалить ссылку">
-              <X className="size-4" />
-            </Button>
-          </div>
-        ))}
-        <div className="flex gap-2">
-          <Input
-            value={newLink}
-            onChange={(e) => setNewLink(e.target.value)}
-            inputMode="url"
-            placeholder="https://… (YouTube, Songsterr, таб)"
-            className="h-11 flex-1 text-sm"
-          />
-          <IconBtn
-            label="Добавить ссылку"
-            onClick={() => {
-              const url = newLink.trim();
-              if (/^https?:\/\//.test(url) && !item.links.includes(url)) update({ links: [...item.links, url] });
-              setNewLink("");
-            }}
-          />
-        </div>
-      </Card>
 
       {confirmDelete ? (
         <div className="flex gap-2">
@@ -263,13 +201,5 @@ export function ItemPage() {
         </Button>
       )}
     </div>
-  );
-}
-
-function IconBtn({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <Button variant="secondary" size="icon" aria-label={label} onClick={onClick}>
-      <Plus />
-    </Button>
   );
 }
