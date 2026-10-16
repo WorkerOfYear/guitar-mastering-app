@@ -11,7 +11,7 @@ import type { BlockId } from "@/shared/types";
 export const BLOCK_META: Record<BlockId, { title: string; icon: LucideIcon; hint: string }> = {
   video: { title: "Видео", icon: Video, hint: "Играть вместе с роликом YouTube" },
   audio: { title: "Запись", icon: Headphones, hint: "mp3 оригинала — играть под него, ноты пойдут следом" },
-  score: { title: "Ноты", icon: FileMusic, hint: "Guitar Pro или MusicXML — играют с курсором и звуком" },
+  score: { title: "Табы и ноты", icon: FileMusic, hint: "Guitar Pro или MusicXML — играют с курсором и звуком" },
   board: { title: "Гриф", icon: Grid3x3, hint: "Гамма, лад или аккорд по позициям" },
   metronome: { title: "Метроном", icon: Metronome, hint: "Темп: с какого начать и к какому прийти" },
   notes: { title: "Заметки", icon: NotebookPen, hint: "Мысли по ходу: что получается, где ошибаешься" },
@@ -23,7 +23,7 @@ const SHOWN = 4;
 
 /** What each kind of item is built from, in the order the chips offer them. */
 export const EXERCISE_BLOCKS: BlockId[] = ["video", "score", "board", "metronome", "notes", "recorder"];
-export const PIECE_BLOCKS: BlockId[] = ["video", "audio", "score", "notes", "recorder"];
+export const PIECE_BLOCKS: BlockId[] = ["video", "score", "notes", "recorder"];
 
 /**
  * Chips for the blocks not added yet, in a fixed order: the first four, then "Ещё…", which unfolds

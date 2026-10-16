@@ -22,19 +22,16 @@ const hasTempo = (item: Item) => item.startBpm != null || item.targetBpm != null
 
 /**
  * An item's blocks: its own list, or (made before blocks existed) whatever its fields hold.
- * A piece keeps its recording as a block of its own ("Запись"); an exercise's recording belongs to its notes.
+ * The recording belongs to "Табы и ноты": a "Запись" block saved earlier turns into that block.
  */
 export function blocksOf(item: Item): BlockId[] {
-  if (item.blocks) return item.blocks;
+  if (item.blocks) {
+    if (!item.blocks.includes("audio")) return item.blocks;
+    const merged = item.blocks.map((b) => (b === "audio" ? "score" : b));
+    return merged.filter((b, i) => merged.indexOf(b) === i);
+  }
   const list: BlockId[] = [];
   if (item.video) list.push("video");
-  if (!isExercise(item)) {
-    if (item.audioFile) list.push("audio");
-    if (item.tab || item.tabFile) list.push("score");
-    if (item.theory) list.push("board");
-    if (item.notes || item.description) list.push("notes");
-    return list;
-  }
   if (hasScore(item)) list.push("score");
   if (item.theory) list.push("board");
   if (hasTempo(item)) list.push("metronome");
@@ -68,7 +65,7 @@ export function removeBlockPatch(item: Item, id: BlockId): Partial<Item> {
 /** What an item can be played with in a session; the first one is what opens. */
 export type Material = "video" | "score" | "board";
 
-export const MATERIAL_LABEL: Record<Material, string> = { video: "Видео", score: "Ноты", board: "Гриф" };
+export const MATERIAL_LABEL: Record<Material, string> = { video: "Видео", score: "Табы", board: "Гриф" };
 
 /**
  * Materials in the order they open. An exercise follows its blocks. A piece opens on a tab with its
@@ -81,7 +78,7 @@ export function materialsOf(item: Item): Material[] {
     );
   const b = blocksOf(item);
   const tab = b.includes("score") && !!(item.tab || item.tabFile);
-  const recording = b.includes("audio") && !!item.audioFile;
+  const recording = b.includes("score") && !!item.audioFile;
   const list: Material[] = [];
   if (tab && item.audioFile) list.push("score");
   if (b.includes("video") && item.video) list.push("video");

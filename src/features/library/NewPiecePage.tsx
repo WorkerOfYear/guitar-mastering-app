@@ -1,21 +1,20 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Headphones, LoaderCircle, Plus } from "lucide-react";
+import { LoaderCircle, Plus } from "lucide-react";
 import { Button, Input, Textarea } from "@/components/ui";
 import { PageHeader } from "@/components/ui/Placeholder";
-import { AUDIO_ACCEPT, AUDIO_MAX } from "./MediaCard";
 import { BlockPicker, BlockShell, PIECE_BLOCKS } from "./blocks";
-import { FileField, ScoreFields, VideoField, pickFile } from "./newItemParts";
+import { ScoreFields, VideoField } from "./newItemParts";
 import { parseYouTube, withScheme } from "@/lib/youtubeLink";
-import { saveAudioFile, saveTabFile } from "@/lib/tabFiles";
+import { saveTabFile } from "@/lib/tabFiles";
 import { fileTitle, songQuery, youtubeTitle } from "@/lib/titles";
 import { serverReady } from "@/lib/youtubeAudio";
 import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
 import type { BlockId } from "@/shared/types";
 
-/** A piece (song), put together from blocks like an exercise: video, the original recording, notes, own notes, takes. */
+/** A piece (song), put together from blocks like an exercise: video, tabs and notes, own notes, takes. */
 export function NewPiecePage() {
   const { items, addItem, updateItem } = useData();
   const navigate = useNavigate();
@@ -23,7 +22,6 @@ export function NewPiecePage() {
   const [blocks, setBlocks] = useState<BlockId[]>([]);
   const [videoUrl, setVideoUrl] = useState("");
   const [videoTitle, setVideoTitle] = useState<string | null>(null);
-  const [audioFile, setAudioFile] = useState<File | null>(null);
   const [tabFile, setTabFile] = useState<File | null>(null);
   // Tab and sheet-music links picked in the web search; they go into the item's links.
   const [tabLinks, setTabLinks] = useState<string[]>([]);
@@ -42,10 +40,9 @@ export function NewPiecePage() {
     return () => ctl.abort();
   }, [video?.youtubeId]);
 
-  // Left untitled: the video's title, the recording's or the notes file's name, else "Произведение N".
+  // Left untitled: the video's title or the notes file's name, else "Произведение N".
   const suggestion =
     (video && videoTitle) ||
-    (has("audio") && audioFile && fileTitle(audioFile.name)) ||
     (has("score") && tabFile && fileTitle(tabFile.name)) ||
     `Произведение ${items.filter((i) => i.type === "song").length + 1}`;
   const finalTitle = title.trim() || suggestion;
@@ -56,11 +53,10 @@ export function NewPiecePage() {
     if (videoError) return;
     setBusy(true);
     try {
-      const ownAudio = !!audioFile && has("audio");
-      // A video, no recording of its own and our audio server: the card takes the sound from the video right away,
-      // into a "Запись" block (added after the video if it isn't there).
-      const grabAudio = !!video && !ownAudio && serverReady(useSettings.getState().audioServer);
-      const withAudio: BlockId[] = grabAudio && !has("audio") ? blocks.flatMap((b) => (b === "video" ? ["video", "audio"] : [b])) : blocks;
+      // A video and our audio server: the card takes the sound from the video right away and binds it to the tabs
+      // (a "Табы и ноты" block is added after the video if it isn't there).
+      const grabAudio = !!video && serverReady(useSettings.getState().audioServer);
+      const withAudio: BlockId[] = grabAudio && !has("score") ? blocks.flatMap((b) => (b === "video" ? ["video", "score"] : [b])) : blocks;
       const id = addItem({
         title: finalTitle,
         type: "song",
@@ -76,10 +72,6 @@ export function NewPiecePage() {
         await saveTabFile(id, await tabFile.arrayBuffer());
         updateItem(id, { tabFile: { name: tabFile.name, size: tabFile.size } });
       }
-      if (ownAudio) {
-        await saveAudioFile(id, await audioFile.arrayBuffer());
-        updateItem(id, { audioFile: { name: audioFile.name, size: audioFile.size } });
-      }
       navigate(`/library/${id}`, { replace: true, state: { grabAudio, fresh: true } });
     } catch (e) {
       toast.error("Не удалось сохранить файл", { description: (e as Error).message });
@@ -91,18 +83,6 @@ export function NewPiecePage() {
     switch (id) {
       case "video":
         return <VideoField value={videoUrl} onChange={setVideoUrl} error={videoError} />;
-      case "audio":
-        return (
-          <FileField
-            icon={<Headphones />}
-            file={audioFile}
-            accept={AUDIO_ACCEPT}
-            onFile={pickFile(AUDIO_MAX, setAudioFile, "Аудио больше 40 МБ — сожми его в mp3")}
-            onClear={() => setAudioFile(null)}
-          >
-            Выбрать запись (mp3, m4a, wav)
-          </FileField>
-        );
       case "score":
         return (
           <ScoreFields file={tabFile} onFile={setTabFile} links={tabLinks} onLinks={setTabLinks} query={query} auto={!!(video && videoTitle)} initialMode="search" />

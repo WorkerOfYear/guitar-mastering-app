@@ -5,7 +5,7 @@ import { Button, Input, NumberField, SectionTitle, Textarea } from "@/components
 import { ItemBoard } from "@/components/fretboard/ItemBoard";
 import { DEFAULT_BOARD, TheoryPicker } from "@/components/fretboard/TheoryPicker";
 import { YouTubePlayer } from "@/components/video/YouTubePlayer";
-import { addBlockPatch, blocksOf, hasBlock, isExercise, removeBlockPatch } from "@/lib/library";
+import { addBlockPatch, blocksOf, isExercise, removeBlockPatch } from "@/lib/library";
 import { choiceOf, theoryView } from "@/music/theoryView";
 import { parseYouTube, withScheme } from "@/lib/youtubeLink";
 import { useData } from "@/store/data";
@@ -88,10 +88,8 @@ function BlockBody({ id, item, update }: { id: BlockId; item: Item; update: (pat
     case "video":
       return <VideoBlock item={item} update={update} />;
     case "score":
-      // A piece's recording is a block of its own; an exercise's lives with its notes.
-      return <MediaCard item={item} part="score" audioRows={!hasBlock(item, "audio")} />;
-    case "audio":
-      return <MediaCard item={item} part="audio" />;
+      // The recording is bound to the tabs here (for pieces and exercises alike).
+      return <MediaCard item={item} part="score" />;
     case "board":
       return <BoardBlock item={item} update={update} />;
     case "metronome":

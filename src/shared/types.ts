@@ -143,7 +143,7 @@ export const BLOCK_META: Record<BlockKind, { icon: string; title: string; hint: 
 
 export const TYPE_META: Record<ItemType, { icon: string; title: string }> = {
   technique: { icon: "⚡", title: "Техника" },
-  song: { icon: "🎵", title: "Песня" },
+  song: { icon: "🎵", title: "Произведение" },
   lick: { icon: "〰️", title: "Лик" },
   theory: { icon: "🎼", title: "Теория" },
 };

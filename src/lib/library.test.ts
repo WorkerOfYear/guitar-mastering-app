@@ -52,9 +52,12 @@ describe("library", () => {
     expect(materialsOf(item({ blocks: ["video", "score"] }))).toEqual([]);
   });
 
-  it("a piece made before blocks gets its recording as a block of its own", () => {
+  it("a piece keeps its recording inside its tabs block", () => {
     const song = item({ type: "song", video: { youtubeId: "x" }, tabFile: { name: "a.gp", size: 1 }, audioFile: { name: "a.mp3", size: 1 } });
-    expect(blocksOf(song)).toEqual(["video", "audio", "score"]);
+    expect(blocksOf(song)).toEqual(["video", "score"]);
+    // A "Запись" block saved earlier is now part of "Табы и ноты".
+    expect(blocksOf({ ...song, blocks: ["video", "audio", "notes"] })).toEqual(["video", "score", "notes"]);
+    expect(blocksOf({ ...song, blocks: ["audio", "score"] })).toEqual(["score"]);
     // A removed block's material isn't played.
     expect(materialsOf({ ...song, blocks: ["score"] })).toEqual(["score"]);
     expect(materialsOf({ ...song, blocks: ["video"] })).toEqual(["video"]);

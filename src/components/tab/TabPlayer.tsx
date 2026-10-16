@@ -110,7 +110,9 @@ export default function TabPlayer({
     const settings = new alphaTab.Settings();
     settings.core.fontDirectory = "/font/";
     settings.display.staveProfile = alphaTab.StaveProfile.Default;
-    settings.display.scale = 1;
+    // Fit the width: a narrow screen draws the notes smaller instead of scrolling sideways.
+    const width = scroller.current.clientWidth;
+    settings.display.scale = width < 420 ? 0.7 : width < 640 ? 0.85 : 1;
     settings.display.resources.mainGlyphColor = alphaTab.model.Color.fromJson(
       getComputedStyle(document.documentElement).getPropertyValue("--text").trim() || "#000",
     )!;
@@ -254,7 +256,7 @@ export default function TabPlayer({
 
   return (
     <div className="relative isolate overflow-hidden rounded-3xl border border-line bg-surface">
-      <div ref={scroller} className="overflow-y-auto overscroll-contain" style={{ height }}>
+      <div ref={scroller} className="overflow-y-auto overflow-x-hidden overscroll-contain" style={{ height }}>
         <div ref={host} className="at-host px-2" />
       </div>
       {(loading || (!ready && !error)) && (
