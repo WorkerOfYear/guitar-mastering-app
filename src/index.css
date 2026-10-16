@@ -95,9 +95,14 @@ html {
   scrollbar-gutter: stable;
 }
 
+/* The page color sits on html so the backdrop (strings, glow) can be drawn between it and the content. */
+html {
+  background: var(--bg);
+}
+
 body {
   margin: 0;
-  background: var(--bg);
+  background: transparent;
   color: var(--text);
   font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;

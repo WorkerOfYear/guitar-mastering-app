@@ -8,6 +8,7 @@ import { Button } from "@/components/ui";
 import { Toaster } from "@/components/ui/sonner";
 import { TodayPage } from "@/features/today/TodayPage";
 import { BottomNav, SECTION_ROOTS, SectionsMenu } from "./Nav";
+import { Backdrop } from "./Backdrop";
 
 // Everything but the home screen loads on first visit, so the app opens fast inside Telegram.
 const page = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) => lazy(() => load().then((m) => ({ default: m[name] })));
@@ -69,6 +70,7 @@ function Shell() {
   return (
     <LazyMotion features={motionFeatures} strict>
       <MotionConfig reducedMotion="user">
+        <Backdrop />
         <TelegramBack />
         <main
           className={`mx-auto max-w-3xl px-4 pt-[max(env(safe-area-inset-top),0.5rem)] ${location.pathname === "/session" ? "pb-10" : "pb-28 md:pb-10"}`}
