@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { EyeOff, Hand, Hash, Layers, Music2, type LucideIcon } from "lucide-react";
 import { Fretboard } from "./Fretboard";
 import { Card, Segmented } from "@/components/ui";
 import { haptic } from "@/app/telegram";
@@ -32,12 +33,13 @@ export function ScaleBoard({ title, tones, chord, patterns, position: rawPositio
   const pattern = position >= 0 ? patterns[position] : null;
   const notes = fretNotes({ tones, frets: fretboard.frets, chord, pattern });
 
-  const labelOptions: { value: LabelMode; label: string }[] = [
-    { value: "degree", label: chordOnly ? "Интервалы" : "Ступени" },
-    { value: "note", label: "Ноты" },
-    ...(!chordOnly && chord ? [{ value: "chord" as const, label: "Аккорд" }] : []),
-    ...(pattern ? [{ value: "finger" as const, label: "Пальцы" }] : []),
-    { value: "none", label: "—" },
+  // What the notes are labelled with, picked by icon (the name is for screen readers).
+  const labelOptions: { value: LabelMode; label: ReactNode }[] = [
+    { value: "degree", label: <IconLabel icon={Hash} name={chordOnly ? "Интервалы" : "Ступени"} /> },
+    { value: "note", label: <IconLabel icon={Music2} name="Ноты" /> },
+    ...(!chordOnly && chord ? [{ value: "chord" as const, label: <IconLabel icon={Layers} name="Интервалы аккорда" /> }] : []),
+    ...(pattern ? [{ value: "finger" as const, label: <IconLabel icon={Hand} name="Пальцы" /> }] : []),
+    { value: "none", label: <IconLabel icon={EyeOff} name="Без подписей" /> },
   ];
   const labelMode = labelOptions.some((o) => o.value === fretboard.labelMode) ? fretboard.labelMode : "degree";
 
@@ -66,10 +68,10 @@ export function ScaleBoard({ title, tones, chord, patterns, position: rawPositio
       </div>
 
       <div className="mt-2 px-4">
-        <Segmented size="sm" value={labelMode} onChange={(v) => setFretboard({ labelMode: v })} options={labelOptions} />
+        <Segmented value={labelMode} onChange={(v) => setFretboard({ labelMode: v })} options={labelOptions} />
       </div>
 
-      <Legend hasChord={!!chord} chordOnly={!!chordOnly} />
+      <Legend hasChord={!!chord} />
     </Card>
   );
 }
@@ -95,25 +97,27 @@ function PositionBlock({ n, active, onClick }: { n: number; active: boolean; onC
   );
 }
 
-function Legend({ hasChord, chordOnly }: { hasChord: boolean; chordOnly: boolean }) {
+function IconLabel({ icon: Icon, name }: { icon: LucideIcon; name: string }) {
+  return (
+    <>
+      <Icon className="!size-5" aria-hidden />
+      <span className="sr-only">{name}</span>
+    </>
+  );
+}
+
+/** Only the chord colors need explaining: the tonic and the scale are plain to see. */
+function Legend({ hasChord }: { hasChord: boolean }) {
+  if (!hasChord) return null;
   const items = [
-    { color: "var(--root)", label: "Тоника" },
-    ...(hasChord
-      ? [
-          { color: "var(--guide)", label: "Терция и септима" },
-          { color: "var(--chord)", label: "Звуки аккорда" },
-        ]
-      : []),
-    ...(chordOnly ? [] : [{ color: "transparent", label: "Лад", outline: true }]),
+    { color: "var(--guide)", label: "Терция и септима" },
+    { color: "var(--chord)", label: "Звуки аккорда" },
   ];
   return (
     <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 px-4 text-xs text-muted">
       {items.map((i) => (
         <span key={i.label} className="flex items-center gap-1.5">
-          <span
-            className="inline-block h-3 w-3 rounded-full"
-            style={{ background: i.color, border: "outline" in i ? "1.5px solid var(--scale)" : undefined }}
-          />
+          <span className="inline-block h-3 w-3 rounded-full" style={{ background: i.color }} />
           {i.label}
         </span>
       ))}
