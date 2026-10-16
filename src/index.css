@@ -1,49 +1,49 @@
 @import "tailwindcss";
 @import "@fontsource-variable/inter";
 
-/* Design tokens. Warm neutrals with a blue accent; notes on the neck: coral tonic, red guide tones, teal chord.
+/* Design tokens. Neutral graphite grays with a blue accent; notes on the neck: coral tonic, red guide tones, teal chord.
    Dark is the default (phone on a music stand); inside Telegram they follow its theme. */
 :root {
-  --bg: #1f1e1d;
-  --surface: #262624;
-  --surface-2: #30302e;
-  --border: #3d3c38;
-  --text: #f0eee6;
-  --muted: #a19f96;
+  --bg: #18181b;
+  --surface: #212124;
+  --surface-2: #2c2c30;
+  --border: #3a3a3f;
+  --text: #f2f2f3;
+  --muted: #a1a1aa;
   --accent: #378add;
   --on-accent: #ffffff;
   --root: #d85a30;
   --guide: #e24b4a;
   --chord: #1d9e75;
-  --scale: #b4b2a9;
+  --scale: #a1a1aa;
   --on-note: #ffffff;
   --good: #639922;
-  --fret-wood: #2b2723;
-  --fret-wire: #8c8a84;
-  --string: #c9c6bd;
-  --inlay: #4a4640;
+  --fret-wood: #232326;
+  --fret-wire: #8a8a90;
+  --string: #c8c8cc;
+  --inlay: #3f3f45;
   color-scheme: dark;
 }
 
 :root[data-theme="light"] {
-  --bg: #f5f4ef;
+  --bg: #f5f5f6;
   --surface: #ffffff;
-  --surface-2: #efede6;
-  --border: #e3e0d6;
-  --text: #1f1e1d;
-  --muted: #6b6963;
+  --surface-2: #ececee;
+  --border: #e2e2e5;
+  --text: #18181b;
+  --muted: #6b6b73;
   --accent: #2b78c6;
   --on-accent: #ffffff;
   --root: #d85a30;
   --guide: #d33f3e;
   --chord: #138a66;
-  --scale: #5f5e5a;
+  --scale: #52525b;
   --on-note: #ffffff;
   --good: #3b6d11;
-  --fret-wood: #efe9df;
-  --fret-wire: #a5a29a;
-  --string: #6e6c66;
-  --inlay: #d8d0c2;
+  --fret-wood: #e9e9ec;
+  --fret-wire: #a3a3a8;
+  --string: #6b6b73;
+  --inlay: #d4d4d8;
   color-scheme: light;
 }
 
