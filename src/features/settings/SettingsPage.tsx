@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { BookOpen, ChevronDown, ChevronRight, ListChecks, Download, Guitar, GraduationCap, Metronome, TrendingUp, Upload, type LucideIcon } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, ListChecks, Download, Guitar, GraduationCap, Metronome, Moon, Sun, TrendingUp, Upload, type LucideIcon } from "lucide-react";
 import { Button, Card, NumberField, Segmented, SectionTitle, Toggle } from "@/components/ui";
 import { BLOCK_ICON } from "@/components/ui/icons";
 import { haptic } from "@/app/telegram";
@@ -25,7 +25,7 @@ const SECTIONS: [string, string, LucideIcon][] = [
 ];
 
 export function SettingsPage() {
-  const { fretboard, setFretboard } = useSettings();
+  const { fretboard, setFretboard, theme, setTheme } = useSettings();
   const { practice, setPractice, replaceAll } = useData();
   const file = useRef<HTMLInputElement>(null);
   const [more, setMore] = useState(false);
@@ -119,6 +119,20 @@ export function SettingsPage() {
             onChange={(minutesPerReview) => setPractice({ minutesPerReview })}
           />
         </div>
+      </Card>
+
+      <SectionTitle>Оформление</SectionTitle>
+      <Card>
+        <Segmented
+          value={theme}
+          onChange={setTheme}
+          options={[
+            { value: "auto", label: "Авто" },
+            { value: "dark", label: <><Moon /> Тёмная</> },
+            { value: "light", label: <><Sun /> Светлая</> },
+          ]}
+        />
+        <p className="mt-2 px-1 text-xs text-muted">Авто — как в Telegram, а в браузере — как в системе.</p>
       </Card>
 
       <button

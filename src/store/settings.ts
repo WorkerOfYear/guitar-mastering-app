@@ -5,6 +5,8 @@ import type { AudioServer } from "@/lib/youtubeAudio";
 export type LabelMode = "note" | "degree" | "chord" | "finger" | "none";
 /** How the tab player draws music: tablature, standard notation, or both */
 export type TabView = "tab" | "score" | "both";
+/** Light or dark; "auto" follows Telegram inside it, the system elsewhere */
+export type ThemeMode = "auto" | "dark" | "light";
 
 interface FretboardSettings {
   labelMode: LabelMode;
@@ -29,6 +31,8 @@ interface SettingsStore {
   fretboard: FretboardSettings;
   theory: TheoryState;
   tabView: TabView;
+  theme: ThemeMode;
+  setTheme: (theme: ThemeMode) => void;
   /** The user's server that takes the audio out of YouTube videos (kept on this device only) */
   audioServer: AudioServer;
   setAudioServer: (s: AudioServer) => void;
@@ -46,6 +50,8 @@ export const useSettings = create<SettingsStore>()(
       fretboard: { labelMode: "degree", leftHanded: false, frets: 15, zoom: 1, showOutside: true },
       theory: { tab: "scale", tonic: "A", scaleId: "minor-pentatonic", chordType: "m7", diatonic: 0, position: 0 },
       tabView: "tab",
+      theme: "auto",
+      setTheme: (theme) => set({ theme }),
       audioServer: { url: "", key: "" },
       setAudioServer: (audioServer) => set({ audioServer }),
       scoreServer: { url: "", key: "" },
