@@ -11,14 +11,13 @@ import { ItemBoard } from "@/components/fretboard/ItemBoard";
 import type { PlayerControl } from "@/components/tab/TabPlayer";
 import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
 import { audio } from "@/audio/player";
-import { rhythmForSubdivision } from "@/audio/rhythms";
 import { signal, startMetronome, stopMetronome } from "@/audio/metronome";
 import { haptic, tg } from "@/app/telegram";
 import { ImprovPanel } from "@/features/improv/ImprovPanel";
 import { formatClock, useNow, useWakeLock } from "@/lib/hooks";
 import { localDate } from "@/lib/date";
 import { findSection, startingBpm, unitTitle } from "@/lib/progress";
-import { MATERIAL_LABEL, hasBlock, materialsOf, withMetronome, type Material } from "@/lib/library";
+import { MATERIAL_LABEL, hasBlock, materialsOf, shownText, withMetronome, type Material } from "@/lib/library";
 import { RecordButton } from "@/features/library/Takes";
 import { loadAudioFile, loadTabFile } from "@/lib/tabFiles";
 import { audioBlob } from "@/lib/audioType";
@@ -88,10 +87,8 @@ export function SessionPage() {
     stopMetronome();
     if (entry) {
       const it = data.items.find((i) => i.id === entry.itemId);
-      useMetronome.getState().set({
-        bpm: startingBpm(data.log, it, entry, localDate()),
-        ...(it?.subdivision ? { rhythm: rhythmForSubdivision(it.subdivision) } : {}),
-      });
+      // Only the tempo: the rhythm is the player's choice on the metronome, it can change within an exercise.
+      useMetronome.getState().set({ bpm: startingBpm(data.log, it, entry, localDate()) });
     }
     if (phase === "paused") return;
     setCount(isFirstOfBlock ? COUNT_BLOCK : COUNT_ENTRY);
@@ -418,7 +415,9 @@ function Stage({ block, entry, item, material, playing, control, onBlocked }: St
 
 /** The exercise's description under a video or a tab, which take the screen otherwise. */
 function Description({ item }: { item: Item }) {
-  return item.description ? <p className="mt-2 whitespace-pre-wrap px-1 text-sm text-muted">{item.description}</p> : null;
+  const text = shownText(item);
+  const shown = text.description ?? text.notes;
+  return shown ? <p className="mt-2 whitespace-pre-wrap px-1 text-sm text-muted">{shown}</p> : null;
 }
 
 /** A recording without a tab: loops it at the chosen speed (pitch is kept). */

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, Pencil, Video } from "lucide-react";
-import { Button, Chip, Input, NumberField, ScrollRow, SectionTitle, Textarea } from "@/components/ui";
+import { Button, Input, NumberField, SectionTitle, Textarea } from "@/components/ui";
 import { ItemBoard } from "@/components/fretboard/ItemBoard";
 import { DEFAULT_BOARD, TheoryPicker } from "@/components/fretboard/TheoryPicker";
 import { YouTubePlayer } from "@/components/video/YouTubePlayer";
@@ -8,7 +8,7 @@ import { addBlockPatch, blocksOf, removeBlockPatch } from "@/lib/library";
 import { choiceOf, theoryView } from "@/music/theoryView";
 import { parseYouTube, withScheme } from "@/lib/youtubeLink";
 import { useData } from "@/store/data";
-import { SUBDIVISION_META, type BlockId, type Item, type Subdivision } from "@/shared/types";
+import type { BlockId, Item } from "@/shared/types";
 import { BlockPicker, BlockShell } from "./blocks";
 import { MediaCard } from "./MediaCard";
 import { TakesList } from "./Takes";
@@ -61,7 +61,7 @@ function blockSummary(id: BlockId, item: Item): string {
     case "board":
       return item.theory ? theoryView(choiceOf(item.theory)).title : "гамма не выбрана";
     case "metronome":
-      return `${item.startBpm ?? "—"} → ${item.targetBpm ?? "—"} bpm${item.subdivision ? ` · ${SUBDIVISION_META[item.subdivision]}` : ""}`;
+      return `${item.startBpm ?? "—"} → ${item.targetBpm ?? "—"} bpm`;
     case "notes":
       return (item.notes ?? item.description ?? "").trim().split("\n")[0] || "пока пусто";
     case "recorder":
@@ -174,22 +174,14 @@ function BoardBlock({ item, update }: { item: Item; update: (patch: Partial<Item
   );
 }
 
-type Tempo = Pick<Item, "startBpm" | "targetBpm" | "subdivision">;
+type Tempo = Pick<Item, "startBpm" | "targetBpm">;
 
+/** Start and target tempo. No rhythm here: it can change even within one exercise, it's set on the metronome. */
 export function MetronomeBlock({ item, update }: { item: Tempo; update: (patch: Partial<Tempo>) => void }) {
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-2">
-        <NumberField label="Начать с, bpm" min={0} value={item.startBpm ?? 0} onChange={(v) => update({ startBpm: v || null })} />
-        <NumberField label="Цель, bpm" min={0} value={item.targetBpm ?? 0} onChange={(v) => update({ targetBpm: v || null })} />
-      </div>
-      <ScrollRow>
-        {([1, 2, 3, 4, 6] as Subdivision[]).map((s) => (
-          <Chip key={s} active={item.subdivision === s} onClick={() => update({ subdivision: s })}>
-            {SUBDIVISION_META[s]}
-          </Chip>
-        ))}
-      </ScrollRow>
+    <div className="grid grid-cols-2 gap-2">
+      <NumberField label="Начать с, bpm" min={0} value={item.startBpm ?? 0} onChange={(v) => update({ startBpm: v || null })} />
+      <NumberField label="Цель, bpm" min={0} value={item.targetBpm ?? 0} onChange={(v) => update({ targetBpm: v || null })} />
     </div>
   );
 }

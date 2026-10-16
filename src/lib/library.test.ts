@@ -36,9 +36,10 @@ describe("library", () => {
     ex = { ...ex, ...addBlockPatch(ex, "metronome") };
     expect(ex.blocks).toEqual(["board", "metronome"]);
     expect(ex.targetBpm).toBe(120);
-    ex = { ...ex, ...removeBlockPatch(ex, "metronome") };
+    ex = { ...ex, ...removeBlockPatch(ex, "metronome"), targetBpm: 140 };
     expect(ex.blocks).toEqual(["board"]);
-    expect(ex.targetBpm).toBeNull();
+    // What the block held stays: adding it back brings the tempo back.
+    expect({ ...ex, ...addBlockPatch(ex, "metronome") }.targetBpm).toBe(140);
     // An empty block list stays empty instead of falling back to the fields.
     ex = { ...ex, ...removeBlockPatch(ex, "board"), video: { youtubeId: "x" } };
     expect(blocksOf(ex)).toEqual([]);

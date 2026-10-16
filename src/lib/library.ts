@@ -39,7 +39,7 @@ export function addBlockPatch(item: Item, id: BlockId): Partial<Item> {
   const blocks = [...blocksOf(item).filter((b) => b !== id), id];
   switch (id) {
     case "metronome":
-      return { blocks, startBpm: item.startBpm ?? 60, targetBpm: item.targetBpm ?? 120, subdivision: item.subdivision ?? 4 };
+      return { blocks, startBpm: item.startBpm ?? 60, targetBpm: item.targetBpm ?? 120 };
     case "notes":
       return { blocks, notes: item.notes ?? item.description ?? "" };
     default:
@@ -48,23 +48,11 @@ export function addBlockPatch(item: Item, id: BlockId): Partial<Item> {
 }
 
 /**
- * Removes a block. Light settings are cleared; files (notes, recordings, takes) stay on the device,
- * so adding the block back brings them back.
+ * Removes a block (no questions asked). What it held stays in the item and on the device, unused while the
+ * block is gone, so adding the block back brings it all back.
  */
 export function removeBlockPatch(item: Item, id: BlockId): Partial<Item> {
-  const blocks = blocksOf(item).filter((b) => b !== id);
-  switch (id) {
-    case "video":
-      return { blocks, video: undefined };
-    case "board":
-      return { blocks, theory: undefined };
-    case "metronome":
-      return { blocks, startBpm: null, targetBpm: null, subdivision: undefined };
-    case "notes":
-      return { blocks, notes: undefined, description: undefined };
-    default:
-      return { blocks };
-  }
+  return { blocks: blocksOf(item).filter((b) => b !== id) };
 }
 
 /** What an item can be played with in a session; the first one is what opens. */
@@ -91,6 +79,15 @@ export function materialsOf(item: Item): Material[] {
 
 /** Plays along with the metronome: an exercise only when it has the block, a piece when nothing else plays. */
 export const withMetronome = (item: Item) => (isExercise(item) ? hasBlock(item, "metronome") : true);
+
+/**
+ * The description and notes shown in a session. An exercise shows its "Заметки" block (which took over the
+ * old description) only while it has that block; a piece shows both fields as they are.
+ */
+export function shownText(item: Item): { description?: string; notes?: string } {
+  if (!isExercise(item)) return { description: item.description, notes: item.notes };
+  return hasBlock(item, "notes") ? { notes: item.notes || item.description } : {};
+}
 
 /** A name for an exercise left untitled: "Упражнение 7". */
 export const defaultExerciseTitle = (items: Item[]) => `Упражнение ${items.filter(isExercise).length + 1}`;

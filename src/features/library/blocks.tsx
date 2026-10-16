@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, FileMusic, Grid3x3, Metronome, Mic, NotebookPen, Plus, Trash2, Video, type LucideIcon } from "lucide-react";
+import { ChevronDown, FileMusic, Grid3x3, Metronome, Mic, NotebookPen, Plus, Trash2, Video, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui";
-import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { haptic } from "@/app/telegram";
 import { cn } from "@/lib/utils";
 import type { BlockId } from "@/shared/types";
@@ -18,77 +17,56 @@ export const BLOCK_META: Record<BlockId, { title: string; icon: LucideIcon; hint
   recorder: { title: "Запись игры", icon: Mic, hint: "Записывай себя на занятии и слушай потом" },
 };
 
-/** Shown as chips under the blocks; the rest are behind "Ещё…". */
-const PINNED: BlockId[] = ["video", "score", "board", "metronome"];
+/** How many "add" chips show before "Ещё…": always this many while that many blocks are left to add. */
+const SHOWN = 4;
 const ALL = Object.keys(BLOCK_META) as BlockId[];
 
-/** Chips for the main blocks not added yet, and "Ещё…" with the whole list. */
+/**
+ * Chips for the blocks not added yet, in a fixed order: the first four, then "Ещё…", which unfolds
+ * the rest right here in the row. Adding one pulls the next one up, so there are always four.
+ */
 export function BlockPicker({ have, onAdd }: { have: BlockId[]; onAdd: (id: BlockId) => void }) {
-  const [sheet, setSheet] = useState(false);
+  const [all, setAll] = useState(false);
   const missing = ALL.filter((b) => !have.includes(b));
-  const chips = PINNED.filter((b) => missing.includes(b));
-  const more = missing.some((b) => !PINNED.includes(b));
   if (!missing.length) return null;
-  const add = (id: BlockId) => {
-    haptic();
-    setSheet(false);
-    onAdd(id);
-  };
+  const shown = all ? missing : missing.slice(0, SHOWN);
   return (
-    <>
-      <div className="flex flex-wrap gap-2">
-        {chips.map((id) => {
-          const Icon = BLOCK_META[id].icon;
-          return (
-            <AddChip key={id} onClick={() => add(id)}>
-              <Icon /> {BLOCK_META[id].title}
-            </AddChip>
-          );
-        })}
-        {more && (
-          <AddChip onClick={() => setSheet(true)} plain>
-            Ещё…
+    <div className="flex flex-wrap gap-2">
+      {shown.map((id) => {
+        const Icon = BLOCK_META[id].icon;
+        return (
+          <AddChip
+            key={id}
+            hint={BLOCK_META[id].hint}
+            onClick={() => {
+              haptic();
+              onAdd(id);
+            }}
+          >
+            <Icon /> {BLOCK_META[id].title}
           </AddChip>
-        )}
-      </div>
-      <Drawer open={sheet} onOpenChange={setSheet}>
-        <DrawerContent>
-          <DrawerHeader>
-            <DrawerTitle>Добавить блок</DrawerTitle>
-            <DrawerDescription>Из блоков складывается упражнение</DrawerDescription>
-          </DrawerHeader>
-          <div className="space-y-1 pb-2">
-            {missing.map((id) => {
-              const Icon = BLOCK_META[id].icon;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => add(id)}
-                  className="flex min-h-14 w-full items-center gap-3 rounded-2xl px-3 py-2 text-left transition-colors active:bg-surface-2 hover:bg-surface-2/60"
-                >
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-accent/12 text-accent">
-                    <Icon className="size-5" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-semibold">{BLOCK_META[id].title}</span>
-                    <span className="block text-xs text-muted">{BLOCK_META[id].hint}</span>
-                  </span>
-                  <ChevronRight className="size-4 shrink-0 text-muted" />
-                </button>
-              );
-            })}
-          </div>
-        </DrawerContent>
-      </Drawer>
-    </>
+        );
+      })}
+      {shown.length < missing.length && (
+        <AddChip
+          plain
+          onClick={() => {
+            haptic();
+            setAll(true);
+          }}
+        >
+          Ещё…
+        </AddChip>
+      )}
+    </div>
   );
 }
 
-function AddChip({ onClick, plain, children }: { onClick: () => void; plain?: boolean; children: ReactNode }) {
+function AddChip({ onClick, plain, hint, children }: { onClick: () => void; plain?: boolean; hint?: string; children: ReactNode }) {
   return (
     <button
       type="button"
+      title={hint}
       onClick={onClick}
       className="flex h-10 items-center gap-1.5 rounded-full border border-dashed border-line px-3.5 text-sm font-medium text-muted transition-colors hover:bg-surface-2 hover:text-fg active:scale-[0.97] [&_svg]:size-4"
     >
@@ -101,8 +79,8 @@ function AddChip({ onClick, plain, children }: { onClick: () => void; plain?: bo
 /**
  * One block: a header row (its icon, name and, when folded, a one-line summary), then its content.
  * With `onToggle` it folds (the card starts with every block folded); the form keeps blocks open.
- * The bin sits in the same spot on every block, folded or open, just left of the fold arrow;
- * tapping it asks once more right in the header.
+ * The bin sits in the same spot on every block, folded or open, just left of the fold arrow,
+ * and removes the block at once.
  */
 export function BlockShell({
   id,
@@ -119,7 +97,6 @@ export function BlockShell({
   summary?: string;
   children: ReactNode;
 }) {
-  const [confirm, setConfirm] = useState(false);
   const Icon = BLOCK_META[id].icon;
   const title = BLOCK_META[id].title;
   const head = (
@@ -129,11 +106,7 @@ export function BlockShell({
       </span>
       <span className="min-w-0 flex-1">
         <span className="block font-semibold">{title}</span>
-        {confirm ? (
-          <span className="block truncate text-xs text-guide">Убрать блок?</span>
-        ) : (
-          !open && summary && <span className="block truncate text-xs text-muted">{summary}</span>
-        )}
+        {!open && summary && <span className="block truncate text-xs text-muted">{summary}</span>}
       </span>
     </>
   );
@@ -146,7 +119,6 @@ export function BlockShell({
             aria-expanded={open}
             onClick={() => {
               haptic();
-              setConfirm(false);
               onToggle();
             }}
             className="flex min-w-0 flex-1 items-center gap-3 self-stretch rounded-3xl py-2 pl-3 text-left"
@@ -156,26 +128,13 @@ export function BlockShell({
         ) : (
           <div className="flex min-w-0 flex-1 items-center gap-3 py-2 pl-3">{head}</div>
         )}
-        {confirm ? (
-          <>
-            <Button variant="ghost" size="sm" onClick={() => setConfirm(false)} className="h-9 px-3">
-              Нет
-            </Button>
-            <Button variant="destructive" size="sm" onClick={onRemove} className="h-9 px-3">
-              Убрать
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button variant="ghost" size="icon-sm" aria-label={`Убрать блок «${title}»`} onClick={() => setConfirm(true)} className="size-9 text-muted hover:text-guide">
-              <Trash2 className="size-4" />
-            </Button>
-            {onToggle && (
-              <Button variant="ghost" size="icon-sm" aria-label={open ? "Свернуть" : "Развернуть"} onClick={onToggle} className="size-9">
-                <ChevronDown className={cn("size-5 transition-transform", open && "rotate-180")} />
-              </Button>
-            )}
-          </>
+        <Button variant="ghost" size="icon-sm" aria-label={`Убрать блок «${title}»`} onClick={onRemove} className="size-9 text-muted hover:text-guide">
+          <Trash2 className="size-4" />
+        </Button>
+        {onToggle && (
+          <Button variant="ghost" size="icon-sm" aria-label={open ? "Свернуть" : "Развернуть"} onClick={onToggle} className="size-9">
+            <ChevronDown className={cn("size-5 transition-transform", open && "rotate-180")} />
+          </Button>
         )}
       </div>
       {open && <div className="space-y-3 border-t border-line/70 px-4 pb-4 pt-3">{children}</div>}

@@ -3,9 +3,10 @@ import { ExternalLink, FileUp } from "lucide-react";
 import { Badge, Button, Card, Progress, Stat } from "@/components/ui";
 import { TYPE_ICON } from "@/components/ui/icons";
 import { cleanBpm, findSection, lastEntry, targetBpm } from "@/lib/progress";
+import { shownText } from "@/lib/library";
 import { localDate } from "@/lib/date";
 import { useData } from "@/store/data";
-import { SUBDIVISION_META, TYPE_META, type PlanEntry } from "@/shared/types";
+import { TYPE_META, type PlanEntry } from "@/shared/types";
 
 const RESULT_LABEL = { clean: "чисто", errors: "с ошибками", fail: "не получилось" } as const;
 
@@ -20,6 +21,7 @@ export function EntryCard({ entry }: { entry: PlanEntry }) {
   const last = lastEntry(log, entry);
   const target = targetBpm(item, entry.sectionId);
   const TypeIcon = TYPE_ICON[item.type];
+  const text = shownText(item);
 
   return (
     <Card>
@@ -27,11 +29,10 @@ export function EntryCard({ entry }: { entry: PlanEntry }) {
         <Badge variant="soft">
           <TypeIcon /> {item.category ?? TYPE_META[item.type].title}
         </Badge>
-        {item.subdivision && <Badge>{SUBDIVISION_META[item.subdivision]}</Badge>}
       </div>
       <div className="mt-2 text-xl font-bold leading-tight">{item.title}</div>
       {section && <div className="text-lg font-semibold text-accent">{section.title}</div>}
-      {item.description && <p className="mt-2 text-sm text-muted">{item.description}</p>}
+      {text.description && <p className="mt-2 text-sm text-muted">{text.description}</p>}
 
       {(clean || target || last) && (
         <div className="mt-3 grid grid-cols-3 gap-2 text-center">
@@ -58,7 +59,7 @@ export function EntryCard({ entry }: { entry: PlanEntry }) {
           <FileUp /> Загрузи Guitar Pro файл — будет играть как в Songsterr
         </Button>
       )}
-      {item.notes && <p className="mt-3 whitespace-pre-wrap rounded-2xl border-l-4 border-accent/60 bg-surface-2/60 p-3 text-sm">{item.notes}</p>}
+      {text.notes && <p className="mt-3 whitespace-pre-wrap rounded-2xl border-l-4 border-accent/60 bg-surface-2/60 p-3 text-sm">{text.notes}</p>}
     </Card>
   );
 }

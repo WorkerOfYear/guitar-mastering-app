@@ -14,7 +14,7 @@ import { saveTabFile } from "@/lib/tabFiles";
 import { fileTitle, youtubeTitle } from "@/lib/titles";
 import { choiceOf, theoryView } from "@/music/theoryView";
 import { useData } from "@/store/data";
-import type { BlockId, Item, Subdivision, TheoryLink } from "@/shared/types";
+import type { BlockId, Item, TheoryLink } from "@/shared/types";
 
 /** An exercise is put together from blocks; each one is set up right here, or later on its card. */
 export function NewExercisePage() {
@@ -27,10 +27,9 @@ export function NewExercisePage() {
   const [tabFile, setTabFile] = useState<File | null>(null);
   const [tabLinks, setTabLinks] = useState<string[]>([]);
   const [board, setBoard] = useState<TheoryLink>(DEFAULT_BOARD);
-  const [tempo, setTempo] = useState<{ startBpm: number | null; targetBpm: number | null; subdivision: Subdivision }>({
+  const [tempo, setTempo] = useState<{ startBpm: number | null; targetBpm: number | null }>({
     startBpm: 60,
     targetBpm: 120,
-    subdivision: 4,
   });
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
