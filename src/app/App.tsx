@@ -7,7 +7,6 @@ import { BeatFlash } from "@/components/metronome/MetronomePanel";
 import { Button } from "@/components/ui";
 import { Toaster } from "@/components/ui/sonner";
 import { TodayPage } from "@/features/today/TodayPage";
-import { SettingsLink } from "@/components/ui/Placeholder";
 import { BottomNav, SECTION_ROOTS, SectionsMenu } from "./Nav";
 
 // Everything but the home screen loads on first visit, so the app opens fast inside Telegram.
@@ -76,10 +75,10 @@ function Shell() {
         >
           <div className="flex items-center gap-2">
             <BackButton />
-            {location.pathname !== "/session" && (
-              <div className="ml-auto hidden gap-2 pt-2 md:flex">
+            {/* Inner screens (a card, a form): the sections menu sits in the back row; main screens have it by the title. */}
+            {location.pathname !== "/session" && !TAB_ROOTS.includes(location.pathname) && (
+              <div className="ml-auto hidden pt-2 md:block">
                 <SectionsMenu />
-                <SettingsLink />
               </div>
             )}
           </div>

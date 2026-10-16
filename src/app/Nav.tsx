@@ -127,6 +127,17 @@ function BarItem({ to, icon: Icon, label, active }: { to: string; icon: LucideIc
   );
 }
 
+/** Wide screens, in the title row of a section's main screen: the sections menu. */
+export function HeaderNav() {
+  const { pathname } = useLocation();
+  if (!SECTION_ROOTS.includes(pathname)) return null;
+  return (
+    <div className="hidden md:block">
+      <SectionsMenu />
+    </div>
+  );
+}
+
 /** Wide screens: a dropdown with every section. */
 export function SectionsMenu() {
   const { pathname } = useLocation();

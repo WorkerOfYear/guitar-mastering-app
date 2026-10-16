@@ -9,6 +9,7 @@ import { SCALES } from "@/music/scales";
 import { theoryView } from "@/music/theoryView";
 import { TONICS, noteName, parseNote } from "@/music/notes";
 import { useSettings } from "@/store/settings";
+import { HeaderNav } from "@/app/Nav";
 
 export function TheoryPage() {
   const { theory, setTheory } = useSettings();
@@ -22,15 +23,18 @@ export function TheoryPage() {
     <div className="space-y-3">
       <header className="flex items-center justify-between gap-3 pt-2">
         <h1 className="text-[1.75rem] font-bold tracking-tight">Теория</h1>
-        <div className="w-52">
-          <Segmented
-            value={tab}
-            onChange={(v) => setTheory({ tab: v, position: 0 })}
-            options={[
-              { value: "scale", label: "Лады" },
-              { value: "chord", label: "Аккорды" },
-            ]}
-          />
+        <div className="flex items-center gap-2">
+          <div className="w-52">
+            <Segmented
+              value={tab}
+              onChange={(v) => setTheory({ tab: v, position: 0 })}
+              options={[
+                { value: "scale", label: "Лады" },
+                { value: "chord", label: "Аккорды" },
+              ]}
+            />
+          </div>
+          <HeaderNav />
         </div>
       </header>
 
