@@ -707,8 +707,9 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
         {player && (
           <div className="relative">
             {player}
-            {/* Clear of the tab's own scrollbar on the right. */}
-            <div className="absolute right-6 top-2 z-10 flex gap-1.5">
+            {/* Clear of the tab's own scrollbar on the right. Half see-through so the notes under them show;
+                solid again under the pointer or while one of them has focus (an open track list). */}
+            <div className="absolute right-6 top-2 z-10 flex gap-1.5 opacity-50 transition-opacity duration-200 hover:opacity-100 focus-within:opacity-100">
               {trackSelect}
               {viewBtn}
               {playBtn}
