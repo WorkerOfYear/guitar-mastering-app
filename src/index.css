@@ -94,6 +94,11 @@ body,
 html {
   scrollbar-gutter: stable;
 }
+/* Menus, selects and sheets (radix) lock the scroll and add the scrollbar's width as a right margin on body
+   to keep the page still. The gutter above already keeps that room, so the margin would push the page aside. */
+html body[data-scroll-locked] {
+  margin-right: 0 !important;
+}
 
 /* The page color sits on html so the backdrop (strings, glow) can be drawn between it and the content. */
 html {
