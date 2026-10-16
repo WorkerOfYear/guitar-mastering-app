@@ -1,29 +1,18 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Check, Dumbbell, Pencil, SearchX, Trash2 } from "lucide-react";
-import { Badge, Button, Card, Input, NumberField, SectionTitle } from "@/components/ui";
+import { Dumbbell, Pencil, SearchX, Trash2 } from "lucide-react";
+import { Badge, Button, Card, Input, Toggle } from "@/components/ui";
 import { TYPE_ICON } from "@/components/ui/icons";
 import { isExercise, isMastered, masteredPatch } from "@/lib/library";
 import { ItemBlocks } from "./ItemBlocks";
-import { cleanBpm } from "@/lib/progress";
-import { localDate } from "@/lib/date";
 import { useData } from "@/store/data";
-import { STATUS_META, TYPE_META, type ItemStatus, type Section } from "@/shared/types";
-
-const NEXT_STATUS: Record<ItemStatus, ItemStatus> = { queue: "active", active: "rotation", rotation: "queue", archived: "queue" };
-const SECTION_STYLE: Record<ItemStatus, string> = {
-  queue: "bg-surface-2 text-muted",
-  active: "bg-accent text-on-accent",
-  rotation: "bg-good text-on-accent",
-  archived: "bg-surface-2 text-muted",
-};
+import { TYPE_META } from "@/shared/types";
 
 export function ItemPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const data = useData();
   const item = data.items.find((i) => i.id === id);
-  const [picked, setChartSection] = useState<string | undefined>();
   const [editTitle, setEditTitle] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   if (!item)
@@ -37,11 +26,6 @@ export function ItemPage() {
   const TypeIcon = exercise ? Dumbbell : TYPE_ICON[item.type];
 
   const update = (patch: Parameters<typeof data.updateItem>[1]) => data.updateItem(item.id, patch);
-  const today = localDate();
-  const isSong = !!item.sections?.length || item.type === "song";
-  // Sections can appear later (from the file's markers), so default to the first one.
-  const chartSection = item.sections?.some((s) => s.id === picked) ? picked : item.sections?.[0]?.id;
-  const section = item.sections?.find((s) => s.id === chartSection);
 
   return (
     <div className="space-y-3 pt-2">
@@ -71,90 +55,15 @@ export function ItemPage() {
         </div>
       )}
 
-      {/* Only pieces get the "learned" mark; exercises are practised, not finished. */}
-      {!exercise && (
-        <Button
-          variant={isMastered(item) ? "secondary" : "default"}
-          onClick={() => update(masteredPatch(item, !isMastered(item)))}
-          className="w-full"
-        >
-          <Check /> {isMastered(item) ? "Разобрано — вернуть в работу" : "Отметить разобранным"}
-        </Button>
-      )}
 
       <ItemBlocks item={item} />
 
-      {isSong && (
-        <>
-          <SectionTitle>Разделы — нажми на статус, чтобы сменить</SectionTitle>
-          <div className="space-y-2">
-            {(item.sections ?? []).map((s: Section) => (
-              <Card
-                key={s.id}
-                className={`flex items-center gap-2 p-3 transition-colors ${chartSection === s.id ? "border-accent ring-1 ring-accent/40" : ""}`}
-              >
-                <button type="button" onClick={() => setChartSection(s.id)} className="min-w-0 flex-1 text-left">
-                  <div className="truncate font-semibold">{s.title}</div>
-                  <div className="text-xs text-muted">
-                    {s.bars ? `такты ${s.bars[0]}–${s.bars[1]} · ` : ""}чисто {cleanBpm(data.log, { itemId: item.id, sectionId: s.id }, today) ?? "—"} / цель{" "}
-                    {s.targetBpm ?? "—"}
-                  </div>
-                </button>
-                <Button
-                  size="icon-sm"
-                  onClick={() => data.updateSection(item.id, s.id, { status: NEXT_STATUS[s.status] })}
-                  className={`w-auto px-2.5 text-xs font-bold shadow-none ${SECTION_STYLE[s.status]}`}
-                >
-                  {STATUS_META[s.status].title}
-                </Button>
-              </Card>
-            ))}
-            {!item.sections?.length && (
-              <p className="px-1 text-sm text-muted">
-                {item.tabFile ? "В файле нет меток разделов — песня играется целиком." : "Загрузи таб выше — разделы возьмутся из его меток."}
-              </p>
-            )}
-          </div>
-          {section && (
-            <Card className="grid grid-cols-2 gap-2">
-              <label className="col-span-2 flex flex-col gap-1.5 text-[11px] font-medium text-muted">
-                Название раздела
-                <Input
-                  value={section.title}
-                  onChange={(e) => data.updateSection(item.id, section.id, { title: e.target.value })}
-                  className="h-11 rounded-xl text-base font-semibold"
-                />
-              </label>
-              <NumberField
-                label="С такта"
-                min={0}
-                value={section.bars?.[0] ?? 0}
-                onChange={(v) => data.updateSection(item.id, section.id, { bars: v ? [v, Math.max(v, section.bars?.[1] ?? v)] : null })}
-              />
-              <NumberField
-                label="По такт"
-                min={0}
-                value={section.bars?.[1] ?? 0}
-                onChange={(v) =>
-                  data.updateSection(item.id, section.id, { bars: v && section.bars ? [section.bars[0], Math.max(section.bars[0], v)] : section.bars })
-                }
-              />
-              <NumberField
-                label={`Целевой темп: ${section.title}`}
-                value={section.targetBpm ?? 0}
-                min={0}
-                onChange={(v) => data.updateSection(item.id, section.id, { targetBpm: v || null })}
-              />
-              <div className="flex items-end">
-                <Button variant="destructive-ghost" onClick={() => data.removeSection(item.id, section.id)} className="h-11 w-full rounded-xl bg-surface-2/60">
-                  <Trash2 className="size-4" /> Удалить раздел
-                </Button>
-              </div>
-            </Card>
-          )}
-        </>
+      {/* Only pieces get the "learned" mark; exercises are practised, not finished. */}
+      {!exercise && (
+        <Card className="py-1">
+          <Toggle label="Произведение разобрано" checked={isMastered(item)} onChange={(on) => update(masteredPatch(item, on))} />
+        </Card>
       )}
-
 
       {confirmDelete ? (
         <div className="flex gap-2">

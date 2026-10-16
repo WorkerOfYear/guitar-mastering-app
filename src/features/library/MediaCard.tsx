@@ -34,6 +34,7 @@ import { audio } from "@/audio/player";
 import { deleteAudioFile, deleteTabFile, loadAudioFile, loadTabFile, saveAudioFile, saveTabFile } from "@/lib/tabFiles";
 import { audioBlob, downloadAudio } from "@/lib/audioType";
 import { AudioSync, detectSync } from "./AudioSync";
+import { SectionStrip } from "./SectionStrip";
 import { fetchYoutubeAudio, serverReady } from "@/lib/youtubeAudio";
 import { fetchScore, museScoreLink, type ScoreFormat } from "@/lib/scoreDownload";
 import { useSettings } from "@/store/settings";
@@ -567,6 +568,7 @@ export function MediaCard({ item, part = "all", audioRows = true }: { item: Item
               {scoreOnly ? "Загрузи ноты (Guitar Pro, MusicXML) или запись — под них и будешь играть." : "Добавь видео, табы, запись или гриф — под них и будешь играть."}
             </div>
             {materials}
+            <SectionStrip item={item} />
           </>
         ) : (
           <>
@@ -589,6 +591,8 @@ export function MediaCard({ item, part = "all", audioRows = true }: { item: Item
               </Suspense>
             )}
             {!hasTab && ownsAudio && audioData && <AudioPreview data={audioData} />}
+            {/* The song's sections live with its notes: a strip right under the player. */}
+            <SectionStrip item={item} />
             {hasTab && <TabViewSwitch />}
             <div className="flex items-center gap-2">
               {hasTab ? (
