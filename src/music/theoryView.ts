@@ -29,7 +29,6 @@ export const highlightOf = (tones: Tone[]): ChordHighlight => ({
 
 export interface TheoryView {
   title: string;
-  subtitle: string;
   tones: Tone[];
   chord: ChordHighlight | null;
   patterns: Pattern[];
@@ -46,7 +45,6 @@ export function theoryView({ tab, tonic, scaleId, chordType, diatonic }: TheoryC
     const type = chordTypeById(chordType);
     return {
       title: `${noteName(parseNote(tonic))}${type.symbol}`,
-      subtitle: type.name,
       tones,
       chord: highlightOf(tones),
       patterns: buildPatterns(tones, STANDARD_TUNING, { perString: 2 }),
@@ -63,7 +61,6 @@ export function theoryView({ tab, tonic, scaleId, chordType, diatonic }: TheoryC
   const base = scale.patternBase ? scaleTones(tonic, scale.patternBase) : tones;
   return {
     title: `${noteName(parseNote(tonic))} — ${scale.name.toLowerCase()}`,
-    subtitle: dc ? `Аккорд ${dc.roman}: ${dc.symbol}` : `${tones.length} нот`,
     tones,
     chord: chordToneSet ? highlightOf(chordToneSet) : null,
     patterns: buildPatterns(base, STANDARD_TUNING, { extra: scale.patternBase ? tones : undefined }),

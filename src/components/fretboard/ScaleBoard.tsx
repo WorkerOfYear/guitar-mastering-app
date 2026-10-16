@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { Fretboard } from "./Fretboard";
 import { FullscreenBoard } from "./FullscreenBoard";
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
@@ -6,7 +6,7 @@ import { Card, IconButton, Segmented } from "@/components/ui";
 import { haptic } from "@/app/telegram";
 import { cn } from "@/lib/utils";
 import { playNote } from "@/audio/player";
-import { fretNotes, STRING_NAMES, type ChordHighlight, type FretNote, type Pattern } from "@/music/fretboard";
+import { fretNotes, type ChordHighlight, type FretNote, type Pattern } from "@/music/fretboard";
 import type { Tone } from "@/music/scales";
 import { useSettings, type LabelMode } from "@/store/settings";
 
@@ -14,7 +14,6 @@ export { highlightOf } from "@/music/theoryView";
 
 interface Props {
   title: string;
-  subtitle?: ReactNode;
   tones: Tone[];
   chord: ChordHighlight | null;
   patterns: Pattern[];
@@ -25,8 +24,8 @@ interface Props {
   chordOnly?: boolean;
 }
 
-/** Fretboard card: tones, board, tapped-note info, position blocks, label switch, legend, fullscreen. */
-export function ScaleBoard({ title, subtitle, tones, chord, patterns, position: rawPosition, onPosition, chordOnly }: Props) {
+/** Fretboard card: tones, board (a tapped note sounds and lights up its twins), position blocks, label switch, legend, fullscreen. */
+export function ScaleBoard({ title, tones, chord, patterns, position: rawPosition, onPosition, chordOnly }: Props) {
   const { fretboard, setFretboard } = useSettings();
   const [selected, setSelected] = useState<FretNote | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -87,10 +86,7 @@ export function ScaleBoard({ title, subtitle, tones, chord, patterns, position: 
   return (
     <Card className="px-0 pb-3">
       <div className="flex items-start justify-between gap-2 px-4">
-        <div className="min-w-0">
-          <div className="truncate text-lg font-bold">{title}</div>
-          {subtitle && <div className="text-xs text-muted">{subtitle}</div>}
-        </div>
+        <div className="min-w-0 truncate text-lg font-bold">{title}</div>
         <div className="flex shrink-0 gap-1.5">
           <IconButton label="Во весь экран" onClick={() => setFullscreen(true)}>
             <Maximize2 className="size-4" />
@@ -121,22 +117,6 @@ export function ScaleBoard({ title, subtitle, tones, chord, patterns, position: 
 
       <div className="mt-3">
         <Fretboard {...boardProps} zoom={fretboard.zoom} />
-      </div>
-
-      <div className="mt-1 min-h-6 px-4 text-sm">
-        {selected ? (
-          <span>
-            <b>{selected.name}</b>
-            {selected.degree && <> · ступень {selected.degree}</>}
-            {selected.chordInterval && !chordOnly && <> · в аккорде {selected.chordInterval}</>}
-            <span className="text-muted">
-              {" "}
-              · струна {STRING_NAMES[selected.string]}, {selected.fret === 0 ? "открытая" : `${selected.fret} лад`}
-            </span>
-          </span>
-        ) : (
-          <span className="text-muted">Нажми на ноту, чтобы услышать её и увидеть все такие ноты на грифе</span>
-        )}
       </div>
 
       <div role="radiogroup" aria-label="Позиция" className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(4.25rem,1fr))] gap-1.5 px-4">

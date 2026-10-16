@@ -10,7 +10,6 @@ export function ItemBoard({ link }: { link: TheoryLink }) {
   return (
     <ScaleBoard
       title={view.title}
-      subtitle={view.subtitle}
       tones={view.tones}
       chord={view.chord}
       patterns={view.patterns}

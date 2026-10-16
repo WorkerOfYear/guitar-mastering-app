@@ -112,7 +112,6 @@ export function ImprovPanel({ task, onChange }: Props) {
 
       <ScaleBoard
         title={tones[0].name + " " + def.name.toLowerCase()}
-        subtitle={`Подсвечен ${chord.symbol}`}
         tones={tones}
         chord={chordSet}
         patterns={patterns}

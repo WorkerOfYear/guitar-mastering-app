@@ -61,7 +61,6 @@ export function TheoryPage() {
 
           <ScaleBoard
             title={view.title}
-            subtitle={view.subtitle}
             tones={view.tones}
             chord={view.chord}
             patterns={view.patterns}
@@ -72,7 +71,7 @@ export function TheoryPage() {
 
           {tab === "scale" && view.chords.length > 0 && (
             <>
-              <SectionTitle>Аккорды лада — нажми, чтобы подсветить</SectionTitle>
+              <SectionTitle>Аккорды лада</SectionTitle>
               <ScrollRow>
                 {view.chords.map((c) => (
                   <Chip key={c.degree} active={c.degree === diatonic} sub={c.symbol} onClick={() => setTheory({ diatonic: c.degree === diatonic ? 0 : c.degree })}>
@@ -85,7 +84,7 @@ export function TheoryPage() {
 
           {vs.length > 0 && (
             <>
-              <SectionTitle>Аппликатуры — нажми, чтобы сыграть</SectionTitle>
+              <SectionTitle>Аппликатуры</SectionTitle>
               <ScrollRow>
                 {vs.map((v) => (
                   <ChordDiagram key={v.group} voicing={v} title={v.group} onPlay={() => strum(v.notes.map((n) => n.midi))} />
