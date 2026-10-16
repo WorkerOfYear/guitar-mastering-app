@@ -144,8 +144,10 @@ export function SectionsMenu() {
   const current = sectionOf(pathname);
   return (
     <DropdownMenu.Root>
+      {/* No press-shrink here: the menu opens on press and is placed by the trigger, so a shrunken
+          trigger made it jump a few pixels when the press ended. */}
       <DropdownMenu.Trigger asChild>
-        <Button variant="secondary" className="h-11">
+        <Button variant="secondary" className="h-11 active:scale-100">
           <LayoutGrid className="size-4" /> {current?.label ?? "Разделы"} <ChevronDown className="size-4 text-muted" />
         </Button>
       </DropdownMenu.Trigger>
