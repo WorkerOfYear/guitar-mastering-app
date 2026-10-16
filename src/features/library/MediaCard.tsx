@@ -45,6 +45,10 @@ import type { Item, Section } from "@/shared/types";
 
 const TabPlayer = lazy(() => import("@/components/tab/TabPlayer"));
 
+/** Buttons lying on the tabs: 70% visible so the notes under them show, each solid on its own under the pointer,
+ *  with keyboard focus or while open (the track list). */
+const ON_TAB = "opacity-70 transition-opacity duration-200 hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100";
+
 /** The view switch is one button that steps tab → notes → both, marked the way music is: "TAB", a note, both. */
 const VIEW_NEXT = { tab: "score", score: "both", both: "tab" } as const;
 const TabMark = () => <span className="text-[13px] font-semibold leading-none">TAB</span>;
@@ -584,7 +588,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
           audio();
           setPlaying(!playing);
         }}
-        className="size-10 shrink-0 shadow-none"
+        className={cn("size-10 shrink-0 shadow-none", ON_TAB)}
       >
         {playing ? <Pause fill="currentColor" className="!size-4" /> : <Play fill="currentColor" className="!size-4" />}
       </Button>
@@ -596,7 +600,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
         aria-label={`Вид: ${View.name}. Переключить`}
         title={`${View.name} — нажми, чтобы переключить`}
         onClick={() => setTabView(VIEW_NEXT[tabView])}
-        className="h-10 w-[4.75rem] shrink-0 px-0"
+        className={cn("h-10 w-[4.75rem] shrink-0 px-0", ON_TAB)}
       >
         {View.mark}
       </Button>
@@ -629,7 +633,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
     );
     const trackSelect = score && score.tracks.length > 1 && (
       <Select value={String(track)} onValueChange={(v) => setTrack(Number(v))}>
-        <SelectTrigger aria-label="Дорожка" title="Дорожка" className="h-10 w-auto max-w-36 rounded-xl border-0 bg-surface-2 px-3 text-xs font-semibold">
+        <SelectTrigger aria-label="Дорожка" title="Дорожка" className={cn("h-10 w-auto max-w-36 rounded-xl border-0 bg-surface-2 px-3 text-xs font-semibold", ON_TAB)}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -707,9 +711,8 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
         {player && (
           <div className="relative">
             {player}
-            {/* Clear of the tab's own scrollbar on the right. Half see-through so the notes under them show;
-                solid again under the pointer or while one of them has focus (an open track list). */}
-            <div className="absolute right-6 top-2 z-10 flex gap-1.5 opacity-50 transition-opacity duration-200 hover:opacity-100 focus-within:opacity-100">
+            {/* Clear of the tab's own scrollbar on the right. Each button is see-through (ON_TAB) so the notes show. */}
+            <div className="absolute right-6 top-2 z-10 flex gap-1.5">
               {trackSelect}
               {viewBtn}
               {playBtn}
