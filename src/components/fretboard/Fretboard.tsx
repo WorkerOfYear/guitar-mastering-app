@@ -10,8 +10,6 @@ interface Props {
   leftHanded?: boolean;
   /** Dimmed notes outside the selected position are drawn only when true */
   showOutside?: boolean;
-  /** Frets to show (the selected position); the whole neck when missing. Either way the board fills the width. */
-  range?: { min: number; max: number } | null;
   selectedChroma?: number | null;
   onTap?: (note: FretNote) => void;
 }
@@ -57,17 +55,13 @@ export function fretboardSize(frets: number) {
   return { width: wirePositions(frets)[frets] + 18, height: TOP + GAP * 5 + 40 };
 }
 
-export function Fretboard({ notes, frets, labelMode, leftHanded = false, showOutside = true, range, selectedChroma, onTap }: Props) {
+export function Fretboard({ notes, frets, labelMode, leftHanded = false, showOutside = true, selectedChroma, onTap }: Props) {
   const wires = useMemo(() => wirePositions(frets), [frets]);
   const { width: W, height: H } = fretboardSize(frets);
   const flip = (x: number) => (leftHanded ? W - x : x);
   const noteX = (f: number) => (f === 0 ? NUT_X - 24 : (wires[f - 1] + wires[f]) / 2);
   const y = (s: number) => TOP + (5 - s) * GAP; // high e on top, like tab
   const midY = (a: number) => TOP + a * GAP;
-
-  // The part of the board in view: from the wire before the first fret to just past the last one.
-  let [left, right] = range ? [range.min <= 0 ? 0 : wires[range.min - 1] - 6, range.max >= frets ? W : wires[range.max] + 10] : [0, W];
-  if (leftHanded) [left, right] = [W - right, W - left];
 
   const visible = notes.filter((n) => n.fret <= frets && (showOutside || n.inPosition));
   // Draw notes of the selected position last so they sit on top.
@@ -76,7 +70,7 @@ export function Fretboard({ notes, frets, labelMode, leftHanded = false, showOut
   return (
     <div>
       <svg
-        viewBox={`${left} 0 ${right - left} ${H}`}
+        viewBox={`0 0 ${W} ${H}`}
         className="block h-auto w-full select-none"
         role="img"
         aria-label="Гриф гитары"

@@ -23,7 +23,7 @@ interface Props {
   chordOnly?: boolean;
 }
 
-/** Fretboard card: the board across the full width (a tapped note sounds and lights up its twins), position blocks, label switch, legend. */
+/** Fretboard card: the whole neck across the full width, the same size for every position (a tapped note sounds and lights up its twins), position blocks, label switch, legend. */
 export function ScaleBoard({ title, tones, chord, patterns, position: rawPosition, onPosition, chordOnly }: Props) {
   const { fretboard, setFretboard } = useSettings();
   const [selected, setSelected] = useState<FretNote | null>(null);
@@ -45,9 +45,6 @@ export function ScaleBoard({ title, tones, chord, patterns, position: rawPositio
     playNote(n.midi);
     setSelected((cur) => (cur?.key === n.key ? null : n));
   };
-  // The board fills the width: a position shows its frets (and one either side), "Весь гриф" the whole neck.
-  const range = pattern ? { min: Math.max(0, pattern.minFret - 1), max: Math.min(fretboard.frets, pattern.maxFret + 1) } : null;
-
   return (
     <Card className="px-0 pb-3">
       {title && <div className="truncate px-4 pb-2 text-lg font-bold">{title}</div>}
@@ -57,7 +54,6 @@ export function ScaleBoard({ title, tones, chord, patterns, position: rawPositio
         labelMode={labelMode}
         leftHanded={fretboard.leftHanded}
         showOutside={fretboard.showOutside}
-        range={range}
         selectedChroma={selected?.chroma ?? null}
         onTap={tap}
       />
