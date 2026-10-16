@@ -87,8 +87,9 @@ export function LibraryPage() {
       ) : (
         <div className="space-y-2">
           {items.map((item, i) => {
-            const clean = cleanBpm(log, { itemId: item.id }, today);
-            const target = targetBpm(item);
+            // Tempo progress is for later; for now only pieces show it.
+            const clean = pieces ? cleanBpm(log, { itemId: item.id }, today) : null;
+            const target = pieces ? targetBpm(item) : null;
             const sections = item.sections ?? [];
             const done = sections.filter((s) => s.status === "rotation").length;
             const mastered = pieces && isMastered(item);
