@@ -44,28 +44,31 @@ export function LibraryPage() {
   const doneCount = shelf.filter(isMastered).length;
   const items = shelf.filter((i) => (filter === "all" ? true : filter === "done" ? isMastered(i) : !isMastered(i)));
 
+  // Small and quiet: the open tab already says what gets added.
+  const addButton = (
+    <Button asChild variant="secondary" size="sm" className="h-9 gap-1 px-3">
+      <Link to={pieces ? "/library/new/piece" : "/library/new/exercise"}>
+        <Plus className="size-4" /> {pieces ? "Произведение" : "Упражнение"}
+      </Link>
+    </Button>
+  );
+  const tabs = (
+    <Segmented
+      value={tab}
+      onChange={(v) => setQuery({ tab: v === "pieces" ? v : null, show: null })}
+      options={[
+        { value: "exercises", label: "Упражнения" },
+        { value: "pieces", label: "Произведения" },
+      ]}
+    />
+  );
+
   return (
     <div className="space-y-3">
-      <PageHeader
-        title="Библиотека"
-        action={
-          <Button asChild className="h-11">
-            <Link to={tab === "pieces" ? "/library/new/piece" : "/library/new/exercise"}>
-              <Plus /> {tab === "pieces" ? "Произведение" : "Упражнение"}
-            </Link>
-          </Button>
-        }
-      />
-      <Segmented
-        value={tab}
-        onChange={(v) => setQuery({ tab: v === "pieces" ? v : null, show: null })}
-        options={[
-          { value: "exercises", label: "Упражнения" },
-          { value: "pieces", label: "Произведения" },
-        ]}
-      />
+      <PageHeader title="Библиотека" action={addButton} />
+      {tabs}
       {pieces && shelf.length > 0 && (
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex gap-2">
             {FILTERS.map((f) => (
               <Chip key={f.value} active={filter === f.value} onClick={() => setQuery({ show: f.value === "all" ? null : f.value })}>
