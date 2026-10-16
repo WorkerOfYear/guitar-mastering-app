@@ -11,7 +11,9 @@ const stringY = (s: number) => 60 + s * 28;
 /** Fret wires across the width, closer together up the neck like on a guitar. */
 const FRETS = Array.from({ length: 11 }, (_, n) => 12 + (376 * (1 - 0.88 ** n)) / (1 - 0.88 ** 10));
 
-const REST_OPACITY = 0.07;
+// Barely there: the strings show around titles and between cards, so they must not compete with the text.
+const REST_OPACITY = 0.045;
+const FRET_OPACITY = 0.03;
 /** How long a pluck rings, seconds (amplitude falls by e each DECAY) */
 const DECAY = 0.45;
 /** Visible wobbles per second */
@@ -99,7 +101,7 @@ export function Backdrop() {
   return (
     <div
       aria-hidden
-      className="pointer-events-none fixed inset-x-0 top-0 -z-10 h-[60vh] [mask-image:linear-gradient(#000,transparent_75%)]"
+      className="pointer-events-none fixed inset-x-0 top-0 -z-10 h-[60vh] [mask-image:linear-gradient(#000_10%,transparent_65%)]"
       style={{ background: "radial-gradient(70% 55% at 50% 0%, color-mix(in oklab, var(--accent) 12%, transparent), transparent 75%)" }}
     >
       <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
@@ -117,7 +119,7 @@ export function Backdrop() {
             />
           ))}
         </g>
-        <g stroke="var(--text)" strokeOpacity={0.05} strokeWidth={1.5}>
+        <g stroke="var(--text)" strokeOpacity={FRET_OPACITY} strokeWidth={1.5}>
           {FRETS.map((x) => (
             <line key={x} x1={x} x2={x} y1={48} y2={212} vectorEffect="non-scaling-stroke" />
           ))}
