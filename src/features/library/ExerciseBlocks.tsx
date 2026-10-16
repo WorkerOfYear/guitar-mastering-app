@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, Pencil, Video } from "lucide-react";
-import { Button, Chip, Input, NumberField, ScrollRow, Textarea } from "@/components/ui";
+import { Button, Chip, Input, NumberField, ScrollRow, SectionTitle, Textarea } from "@/components/ui";
 import { ItemBoard } from "@/components/fretboard/ItemBoard";
 import { DEFAULT_BOARD, TheoryPicker } from "@/components/fretboard/TheoryPicker";
 import { YouTubePlayer } from "@/components/video/YouTubePlayer";
@@ -21,21 +21,24 @@ export function ExerciseBlocks({ item }: { item: Item }) {
   const [open, setOpen] = useState<BlockId[]>([]);
   const toggle = (id: BlockId) => setOpen((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]));
   return (
-    <div className="space-y-2">
-      {blocks.map((id) => (
-        <BlockShell
-          key={id}
-          id={id}
-          open={open.includes(id)}
-          onToggle={() => toggle(id)}
-          summary={blockSummary(id, item)}
-          onRemove={() => update(removeBlockPatch(item, id))}
-        >
-          <BlockBody id={id} item={item} update={update} />
-        </BlockShell>
-      ))}
-      {!blocks.length && <p className="px-1 text-sm text-muted">Собери упражнение из блоков: видео, ноты, гриф, метроном и другие.</p>}
-      <div className="pt-2">
+    <section>
+      <SectionTitle>Из чего состоит</SectionTitle>
+      <div className="space-y-2">
+        {blocks.map((id) => (
+          <BlockShell
+            key={id}
+            id={id}
+            open={open.includes(id)}
+            onToggle={() => toggle(id)}
+            summary={blockSummary(id, item)}
+            onRemove={() => update(removeBlockPatch(item, id))}
+          >
+            <BlockBody id={id} item={item} update={update} />
+          </BlockShell>
+        ))}
+        {!blocks.length && <p className="px-1 text-sm text-muted">Собери упражнение из блоков: видео, ноты, гриф, метроном и другие.</p>}
+      </div>
+      <div className="pt-3">
         <BlockPicker
           have={blocks}
           onAdd={(id) => {
@@ -44,7 +47,7 @@ export function ExerciseBlocks({ item }: { item: Item }) {
           }}
         />
       </div>
-    </div>
+    </section>
   );
 }
 

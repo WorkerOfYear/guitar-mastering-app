@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, FileMusic, Grid3x3, Metronome, Mic, NotebookPen, Plus, Video, X, type LucideIcon } from "lucide-react";
+import { ChevronDown, ChevronRight, FileMusic, Grid3x3, Metronome, Mic, NotebookPen, Plus, Trash2, Video, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { haptic } from "@/app/telegram";
@@ -101,7 +101,8 @@ function AddChip({ onClick, plain, children }: { onClick: () => void; plain?: bo
 /**
  * One block: a header row (its icon, name and, when folded, a one-line summary), then its content.
  * With `onToggle` it folds (the card starts with every block folded); the form keeps blocks open.
- * Removing asks once more.
+ * An open block is outlined in the accent color, its content set off by a line; "Убрать блок" sits at
+ * the bottom of the content (asks once more), away from the fold arrow.
  */
 export function BlockShell({
   id,
@@ -132,42 +133,45 @@ export function BlockShell({
     </>
   );
   return (
-    <section className="rounded-3xl border border-line bg-surface">
-      <div className="flex min-h-14 items-center gap-1 pr-2">
-        {onToggle ? (
-          <button
-            type="button"
-            aria-expanded={open}
-            onClick={() => {
-              haptic();
-              setConfirm(false);
-              onToggle();
-            }}
-            className="flex min-w-0 flex-1 items-center gap-3 self-stretch rounded-3xl py-2 pl-3 text-left"
-          >
-            {head}
-            <ChevronDown className={cn("size-4 shrink-0 text-muted transition-transform", open && "rotate-180")} />
-          </button>
-        ) : (
-          <div className="flex min-w-0 flex-1 items-center gap-3 py-2 pl-3">{head}</div>
-        )}
-        {open &&
-          (confirm ? (
-            <>
-              <Button variant="destructive-ghost" size="sm" onClick={onRemove} className="h-8">
-                Убрать
+    <section className={cn("rounded-3xl border bg-surface transition-colors", open && onToggle ? "border-accent/60" : "border-line")}>
+      {onToggle ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => {
+            haptic();
+            setConfirm(false);
+            onToggle();
+          }}
+          className="flex min-h-14 w-full items-center gap-3 rounded-3xl py-2 pl-3 pr-4 text-left"
+        >
+          {head}
+          <ChevronDown className={cn("size-5 shrink-0 text-muted transition-transform", open && "rotate-180")} />
+        </button>
+      ) : (
+        <div className="flex min-h-14 items-center gap-3 py-2 pl-3 pr-4">{head}</div>
+      )}
+      {open && (
+        <div className="space-y-3 border-t border-line/70 px-4 pb-3 pt-3">
+          {children}
+          <div className="flex justify-end gap-2">
+            {confirm ? (
+              <>
+                <Button variant="ghost" size="sm" onClick={() => setConfirm(false)} className="h-9">
+                  Отмена
+                </Button>
+                <Button variant="destructive" size="sm" onClick={onRemove} className="h-9">
+                  Да, убрать «{BLOCK_META[id].title}»
+                </Button>
+              </>
+            ) : (
+              <Button variant="destructive-ghost" size="sm" onClick={() => setConfirm(true)} className="h-9">
+                <Trash2 className="size-4" /> Убрать блок
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setConfirm(false)} className="h-8">
-                Отмена
-              </Button>
-            </>
-          ) : (
-            <Button variant="ghost" size="icon-sm" aria-label={`Убрать блок «${BLOCK_META[id].title}»`} onClick={() => setConfirm(true)} className="size-8">
-              <X className="size-4" />
-            </Button>
-          ))}
-      </div>
-      {open && <div className="px-3 pb-3">{children}</div>}
+            )}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
