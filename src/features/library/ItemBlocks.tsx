@@ -1,24 +1,31 @@
 import { useState } from "react";
+import { useLocation } from "react-router-dom";
 import { Check, Pencil, Video } from "lucide-react";
 import { Button, Input, NumberField, SectionTitle, Textarea } from "@/components/ui";
 import { ItemBoard } from "@/components/fretboard/ItemBoard";
 import { DEFAULT_BOARD, TheoryPicker } from "@/components/fretboard/TheoryPicker";
 import { YouTubePlayer } from "@/components/video/YouTubePlayer";
-import { addBlockPatch, blocksOf, removeBlockPatch } from "@/lib/library";
+import { addBlockPatch, blocksOf, hasBlock, isExercise, removeBlockPatch } from "@/lib/library";
 import { choiceOf, theoryView } from "@/music/theoryView";
 import { parseYouTube, withScheme } from "@/lib/youtubeLink";
 import { useData } from "@/store/data";
 import type { BlockId, Item } from "@/shared/types";
-import { BlockPicker, BlockShell } from "./blocks";
+import { BlockPicker, BlockShell, EXERCISE_BLOCKS, PIECE_BLOCKS } from "./blocks";
 import { MediaCard } from "./MediaCard";
 import { TakesList } from "./Takes";
 
-/** An exercise's card body: its blocks in order, folded (a block just added opens), then chips to add more. */
-export function ExerciseBlocks({ item }: { item: Item }) {
+/**
+ * The card body of an exercise or a piece: its blocks in order, folded, then chips to add more.
+ * A block just added opens; right after the item is created they all start open, so whatever runs inside
+ * them (taking the sound from the video, sections from the notes file) gets going.
+ */
+export function ItemBlocks({ item }: { item: Item }) {
   const { updateItem } = useData();
   const update = (patch: Partial<Item>) => updateItem(item.id, patch);
   const blocks = blocksOf(item);
-  const [open, setOpen] = useState<BlockId[]>([]);
+  const piece = !isExercise(item);
+  const fresh = !!(useLocation().state as { fresh?: boolean } | null)?.fresh;
+  const [open, setOpen] = useState<BlockId[]>(() => (fresh ? blocks : []));
   const toggle = (id: BlockId) => setOpen((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]));
   return (
     <section>
@@ -36,10 +43,15 @@ export function ExerciseBlocks({ item }: { item: Item }) {
             <BlockBody id={id} item={item} update={update} />
           </BlockShell>
         ))}
-        {!blocks.length && <p className="px-1 text-sm text-muted">Собери упражнение из блоков: видео, ноты, гриф, метроном и другие.</p>}
+        {!blocks.length && (
+          <p className="px-1 text-sm text-muted">
+            {piece ? "Собери произведение из блоков: видео, запись, ноты и другие." : "Собери упражнение из блоков: видео, ноты, гриф, метроном и другие."}
+          </p>
+        )}
       </div>
       <div className="pt-3">
         <BlockPicker
+          from={piece ? PIECE_BLOCKS : EXERCISE_BLOCKS}
           have={blocks}
           onAdd={(id) => {
             update(addBlockPatch(item, id));
@@ -76,8 +88,10 @@ function BlockBody({ id, item, update }: { id: BlockId; item: Item; update: (pat
     case "video":
       return <VideoBlock item={item} update={update} />;
     case "score":
+      // A piece's recording is a block of its own; an exercise's lives with its notes.
+      return <MediaCard item={item} part="score" audioRows={!hasBlock(item, "audio")} />;
     case "audio":
-      return <MediaCard item={item} scoreOnly />;
+      return <MediaCard item={item} part="audio" />;
     case "board":
       return <BoardBlock item={item} update={update} />;
     case "metronome":

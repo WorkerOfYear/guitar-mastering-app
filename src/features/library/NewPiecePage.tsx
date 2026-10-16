@@ -56,12 +56,17 @@ export function NewPiecePage() {
     if (videoError) return;
     setBusy(true);
     try {
+      const ownAudio = !!audioFile && has("audio");
+      // A video, no recording of its own and our audio server: the card takes the sound from the video right away,
+      // into a "Запись" block (added after the video if it isn't there).
+      const grabAudio = !!video && !ownAudio && serverReady(useSettings.getState().audioServer);
+      const withAudio: BlockId[] = grabAudio && !has("audio") ? blocks.flatMap((b) => (b === "video" ? ["video", "audio"] : [b])) : blocks;
       const id = addItem({
         title: finalTitle,
         type: "song",
         // No queue/active choice any more: what gets played is set in the plan builder.
         status: "active",
-        blocks,
+        blocks: withAudio,
         sections: [],
         links: [...(video ? [withScheme(videoUrl)] : []), ...(has("score") ? tabLinks : [])],
         ...(video ? { video } : {}),
@@ -71,14 +76,11 @@ export function NewPiecePage() {
         await saveTabFile(id, await tabFile.arrayBuffer());
         updateItem(id, { tabFile: { name: tabFile.name, size: tabFile.size } });
       }
-      const ownAudio = !!audioFile && has("audio");
       if (ownAudio) {
         await saveAudioFile(id, await audioFile.arrayBuffer());
         updateItem(id, { audioFile: { name: audioFile.name, size: audioFile.size } });
       }
-      // A video, no recording of its own and our audio server: the card takes the sound from the video right away.
-      const grabAudio = !!video && !ownAudio && serverReady(useSettings.getState().audioServer);
-      navigate(`/library/${id}`, { replace: true, state: { grabAudio } });
+      navigate(`/library/${id}`, { replace: true, state: { grabAudio, fresh: true } });
     } catch (e) {
       toast.error("Не удалось сохранить файл", { description: (e as Error).message });
       setBusy(false);

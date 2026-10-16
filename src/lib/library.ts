@@ -20,11 +20,21 @@ export function masteredPatch(item: Item, on: boolean): Partial<Item> {
 const hasScore = (item: Item) => !!(item.tab || item.tabFile || item.audioFile);
 const hasTempo = (item: Item) => item.startBpm != null || item.targetBpm != null;
 
-/** An exercise's blocks: its own list, or (made before blocks existed) whatever its fields hold. */
+/**
+ * An item's blocks: its own list, or (made before blocks existed) whatever its fields hold.
+ * A piece keeps its recording as a block of its own ("Запись"); an exercise's recording belongs to its notes.
+ */
 export function blocksOf(item: Item): BlockId[] {
   if (item.blocks) return item.blocks;
   const list: BlockId[] = [];
   if (item.video) list.push("video");
+  if (!isExercise(item)) {
+    if (item.audioFile) list.push("audio");
+    if (item.tab || item.tabFile) list.push("score");
+    if (item.theory) list.push("board");
+    if (item.notes || item.description) list.push("notes");
+    return list;
+  }
   if (hasScore(item)) list.push("score");
   if (item.theory) list.push("board");
   if (hasTempo(item)) list.push("metronome");
@@ -69,11 +79,14 @@ export function materialsOf(item: Item): Material[] {
     return blocksOf(item).filter(
       (b): b is Material => (b === "video" && !!item.video) || (b === "score" && hasScore(item)) || (b === "board" && !!item.theory),
     );
+  const b = blocksOf(item);
+  const tab = b.includes("score") && !!(item.tab || item.tabFile);
+  const recording = b.includes("audio") && !!item.audioFile;
   const list: Material[] = [];
-  if (item.tabFile && item.audioFile) list.push("score");
-  if (item.video) list.push("video");
-  if (hasScore(item) && !list.includes("score")) list.push("score");
-  if (item.theory) list.push("board");
+  if (tab && item.audioFile) list.push("score");
+  if (b.includes("video") && item.video) list.push("video");
+  if ((tab || recording) && !list.includes("score")) list.push("score");
+  if (b.includes("board") && item.theory) list.push("board");
   return list;
 }
 

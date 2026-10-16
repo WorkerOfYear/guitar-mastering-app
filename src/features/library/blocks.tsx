@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import type { BlockId } from "@/shared/types";
 
 // An exercise is put together from blocks, like a construction kit. A new kind of block is one entry here,
-// plus its editor (ExerciseBlocks for the card, NewExercisePage for the form).
+// plus its editor (ItemBlocks for the card, NewExercisePage for the form).
 
 export const BLOCK_META: Record<BlockId, { title: string; icon: LucideIcon; hint: string }> = {
   video: { title: "Видео", icon: Video, hint: "Играть вместе с роликом YouTube" },

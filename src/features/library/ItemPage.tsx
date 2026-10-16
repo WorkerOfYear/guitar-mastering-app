@@ -1,13 +1,10 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Check, Dumbbell, Pencil, SearchX, Trash2 } from "lucide-react";
-import { Badge, Button, Card, Input, NumberField, SectionTitle, Textarea } from "@/components/ui";
+import { Badge, Button, Card, Input, NumberField, SectionTitle } from "@/components/ui";
 import { TYPE_ICON } from "@/components/ui/icons";
-import { MediaCard } from "./MediaCard";
-import { ItemBoard } from "@/components/fretboard/ItemBoard";
-import { hasBlock, isExercise, isMastered, masteredPatch } from "@/lib/library";
-import { TakesList } from "./Takes";
-import { ExerciseBlocks } from "./ExerciseBlocks";
+import { isExercise, isMastered, masteredPatch } from "@/lib/library";
+import { ItemBlocks } from "./ItemBlocks";
 import { cleanBpm } from "@/lib/progress";
 import { localDate } from "@/lib/date";
 import { useData } from "@/store/data";
@@ -85,22 +82,7 @@ export function ItemPage() {
         </Button>
       )}
 
-      {exercise ? (
-        <ExerciseBlocks item={item} />
-      ) : (
-        <>
-          <MediaCard item={item} />
-          {item.theory && <ItemBoard link={item.theory} />}
-          {hasBlock(item, "recorder") && (
-            <>
-              <SectionTitle>Запись игры</SectionTitle>
-              <Card>
-                <TakesList itemId={item.id} />
-              </Card>
-            </>
-          )}
-        </>
-      )}
+      <ItemBlocks item={item} />
 
       {isSong && (
         <>
@@ -173,20 +155,6 @@ export function ItemPage() {
         </>
       )}
 
-      {!exercise && (
-        <>
-          <SectionTitle>Описание и заметки</SectionTitle>
-          <Card className="space-y-2">
-            <Textarea value={item.description ?? ""} onChange={(e) => update({ description: e.target.value })} rows={3} placeholder="Что и как играть" />
-            <Textarea
-              value={item.notes ?? ""}
-              onChange={(e) => update({ notes: e.target.value })}
-              rows={3}
-              placeholder="Заметки: на что обратить внимание, где ошибаюсь"
-            />
-          </Card>
-        </>
-      )}
 
       {confirmDelete ? (
         <div className="flex gap-2">

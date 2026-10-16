@@ -6,7 +6,7 @@ import { Button, Input, Textarea } from "@/components/ui";
 import { PageHeader } from "@/components/ui/Placeholder";
 import { DEFAULT_BOARD, TheoryPicker } from "@/components/fretboard/TheoryPicker";
 import { BlockPicker, BlockShell } from "./blocks";
-import { MetronomeBlock } from "./ExerciseBlocks";
+import { MetronomeBlock } from "./ItemBlocks";
 import { ScoreFields, VideoField } from "./newItemParts";
 import { defaultExerciseTitle } from "@/lib/library";
 import { parseYouTube, withScheme } from "@/lib/youtubeLink";
@@ -77,7 +77,7 @@ export function NewExercisePage() {
         await saveTabFile(id, await tabFile.arrayBuffer());
         updateItem(id, { tabFile: { name: tabFile.name, size: tabFile.size } });
       }
-      navigate(`/library/${id}`, { replace: true });
+      navigate(`/library/${id}`, { replace: true, state: { fresh: true } });
     } catch (e) {
       toast.error("Не удалось сохранить файл", { description: (e as Error).message });
       setBusy(false);

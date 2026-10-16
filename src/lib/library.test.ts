@@ -52,6 +52,14 @@ describe("library", () => {
     expect(materialsOf(item({ blocks: ["video", "score"] }))).toEqual([]);
   });
 
+  it("a piece made before blocks gets its recording as a block of its own", () => {
+    const song = item({ type: "song", video: { youtubeId: "x" }, tabFile: { name: "a.gp", size: 1 }, audioFile: { name: "a.mp3", size: 1 } });
+    expect(blocksOf(song)).toEqual(["video", "audio", "score"]);
+    // A removed block's material isn't played.
+    expect(materialsOf({ ...song, blocks: ["score"] })).toEqual(["score"]);
+    expect(materialsOf({ ...song, blocks: ["video"] })).toEqual(["video"]);
+  });
+
   it("a piece opens a tab with its recording first", () => {
     const synced = { tabFile: { name: "a.gp", size: 1 }, audioFile: { name: "a.mp3", size: 1 } };
     expect(materialsOf(item({ type: "song", video: { youtubeId: "x" }, ...synced }))).toEqual(["score", "video"]);

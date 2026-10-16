@@ -165,9 +165,13 @@ function FileAction({ label, accept, onFile }: { label: string; accept: string; 
 
 /**
  * Video, tabs and recording of an item: the players up front, everything else in the "Материалы" sheet.
- * `scoreOnly`: just the notes and their recording — an exercise's "Ноты" block (its video and neck are blocks of their own).
+ * `part` "score": just the notes (and their recording unless `audioRows` is off) — the "Ноты" block;
+ * `part` "audio": just the recording — a piece's "Запись" block. The video and the neck are blocks of their own.
  */
-export function MediaCard({ item, scoreOnly = false }: { item: Item; scoreOnly?: boolean }) {
+export function MediaCard({ item, part = "all", audioRows = true }: { item: Item; part?: "all" | "score" | "audio"; audioRows?: boolean }) {
+  const scoreOnly = part !== "all";
+  // This card manages the recording (rows, preview, taking it from the video) unless another block does.
+  const ownsAudio = part === "audio" || audioRows;
   const { updateItem } = useData();
   const [file, setFile] = useState<ArrayBuffer | null>(null);
   const fileRef = useRef<ArrayBuffer | null>(null);
@@ -245,7 +249,8 @@ export function MediaCard({ item, scoreOnly = false }: { item: Item; scoreOnly?:
   };
   // Right after creating an item with a video: take its sound without asking.
   const location = useLocation();
-  const autoGrab = useRef((location.state as { grabAudio?: boolean } | null)?.grabAudio);
+  // Only the card that manages the recording takes it (a piece's "Ноты" and "Запись" blocks are two cards).
+  const autoGrab = useRef(ownsAudio && (location.state as { grabAudio?: boolean } | null)?.grabAudio);
   useEffect(() => {
     if (!autoGrab.current) return;
     autoGrab.current = false;
@@ -345,7 +350,7 @@ export function MediaCard({ item, scoreOnly = false }: { item: Item; scoreOnly?:
 
   const synced = !!item.audioSync?.length;
   const sectionCount = item.sections?.length ?? 0;
-  const empty = !item.tabFile && !item.tab && !item.audioFile && (scoreOnly || (!item.video && !item.theory));
+  const empty = !item.tabFile && !item.tab && (!ownsAudio || !item.audioFile) && (scoreOnly || (!item.video && !item.theory));
   const [showSync, setShowSync] = useState(false);
 
   const badges = (
@@ -382,6 +387,50 @@ export function MediaCard({ item, scoreOnly = false }: { item: Item; scoreOnly?:
           <Headphones /> {item.audioFile.fromVideo ? "звук из видео" : "запись"}
         </Badge>
       ) : null}
+    </>
+  );
+
+  // The original recording: what it is, and how to replace, download or remove it; or how to get one.
+  const recording = (
+    <>
+      {item.audioFile ? (
+        <MaterialRow
+          icon={<Headphones />}
+          title={hasTab ? "Звук для табов" : "Запись"}
+          sub={[
+            item.audioFile.fromVideo ? "из видео" : item.audioFile.name,
+            missing.audio ? "загрузи на этом устройстве" : hasTab ? (synced ? "синхронизирован" : "без синхронизации") : "",
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+          actions={
+            <>
+              {audioData && (
+                <IconAction label="Скачать запись" onClick={() => downloadAudio(audioData, item.audioFile!.name)}>
+                  <Download className="size-4" />
+                </IconAction>
+              )}
+              <FileAction label="Заменить запись" accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)} />
+              <IconAction label="Удалить запись" onClick={() => void removeAudio()}>
+                <Trash2 className="size-4" />
+              </IconAction>
+            </>
+          }
+        />
+      ) : (
+        <>
+          {item.video && (
+            <AddRow
+              icon={<WandSparkles />}
+              title={grabbing ? `Беру звук из видео…${grabAttempt > 1 ? ` (попытка ${grabAttempt})` : ""}` : "Звук из видео"}
+              sub={hasTab ? "табы будут играть под запись из видео, а не синтезатор" : "запись можно будет замедлять без смены тона"}
+              busy={grabbing}
+              onClick={() => void grabAudio()}
+            />
+          )}
+          <AddRow icon={<Headphones />} title="Своя запись" sub="mp3, m4a, wav" accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)} />
+        </>
+      )}
     </>
   );
 
@@ -481,45 +530,7 @@ export function MediaCard({ item, scoreOnly = false }: { item: Item; scoreOnly?:
         />
       )}
 
-      {/* Recording */}
-      {item.audioFile ? (
-        <MaterialRow
-          icon={<Headphones />}
-          title={hasTab ? "Звук для табов" : "Запись"}
-          sub={[
-            item.audioFile.fromVideo ? "из видео" : item.audioFile.name,
-            missing.audio ? "загрузи на этом устройстве" : hasTab ? (synced ? "синхронизирован" : "без синхронизации") : "",
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-          actions={
-            <>
-              {audioData && (
-                <IconAction label="Скачать запись" onClick={() => downloadAudio(audioData, item.audioFile!.name)}>
-                  <Download className="size-4" />
-                </IconAction>
-              )}
-              <FileAction label="Заменить запись" accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)} />
-              <IconAction label="Удалить запись" onClick={() => void removeAudio()}>
-                <Trash2 className="size-4" />
-              </IconAction>
-            </>
-          }
-        />
-      ) : (
-        <>
-          {item.video && (
-            <AddRow
-              icon={<WandSparkles />}
-              title={grabbing ? `Беру звук из видео…${grabAttempt > 1 ? ` (попытка ${grabAttempt})` : ""}` : "Звук из видео"}
-              sub={hasTab ? "табы будут играть под запись из видео, а не синтезатор" : "запись можно будет замедлять без смены тона"}
-              busy={grabbing}
-              onClick={() => void grabAudio()}
-            />
-          )}
-          <AddRow icon={<Headphones />} title="Своя запись" sub="mp3, m4a, wav" accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)} />
-        </>
-      )}
+      {ownsAudio && recording}
       {scoreLink && (
         <MaterialRow
           icon={<FileMusic />}
@@ -538,6 +549,14 @@ export function MediaCard({ item, scoreOnly = false }: { item: Item; scoreOnly?:
       )}
     </div>
   );
+
+  if (part === "audio")
+    return (
+      <div className="space-y-2">
+        {audioData && <AudioPreview data={audioData} />}
+        {recording}
+      </div>
+    );
 
   return (
     <>
@@ -569,7 +588,7 @@ export function MediaCard({ item, scoreOnly = false }: { item: Item; scoreOnly?:
                 />
               </Suspense>
             )}
-            {!hasTab && audioData && <AudioPreview data={audioData} />}
+            {!hasTab && ownsAudio && audioData && <AudioPreview data={audioData} />}
             {hasTab && <TabViewSwitch />}
             <div className="flex items-center gap-2">
               {hasTab ? (
