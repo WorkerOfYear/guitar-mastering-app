@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from "react";
-import { ChevronRight, FileMusic, Grid3x3, Metronome, Mic, NotebookPen, Plus, Video, X, type LucideIcon } from "lucide-react";
+import { ChevronDown, ChevronRight, FileMusic, Grid3x3, Metronome, Mic, NotebookPen, Plus, Video, X, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { haptic } from "@/app/telegram";
+import { cn } from "@/lib/utils";
 import type { BlockId } from "@/shared/types";
 
 // An exercise is put together from blocks, like a construction kit. A new kind of block is one entry here,
@@ -97,31 +98,76 @@ function AddChip({ onClick, plain, children }: { onClick: () => void; plain?: bo
   );
 }
 
-/** One block on the card: its name and a remove button (asks once more), then its content. */
-export function BlockShell({ id, onRemove, children }: { id: BlockId; onRemove: () => void; children: ReactNode }) {
+/**
+ * One block: a header row (its icon, name and, when folded, a one-line summary), then its content.
+ * With `onToggle` it folds (the card starts with every block folded); the form keeps blocks open.
+ * Removing asks once more.
+ */
+export function BlockShell({
+  id,
+  onRemove,
+  open = true,
+  onToggle,
+  summary,
+  children,
+}: {
+  id: BlockId;
+  onRemove: () => void;
+  open?: boolean;
+  onToggle?: () => void;
+  summary?: string;
+  children: ReactNode;
+}) {
   const [confirm, setConfirm] = useState(false);
   const Icon = BLOCK_META[id].icon;
+  const head = (
+    <>
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent/12 text-accent">
+        <Icon className="size-[18px]" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold">{BLOCK_META[id].title}</span>
+        {!open && summary && <span className="block truncate text-xs text-muted">{summary}</span>}
+      </span>
+    </>
+  );
   return (
-    <section className="space-y-2">
-      <div className="flex h-8 items-center gap-2 px-1">
-        <Icon className="size-4 shrink-0 text-accent" />
-        <h2 className="flex-1 text-xs font-semibold uppercase tracking-wider text-muted">{BLOCK_META[id].title}</h2>
-        {confirm ? (
-          <>
-            <Button variant="destructive-ghost" size="sm" onClick={onRemove} className="h-8">
-              Убрать блок
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setConfirm(false)} className="h-8">
-              Отмена
-            </Button>
-          </>
+    <section className="rounded-3xl border border-line bg-surface">
+      <div className="flex min-h-14 items-center gap-1 pr-2">
+        {onToggle ? (
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => {
+              haptic();
+              setConfirm(false);
+              onToggle();
+            }}
+            className="flex min-w-0 flex-1 items-center gap-3 self-stretch rounded-3xl py-2 pl-3 text-left"
+          >
+            {head}
+            <ChevronDown className={cn("size-4 shrink-0 text-muted transition-transform", open && "rotate-180")} />
+          </button>
         ) : (
-          <Button variant="ghost" size="icon-sm" aria-label={`Убрать блок «${BLOCK_META[id].title}»`} onClick={() => setConfirm(true)} className="size-8">
-            <X className="size-4" />
-          </Button>
+          <div className="flex min-w-0 flex-1 items-center gap-3 py-2 pl-3">{head}</div>
         )}
+        {open &&
+          (confirm ? (
+            <>
+              <Button variant="destructive-ghost" size="sm" onClick={onRemove} className="h-8">
+                Убрать
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setConfirm(false)} className="h-8">
+                Отмена
+              </Button>
+            </>
+          ) : (
+            <Button variant="ghost" size="icon-sm" aria-label={`Убрать блок «${BLOCK_META[id].title}»`} onClick={() => setConfirm(true)} className="size-8">
+              <X className="size-4" />
+            </Button>
+          ))}
       </div>
-      {children}
+      {open && <div className="px-3 pb-3">{children}</div>}
     </section>
   );
 }

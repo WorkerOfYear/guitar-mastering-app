@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { LoaderCircle, Plus } from "lucide-react";
-import { Button, Card, Input, Textarea } from "@/components/ui";
+import { Button, Input, Textarea } from "@/components/ui";
 import { PageHeader } from "@/components/ui/Placeholder";
 import { DEFAULT_BOARD, TheoryPicker } from "@/components/fretboard/TheoryPicker";
 import { BlockPicker, BlockShell } from "./blocks";
@@ -89,32 +89,32 @@ export function NewExercisePage() {
     switch (id) {
       case "video":
         return (
-          <Card>
+          <div>
             <VideoField value={videoUrl} onChange={setVideoUrl} error={videoError} />
-          </Card>
+          </div>
         );
       case "score":
         return (
-          <Card className="space-y-3">
+          <div className="space-y-3">
             <ScoreFields file={tabFile} onFile={setTabFile} links={tabLinks} onLinks={setTabLinks} query={finalTitle} auto={false} />
-          </Card>
+          </div>
         );
       case "board":
         return (
-          <Card>
+          <div>
             <TheoryPicker value={board} onChange={setBoard} />
-          </Card>
+          </div>
         );
       case "metronome":
         return <MetronomeBlock item={tempo} update={(p) => setTempo((t) => ({ ...t, ...p }))} />;
       case "notes":
         return (
-          <Card>
+          <div>
             <Textarea autoFocus value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Мысли по поводу упражнения" />
-          </Card>
+          </div>
         );
       case "recorder":
-        return <Card className="text-sm text-muted">Кнопка «Записать игру» появится на занятии и в карточке упражнения — записи можно будет послушать потом.</Card>;
+        return <p className="text-sm text-muted">Кнопка «Записать игру» появится на занятии и в карточке упражнения — записи можно будет послушать потом.</p>;
     }
   };
 

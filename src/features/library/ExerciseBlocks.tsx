@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Check, Pencil, Video } from "lucide-react";
-import { Button, Card, Chip, Input, NumberField, ScrollRow, Textarea } from "@/components/ui";
+import { Button, Chip, Input, NumberField, ScrollRow, Textarea } from "@/components/ui";
 import { ItemBoard } from "@/components/fretboard/ItemBoard";
 import { DEFAULT_BOARD, TheoryPicker } from "@/components/fretboard/TheoryPicker";
 import { YouTubePlayer } from "@/components/video/YouTubePlayer";
 import { addBlockPatch, blocksOf, removeBlockPatch } from "@/lib/library";
+import { choiceOf, theoryView } from "@/music/theoryView";
 import { parseYouTube, withScheme } from "@/lib/youtubeLink";
 import { useData } from "@/store/data";
 import { SUBDIVISION_META, type BlockId, type Item, type Subdivision } from "@/shared/types";
@@ -12,22 +13,57 @@ import { BlockPicker, BlockShell } from "./blocks";
 import { MediaCard } from "./MediaCard";
 import { TakesList } from "./Takes";
 
-/** An exercise's card body: its blocks in order, then chips to add more. */
+/** An exercise's card body: its blocks in order, folded (a block just added opens), then chips to add more. */
 export function ExerciseBlocks({ item }: { item: Item }) {
   const { updateItem } = useData();
   const update = (patch: Partial<Item>) => updateItem(item.id, patch);
   const blocks = blocksOf(item);
+  const [open, setOpen] = useState<BlockId[]>([]);
+  const toggle = (id: BlockId) => setOpen((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]));
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       {blocks.map((id) => (
-        <BlockShell key={id} id={id} onRemove={() => update(removeBlockPatch(item, id))}>
+        <BlockShell
+          key={id}
+          id={id}
+          open={open.includes(id)}
+          onToggle={() => toggle(id)}
+          summary={blockSummary(id, item)}
+          onRemove={() => update(removeBlockPatch(item, id))}
+        >
           <BlockBody id={id} item={item} update={update} />
         </BlockShell>
       ))}
       {!blocks.length && <p className="px-1 text-sm text-muted">Собери упражнение из блоков: видео, ноты, гриф, метроном и другие.</p>}
-      <BlockPicker have={blocks} onAdd={(id) => update(addBlockPatch(item, id))} />
+      <div className="pt-2">
+        <BlockPicker
+          have={blocks}
+          onAdd={(id) => {
+            update(addBlockPatch(item, id));
+            setOpen((o) => [...o, id]);
+          }}
+        />
+      </div>
     </div>
   );
+}
+
+/** What a folded block holds, in a few words. */
+function blockSummary(id: BlockId, item: Item): string {
+  switch (id) {
+    case "video":
+      return item.video ? `YouTube${item.video.start ? ` с ${Math.floor(item.video.start / 60)}:${String(Math.floor(item.video.start % 60)).padStart(2, "0")}` : ""}` : "ссылка не добавлена";
+    case "score":
+      return item.tabFile?.name ?? (item.tab ? "табы упражнения" : (item.audioFile?.name ?? "файл не загружен"));
+    case "board":
+      return item.theory ? theoryView(choiceOf(item.theory)).title : "гамма не выбрана";
+    case "metronome":
+      return `${item.startBpm ?? "—"} → ${item.targetBpm ?? "—"} bpm${item.subdivision ? ` · ${SUBDIVISION_META[item.subdivision]}` : ""}`;
+    case "notes":
+      return (item.notes ?? item.description ?? "").trim().split("\n")[0] || "пока пусто";
+    case "recorder":
+      return "записи твоей игры";
+  }
 }
 
 function BlockBody({ id, item, update }: { id: BlockId; item: Item; update: (patch: Partial<Item>) => void }) {
@@ -42,20 +78,20 @@ function BlockBody({ id, item, update }: { id: BlockId; item: Item; update: (pat
       return <MetronomeBlock item={item} update={update} />;
     case "notes":
       return (
-        <Card>
+        <div>
           <Textarea
             value={item.notes ?? item.description ?? ""}
             onChange={(e) => update({ notes: e.target.value, description: undefined })}
             rows={4}
             placeholder="Что получается, где ошибаюсь, на что обратить внимание"
           />
-        </Card>
+        </div>
       );
     case "recorder":
       return (
-        <Card>
+        <div>
           <TakesList itemId={item.id} />
-        </Card>
+        </div>
       );
   }
 }
@@ -82,7 +118,7 @@ export function VideoBlock({ item, update }: { item: Item; update: (patch: Parti
       </div>
     );
   return (
-    <Card className="space-y-1.5">
+    <div className="space-y-1.5">
       <div className="flex gap-2">
         <div className="relative min-w-0 flex-1">
           <Video className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted" />
@@ -101,7 +137,7 @@ export function VideoBlock({ item, update }: { item: Item; update: (patch: Parti
         </Button>
       </div>
       {!!url.trim() && !parsed && <p className="px-1 text-xs text-guide">Не похоже на ссылку YouTube</p>}
-    </Card>
+    </div>
   );
 }
 
@@ -111,7 +147,7 @@ function BoardBlock({ item, update }: { item: Item; update: (patch: Partial<Item
   return (
     <div className="space-y-2">
       {edit && (
-        <Card className="space-y-2">
+        <div className="space-y-2">
           <TheoryPicker value={link} onChange={(theory) => update({ theory })} />
           <Button
             variant="secondary"
@@ -123,7 +159,7 @@ function BoardBlock({ item, update }: { item: Item; update: (patch: Partial<Item
           >
             <Check /> Готово
           </Button>
-        </Card>
+        </div>
       )}
       {item.theory && <ItemBoard link={item.theory} />}
       {!edit && (
@@ -139,7 +175,7 @@ type Tempo = Pick<Item, "startBpm" | "targetBpm" | "subdivision">;
 
 export function MetronomeBlock({ item, update }: { item: Tempo; update: (patch: Partial<Tempo>) => void }) {
   return (
-    <Card className="space-y-3">
+    <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2">
         <NumberField label="Начать с, bpm" min={0} value={item.startBpm ?? 0} onChange={(v) => update({ startBpm: v || null })} />
         <NumberField label="Цель, bpm" min={0} value={item.targetBpm ?? 0} onChange={(v) => update({ targetBpm: v || null })} />
@@ -151,6 +187,6 @@ export function MetronomeBlock({ item, update }: { item: Tempo; update: (patch: 
           </Chip>
         ))}
       </ScrollRow>
-    </Card>
+    </div>
   );
 }
