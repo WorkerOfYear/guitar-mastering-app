@@ -58,10 +58,10 @@ export function ScaleBoard({ title, tones, chord, patterns, position: rawPositio
         onTap={tap}
       />
 
-      <div role="radiogroup" aria-label="Позиция" className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(4.25rem,1fr))] gap-1.5 px-4">
-        <PositionBlock active={position < 0} onClick={() => onPosition(-1)} title="Весь" sub="гриф" />
-        {patterns.map((p, i) => (
-          <PositionBlock key={i} active={position === i} onClick={() => onPosition(i)} title={String(i + 1)} sub={fretRange(p)} />
+      {/* Tap a box to light it up, tap it again for the whole neck. */}
+      <div role="group" aria-label="Позиция" className="mt-2 grid gap-1.5 px-4" style={{ gridTemplateColumns: `repeat(${patterns.length}, minmax(0, 1fr))` }}>
+        {patterns.map((_, i) => (
+          <PositionBlock key={i} n={i + 1} active={position === i} onClick={() => onPosition(position === i ? -1 : i)} />
         ))}
       </div>
 
@@ -74,28 +74,23 @@ export function ScaleBoard({ title, tones, chord, patterns, position: rawPositio
   );
 }
 
-/** "лады 5–8", or "откр.–3" for a box that starts on open strings. */
-const fretRange = (p: Pattern) => `${p.minFret === 0 ? "откр." : p.minFret}–${p.maxFret}`;
-
-/** One fingering box (or the whole neck) as a tappable block. */
-function PositionBlock({ active, onClick, title, sub }: { active: boolean; onClick: () => void; title: string; sub: string }) {
+/** One fingering box as a toggle. */
+function PositionBlock({ n, active, onClick }: { n: number; active: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
-      role="radio"
-      aria-checked={active}
-      aria-label={title === "Весь" ? "Весь гриф" : `Позиция ${title}, лады ${sub}`}
+      aria-pressed={active}
+      aria-label={`Позиция ${n}`}
       onClick={() => {
         haptic();
         onClick();
       }}
       className={cn(
-        "flex h-14 flex-col items-center justify-center rounded-2xl border transition-[background-color,border-color,transform] active:scale-[0.97]",
+        "flex h-11 items-center justify-center rounded-2xl border text-base font-bold transition-[background-color,border-color,transform] active:scale-[0.97]",
         active ? "border-accent bg-accent/12 text-accent" : "border-line text-fg hover:bg-surface-2",
       )}
     >
-      <span className="text-base font-bold leading-tight">{title}</span>
-      <span className={cn("text-[11px] leading-tight", active ? "text-accent" : "text-muted")}>{sub}</span>
+      {n}
     </button>
   );
 }
