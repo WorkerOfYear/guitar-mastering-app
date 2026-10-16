@@ -101,8 +101,8 @@ function AddChip({ onClick, plain, children }: { onClick: () => void; plain?: bo
 /**
  * One block: a header row (its icon, name and, when folded, a one-line summary), then its content.
  * With `onToggle` it folds (the card starts with every block folded); the form keeps blocks open.
- * An open block is outlined in the accent color, its content set off by a line; "Убрать блок" sits at
- * the bottom of the content (asks once more), away from the fold arrow.
+ * The bin sits in the same spot on every block, folded or open, just left of the fold arrow;
+ * tapping it asks once more right in the header.
  */
 export function BlockShell({
   id,
@@ -121,57 +121,64 @@ export function BlockShell({
 }) {
   const [confirm, setConfirm] = useState(false);
   const Icon = BLOCK_META[id].icon;
+  const title = BLOCK_META[id].title;
   const head = (
     <>
       <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent/12 text-accent">
         <Icon className="size-[18px]" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block font-semibold">{BLOCK_META[id].title}</span>
-        {!open && summary && <span className="block truncate text-xs text-muted">{summary}</span>}
+        <span className="block font-semibold">{title}</span>
+        {confirm ? (
+          <span className="block truncate text-xs text-guide">Убрать блок?</span>
+        ) : (
+          !open && summary && <span className="block truncate text-xs text-muted">{summary}</span>
+        )}
       </span>
     </>
   );
   return (
     <section className={cn("rounded-3xl border bg-surface transition-colors", open && onToggle ? "border-accent/60" : "border-line")}>
-      {onToggle ? (
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() => {
-            haptic();
-            setConfirm(false);
-            onToggle();
-          }}
-          className="flex min-h-14 w-full items-center gap-3 rounded-3xl py-2 pl-3 pr-4 text-left"
-        >
-          {head}
-          <ChevronDown className={cn("size-5 shrink-0 text-muted transition-transform", open && "rotate-180")} />
-        </button>
-      ) : (
-        <div className="flex min-h-14 items-center gap-3 py-2 pl-3 pr-4">{head}</div>
-      )}
-      {open && (
-        <div className="space-y-3 border-t border-line/70 px-4 pb-3 pt-3">
-          {children}
-          <div className="flex justify-end gap-2">
-            {confirm ? (
-              <>
-                <Button variant="ghost" size="sm" onClick={() => setConfirm(false)} className="h-9">
-                  Отмена
-                </Button>
-                <Button variant="destructive" size="sm" onClick={onRemove} className="h-9">
-                  Да, убрать «{BLOCK_META[id].title}»
-                </Button>
-              </>
-            ) : (
-              <Button variant="destructive-ghost" size="sm" onClick={() => setConfirm(true)} className="h-9">
-                <Trash2 className="size-4" /> Убрать блок
+      <div className="flex min-h-14 items-center pr-2">
+        {onToggle ? (
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => {
+              haptic();
+              setConfirm(false);
+              onToggle();
+            }}
+            className="flex min-w-0 flex-1 items-center gap-3 self-stretch rounded-3xl py-2 pl-3 text-left"
+          >
+            {head}
+          </button>
+        ) : (
+          <div className="flex min-w-0 flex-1 items-center gap-3 py-2 pl-3">{head}</div>
+        )}
+        {confirm ? (
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setConfirm(false)} className="h-9 px-3">
+              Нет
+            </Button>
+            <Button variant="destructive" size="sm" onClick={onRemove} className="h-9 px-3">
+              Убрать
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button variant="ghost" size="icon-sm" aria-label={`Убрать блок «${title}»`} onClick={() => setConfirm(true)} className="size-9 text-muted hover:text-guide">
+              <Trash2 className="size-4" />
+            </Button>
+            {onToggle && (
+              <Button variant="ghost" size="icon-sm" aria-label={open ? "Свернуть" : "Развернуть"} onClick={onToggle} className="size-9">
+                <ChevronDown className={cn("size-5 transition-transform", open && "rotate-180")} />
               </Button>
             )}
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </div>
+      {open && <div className="space-y-3 border-t border-line/70 px-4 pb-4 pt-3">{children}</div>}
     </section>
   );
 }
