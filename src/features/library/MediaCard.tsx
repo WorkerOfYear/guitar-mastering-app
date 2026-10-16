@@ -47,7 +47,7 @@ const TabPlayer = lazy(() => import("@/components/tab/TabPlayer"));
 
 /** The view switch is one button that steps tab → notes → both, marked the way music is: "TAB", a note, both. */
 const VIEW_NEXT = { tab: "score", score: "both", both: "tab" } as const;
-const TabMark = () => <span className="text-[11px] font-black leading-none tracking-tight">TAB</span>;
+const TabMark = () => <span className="text-[13px] font-semibold leading-none">TAB</span>;
 const VIEW_META = {
   tab: { mark: <TabMark />, name: "Табы" },
   score: { mark: <Music2 className="!size-5" />, name: "Ноты" },
@@ -55,6 +55,7 @@ const VIEW_META = {
     mark: (
       <span className="flex items-center gap-0.5">
         <Music2 className="!size-4" />
+        <span className="text-sm font-medium leading-none text-muted">+</span>
         <TabMark />
       </span>
     ),
@@ -595,7 +596,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
         aria-label={`Вид: ${View.name}. Переключить`}
         title={`${View.name} — нажми, чтобы переключить`}
         onClick={() => setTabView(VIEW_NEXT[tabView])}
-        className="h-10 w-16 shrink-0 px-0"
+        className="h-10 w-[4.75rem] shrink-0 px-0"
       >
         {View.mark}
       </Button>
@@ -714,7 +715,8 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
         {player && (
           <div className="relative">
             {player}
-            <div className="absolute right-2 top-2 z-10 flex gap-1.5">
+            {/* Clear of the tab's own scrollbar on the right. */}
+            <div className="absolute right-6 top-2 z-10 flex gap-1.5">
               {viewBtn}
               {playBtn}
             </div>
