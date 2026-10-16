@@ -23,7 +23,7 @@ import {
   Video,
   WandSparkles,
 } from "lucide-react";
-import { Badge, Button, Card, Input, Segmented } from "@/components/ui";
+import { Badge, Button, Card, Input, Segmented, buttonVariants } from "@/components/ui";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { YouTubePlayer } from "@/components/video/YouTubePlayer";
@@ -618,26 +618,18 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
         />
       </Suspense>
     );
+    // Like "Заменить видео" under the video: one wide button under the tabs.
     const fileRow = item.tabFile ? (
-      <MaterialRow
-        icon={<FileMusic />}
-        title={item.tabFile.name}
-        sub={missing.tab ? "загрузи на этом устройстве" : undefined}
-        actions={
-          <>
-            <FileAction label="Заменить файл" accept={TAB_ACCEPT} onFile={(f) => void upload(f)} />
-            <IconAction label="Удалить файл" onClick={() => void removeFile()}>
-              <Trash2 className="size-4" />
-            </IconAction>
-          </>
-        }
-      />
+      <label className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "w-full cursor-pointer")}>
+        <RefreshCw className="size-4" /> {missing.tab ? "Загрузить табы на этом устройстве" : "Заменить табы"}
+        <input type="file" accept={TAB_ACCEPT} hidden onChange={(e) => e.target.files?.[0] && void upload(e.target.files[0])} />
+      </label>
     ) : (
       !item.tab && <AddRow icon={<FileMusic />} title="Загрузить табы или ноты" sub="Guitar Pro, MusicXML" accept={TAB_ACCEPT} onFile={(f) => void upload(f)} />
     );
     const trackSelect = score && score.tracks.length > 1 && (
       <Select value={String(track)} onValueChange={(v) => setTrack(Number(v))}>
-        <SelectTrigger className="w-full" aria-label="Дорожка">
+        <SelectTrigger aria-label="Дорожка" title="Дорожка" className="h-10 w-auto max-w-36 rounded-xl border-0 bg-surface-2 px-3 text-xs font-semibold">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -717,6 +709,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
             {player}
             {/* Clear of the tab's own scrollbar on the right. */}
             <div className="absolute right-6 top-2 z-10 flex gap-1.5">
+              {trackSelect}
               {viewBtn}
               {playBtn}
             </div>
@@ -724,7 +717,6 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
         )}
         {strip}
         {fileRow}
-        {trackSelect}
         {audioRow || (
           <>
             <div className="flex">{bindBtn}</div>
