@@ -50,7 +50,7 @@ export function TodayPage() {
       <PageHeader
         title="План занятия"
         subtitle={new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
-        action={<SettingsLink />}
+        action={<SettingsLink className="md:hidden" />}
       />
       {active ? (
         <Button asChild size="xl" className="w-full">

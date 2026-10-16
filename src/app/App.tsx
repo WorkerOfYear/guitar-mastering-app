@@ -7,6 +7,8 @@ import { BeatFlash } from "@/components/metronome/MetronomePanel";
 import { Button } from "@/components/ui";
 import { Toaster } from "@/components/ui/sonner";
 import { TodayPage } from "@/features/today/TodayPage";
+import { SettingsLink } from "@/components/ui/Placeholder";
+import { BottomNav, SECTION_ROOTS, SectionsMenu } from "./Nav";
 
 // Everything but the home screen loads on first visit, so the app opens fast inside Telegram.
 const page = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) => lazy(() => load().then((m) => ({ default: m[name] })));
@@ -22,8 +24,8 @@ const MetronomePage = page(() => import("@/features/metronome/MetronomePage"), "
 const ImprovPage = page(() => import("@/features/improv/ImprovPage"), "ImprovPage");
 const SessionPage = page(() => import("@/features/session/SessionPage"), "SessionPage");
 
-// One main screen for now; the others stay reachable from settings and from plan entries.
-const TAB_ROOTS = ["/"];
+// Section roots (bottom bar / "Разделы" menu) have no back button.
+const TAB_ROOTS = SECTION_ROOTS;
 
 /** Telegram's native back button for screens that are not tab roots. */
 function TelegramBack() {
@@ -44,7 +46,7 @@ function TelegramBack() {
 function BackButton() {
   const location = useLocation();
   const navigate = useNavigate();
-  if (tg || location.pathname === "/" || location.pathname === "/session") return null;
+  if (tg || TAB_ROOTS.includes(location.pathname) || location.pathname === "/session") return null;
   // Opened by a direct link there is no history to go back to — go home instead.
   const back = () => (location.key === "default" ? navigate("/") : navigate(-1));
   return (
@@ -69,8 +71,18 @@ function Shell() {
     <LazyMotion features={motionFeatures} strict>
       <MotionConfig reducedMotion="user">
         <TelegramBack />
-        <main className="mx-auto max-w-3xl px-4 pb-10 pt-[max(env(safe-area-inset-top),0.5rem)]">
-          <BackButton />
+        <main
+          className={`mx-auto max-w-3xl px-4 pt-[max(env(safe-area-inset-top),0.5rem)] ${location.pathname === "/session" ? "pb-10" : "pb-28 md:pb-10"}`}
+        >
+          <div className="flex items-center gap-2">
+            <BackButton />
+            {location.pathname !== "/session" && (
+              <div className="ml-auto hidden gap-2 pt-2 md:flex">
+                <SectionsMenu />
+                <SettingsLink />
+              </div>
+            )}
+          </div>
           {/* Opacity only: a transform here would break position: fixed inside the pages. */}
           <m.div key={location.pathname} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2, ease: "easeOut" }}>
             <Suspense fallback={null}>
@@ -93,6 +105,7 @@ function Shell() {
             </Suspense>
           </m.div>
         </main>
+        <BottomNav />
         <BeatFlash />
         <Toaster />
       </MotionConfig>

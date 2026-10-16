@@ -15,9 +15,9 @@ export function PageHeader({ title, subtitle, action }: { title: ReactNode; subt
   );
 }
 
-export function SettingsLink() {
+export function SettingsLink({ className }: { className?: string }) {
   return (
-    <Button asChild variant="secondary" size="icon" aria-label="Настройки">
+    <Button asChild variant="secondary" size="icon" aria-label="Настройки" className={className}>
       <Link to="/settings">
         <Settings />
       </Link>

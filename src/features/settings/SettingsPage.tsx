@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { BookOpen, ChevronDown, ChevronRight, ListChecks, Download, Guitar, GraduationCap, Metronome, Moon, Sun, TrendingUp, Upload, type LucideIcon } from "lucide-react";
+import { ChevronDown, Download, Moon, Sun, Upload } from "lucide-react";
 import { Button, Card, NumberField, Segmented, SectionTitle, Toggle } from "@/components/ui";
 import { BLOCK_ICON } from "@/components/ui/icons";
 import { haptic } from "@/app/telegram";
@@ -15,14 +14,6 @@ import { SyncCard } from "./SyncCard";
 import { AudioServerCard, ScoreServerCard } from "./AudioServerCard";
 
 const DAY_LABELS = ["ВС", "ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ"];
-const SECTIONS: [string, string, LucideIcon][] = [
-  ["/settings/plan", "Конструктор плана", ListChecks],
-  ["/library", "Библиотека", BookOpen],
-  ["/theory", "Теория", GraduationCap],
-  ["/progress", "Прогресс", TrendingUp],
-  ["/metronome", "Метроном", Metronome],
-  ["/improv", "Импровизация", Guitar],
-];
 
 export function SettingsPage() {
   const { fretboard, setFretboard, theme, setTheme } = useSettings();
@@ -53,19 +44,6 @@ export function SettingsPage() {
   return (
     <div>
       <PageHeader title="Настройки" />
-
-      <SectionTitle>Разделы</SectionTitle>
-      <Card className="divide-y divide-line/60 px-2 py-1">
-        {SECTIONS.map(([to, label, Icon]) => (
-          <Link key={to} to={to} onClick={haptic} className="flex h-14 items-center gap-3 rounded-xl px-2 transition-colors active:bg-surface-2">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-accent/12 text-accent">
-              <Icon className="size-5" />
-            </span>
-            <span className="flex-1 font-semibold">{label}</span>
-            <ChevronRight className="size-4 text-muted" />
-          </Link>
-        ))}
-      </Card>
 
       <SectionTitle>Занятие</SectionTitle>
       <Card className="space-y-3">
