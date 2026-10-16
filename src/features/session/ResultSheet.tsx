@@ -48,9 +48,9 @@ export function ResultSheet({ open, entry, bpm: initialBpm, onClose }: Props) {
     logTempo({ itemId: entry.itemId, sectionId: entry.sectionId, date, bpm: useTempo ? bpm : null, result, note: note.trim() || undefined });
     markPlayed([entry], date);
     const target = targetBpm(item, entry.sectionId);
-    // Clean at the target tempo: offer the "learned" mark (unless it's already there). The user decides.
+    // A piece (or its section) clean at the target tempo: offer the "learned" mark (unless it's already there). The user decides.
     const learned = (entry.sectionId ? findSection(item, entry.sectionId)?.status : item?.status) === "rotation";
-    if (result === "clean" && useTempo && target && bpm >= target && !learned) setReached(true);
+    if (result === "clean" && useTempo && target && bpm >= target && !learned && item?.type === "song") setReached(true);
     else onClose(true);
   };
 

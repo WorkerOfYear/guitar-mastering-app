@@ -22,13 +22,15 @@ const FILTERS: { value: Filter; label: string }[] = [
   { value: "done", label: "Разобрано" },
 ];
 
-/** Two shelves: exercises and pieces. "Разобрано" is the user's own mark; the planner decides what goes into a session. */
+/** Two shelves: exercises and pieces. Pieces carry the user's own "Разобрано" mark; the planner decides what goes into a session. */
 export function LibraryPage() {
   const { items: all, log } = useData();
   const today = localDate();
   const [params, setParams] = useSearchParams();
   const tab: LibraryTab = params.get("tab") === "pieces" ? "pieces" : "exercises";
-  const filter = (["open", "done"].includes(params.get("show") ?? "") ? params.get("show") : "all") as Filter;
+  const pieces = tab === "pieces";
+  // Exercises are just a list; only pieces are marked learned and filtered by it.
+  const filter = (pieces && ["open", "done"].includes(params.get("show") ?? "") ? params.get("show") : "all") as Filter;
   const setQuery = (patch: Record<string, string | null>) =>
     setParams(
       (p) => {
@@ -63,7 +65,7 @@ export function LibraryPage() {
           { value: "pieces", label: "Произведения" },
         ]}
       />
-      {shelf.length > 0 && (
+      {pieces && shelf.length > 0 && (
         <div className="flex items-center justify-between gap-2">
           <div className="flex gap-2">
             {FILTERS.map((f) => (
@@ -89,7 +91,7 @@ export function LibraryPage() {
             const target = targetBpm(item);
             const sections = item.sections ?? [];
             const done = sections.filter((s) => s.status === "rotation").length;
-            const mastered = isMastered(item);
+            const mastered = pieces && isMastered(item);
             return (
               <m.div key={item.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 10) * 0.03 }}>
                 <Link to={`/library/${item.id}`} className="block">

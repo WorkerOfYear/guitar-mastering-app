@@ -80,13 +80,16 @@ export function ItemPage() {
         </div>
       )}
 
-      <Button
-        variant={isMastered(item) ? "secondary" : "default"}
-        onClick={() => update(masteredPatch(item, !isMastered(item)))}
-        className="w-full"
-      >
-        <Check /> {isMastered(item) ? "Разобрано — вернуть в работу" : "Отметить разобранным"}
-      </Button>
+      {/* Only pieces get the "learned" mark; exercises are practised, not finished. */}
+      {!exercise && (
+        <Button
+          variant={isMastered(item) ? "secondary" : "default"}
+          onClick={() => update(masteredPatch(item, !isMastered(item)))}
+          className="w-full"
+        >
+          <Check /> {isMastered(item) ? "Разобрано — вернуть в работу" : "Отметить разобранным"}
+        </Button>
+      )}
 
       {exercise ? (
         <ExerciseBlocks item={item} />
