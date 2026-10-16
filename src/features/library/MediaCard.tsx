@@ -7,8 +7,6 @@ import {
   Download,
   FileMusic,
   Grid3x3,
-  Guitar,
-  Layers,
   Music2,
   Pencil,
   Headphones,
@@ -47,12 +45,21 @@ import type { Item, Section } from "@/shared/types";
 
 const TabPlayer = lazy(() => import("@/components/tab/TabPlayer"));
 
-/** The view switch is one icon that steps tab → notes → both. */
+/** The view switch is one button that steps tab → notes → both, marked the way music is: "TAB", a note, both. */
 const VIEW_NEXT = { tab: "score", score: "both", both: "tab" } as const;
+const TabMark = () => <span className="text-[11px] font-black leading-none tracking-tight">TAB</span>;
 const VIEW_META = {
-  tab: { icon: Guitar, name: "Табы" },
-  score: { icon: Music2, name: "Ноты" },
-  both: { icon: Layers, name: "Ноты и табы" },
+  tab: { mark: <TabMark />, name: "Табы" },
+  score: { mark: <Music2 className="!size-5" />, name: "Ноты" },
+  both: {
+    mark: (
+      <span className="flex items-center gap-0.5">
+        <Music2 className="!size-4" />
+        <TabMark />
+      </span>
+    ),
+    name: "Ноты и табы",
+  },
 } as const;
 
 import { parseYouTube, withScheme } from "@/lib/youtubeLink";
@@ -588,9 +595,9 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
         aria-label={`Вид: ${View.name}. Переключить`}
         title={`${View.name} — нажми, чтобы переключить`}
         onClick={() => setTabView(VIEW_NEXT[tabView])}
-        className="size-10 shrink-0"
+        className="h-10 w-16 shrink-0 px-0"
       >
-        <View.icon className="!size-5" />
+        {View.mark}
       </Button>
     );
     const player = hasTab && mediaReady && (
