@@ -1,53 +1,34 @@
-// Audio of a YouTube or Instagram video, from the user's own server (server/youtube-audio). YouTube
-// blocks downloads from cloud hosting like Vercel, so the app can't do it itself.
+// Audio of a YouTube or Instagram video. The owner's API asks its neighbour server/youtube-audio for it
+// (YouTube blocks downloads from cloud hosting like Vercel, so the app can't do it itself).
 
 import type { VideoLink } from "@/shared/types";
-
-export interface AudioServer {
-  url: string;
-  key: string;
-}
-
-export const serverReady = (s: AudioServer) => !!s.url.trim() && !!s.key.trim();
-
-const base = (s: AudioServer) => {
-  const url = s.url.trim().replace(/\/+$/, "");
-  return /^https?:\/\//.test(url) ? url : `https://${url}`;
-};
-
-async function failure(r: Response) {
-  const text = await r.text().catch(() => "");
-  try {
-    return (JSON.parse(text) as { error?: string }).error ?? `Ошибка сервера ${r.status}`;
-  } catch {
-    return `Ошибка сервера ${r.status}`;
-  }
-}
+import { apiFetch, failure } from "./api";
 
 const ATTEMPTS = 3;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Downloads the audio; the file name is the video title. A dropped connection or a 5xx (server busy,
- * tunnel hiccup, the site refusing once) is retried; a wrong key or id is not.
+ * Downloads the audio; the file name is the video title. With `saveFor` the server also keeps it as that item's
+ * recording (`updatedAt` says which version). A dropped connection or a 5xx (server busy, the site refusing once)
+ * is retried; anything else is not.
  */
 export async function fetchVideoAudio(
   video: VideoLink,
-  server: AudioServer,
+  saveFor?: string,
   onAttempt?: (attempt: number, of: number) => void,
-): Promise<{ data: ArrayBuffer; name: string }> {
+): Promise<{ data: ArrayBuffer; name: string; updatedAt: number | null }> {
   const videoId = video.instagramId ?? video.youtubeId;
-  const query = `${video.instagramId !== undefined ? "ig" : "id"}=${encodeURIComponent(videoId)}`;
+  const query = `${video.instagramId !== undefined ? "ig" : "id"}=${encodeURIComponent(videoId)}${saveFor ? `&save=${encodeURIComponent(saveFor)}` : ""}`;
   let r: Response | null = null;
   let error = "";
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
     if (attempt > 1) await sleep(attempt * 2000);
     onAttempt?.(attempt, ATTEMPTS);
     try {
-      r = await fetch(`${base(server)}/audio?${query}`, { headers: { Authorization: `Bearer ${server.key.trim()}` } });
-    } catch {
+      r = await apiFetch(`/api/audio?${query}`);
+    } catch (e) {
       r = null;
-      error = "Сервер не отвечает — проверь адрес в настройках";
+      error = (e as Error).message;
       continue;
     }
     if (r.ok || r.status < 500) break;
@@ -59,18 +40,5 @@ export async function fetchVideoAudio(
   const type = r.headers.get("Content-Type") ?? "";
   const ext = type.includes("mp4") ? "m4a" : type.includes("webm") ? "webm" : type.includes("mpeg") ? "mp3" : "audio";
   const title = decodeURIComponent(r.headers.get("X-Title") ?? "") || videoId;
-  return { data: await r.arrayBuffer(), name: `${title}.${ext}` };
-}
-
-/** Checks the address and the key (an invalid video id only passes the key check). */
-export async function checkServer(server: AudioServer): Promise<string> {
-  let r: Response;
-  try {
-    r = await fetch(`${base(server)}/audio?id=-`, { headers: { Authorization: `Bearer ${server.key.trim()}` } });
-  } catch {
-    throw new Error("Сервер не отвечает — проверь адрес");
-  }
-  if (r.status === 401) throw new Error("Сервер отвечает, но ключ неверный");
-  if (r.status !== 400) throw new Error(await failure(r));
-  return "Сервер на связи, ключ верный";
+  return { data: await r.arrayBuffer(), name: `${title}.${ext}`, updatedAt: Number(r.headers.get("X-Updated")) || null };
 }

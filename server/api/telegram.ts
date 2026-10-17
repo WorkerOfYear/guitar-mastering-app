@@ -1,21 +1,22 @@
 // Telegram bot:
 //   POST /api/telegram            — webhook: Telegram sends updates here (checked by secret header)
-//   POST /api/telegram?setup=1    — (sync key) register webhook + menu button, return a one-time link to bind the bot
-//   GET  /api/telegram?status=1   — (sync key or Mini App) bot name and whether it's bound to the owner
+//   POST /api/telegram?setup=1    — (password) register webhook + menu button, return a one-time link to bind the bot
+//   GET  /api/telegram?status=1   — (password or Mini App) bot name and whether it's bound to the owner
 import crypto from "node:crypto";
 import {
-  KEY_LINK, appButton, checkAuth, checkSyncKey, handle, HttpError, json, loadState, ownerId, redis,
-  practiceDaysText, reminderState, safeEqual, setOwner, siteUrl, telegram, webhookSecret,
-} from "./_lib.js";
+  KEY_LINK, appButton, checkAuth, checkToken, handle, HttpError, json, loadState, ownerId,
+  practiceDaysText, publicUrl, reminderState, safeEqual, setOwner, siteUrl, telegram, webhookSecret,
+} from "./lib.js";
+import { kvDel, kvGet, kvSet } from "./store.js";
 
 async function setup(req: Request) {
-  checkSyncKey(req);
+  checkToken(req);
   const me = await telegram<{ username: string }>("getMe");
-  await telegram("setWebhook", { url: `${siteUrl(req)}/api/telegram`, secret_token: webhookSecret(), allowed_updates: ["message"] });
+  await telegram("setWebhook", { url: `${publicUrl(req)}/api/telegram`, secret_token: webhookSecret(), allowed_updates: ["message"] });
   await telegram("setChatMenuButton", { menu_button: { type: "web_app", text: "Гитара", web_app: { url: `${siteUrl(req)}/` } } });
   await telegram("setMyCommands", { commands: [{ command: "start", description: "Открыть приложение" }] });
   const code = crypto.randomBytes(12).toString("hex");
-  await redis("SET", KEY_LINK, code, "EX", 3600);
+  kvSet(KEY_LINK, code, 3600);
   return json({ bot: me.username, link: `https://t.me/${me.username}?start=${code}`, linked: !!(await ownerId()) });
 }
 
@@ -43,10 +44,10 @@ async function webhook(req: Request) {
 
   const code = text.match(/^\/start(?:\s+(\S+))?/)?.[1];
   if (code) {
-    const expected = (await redis("GET", KEY_LINK)) as string | null;
+    const expected = kvGet(KEY_LINK);
     if (expected && safeEqual(code, expected)) {
       await setOwner(chat);
-      await redis("DEL", KEY_LINK);
+      kvDel(KEY_LINK);
       const days = practiceDaysText(await loadState());
       await reply(`✅ Готово! Это твой бот: в дни занятий (${days}) напомню позаниматься.\n\nПриложение открывается кнопкой «Гитара» внизу.`);
       return json({ ok: true });

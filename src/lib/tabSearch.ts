@@ -1,6 +1,7 @@
 // Looking a song's tabs and sheet music up on the web: Songsterr, Ultimate Guitar and MuseScore (when the server
 // has a search key) through /api/tabs, plus each site's own search page as a link that opens in the browser.
-import type { TabResult, TabSource } from "../../api/tabs";
+import type { TabResult, TabSource } from "../../server/api/tabs";
+import { API_URL } from "./api";
 
 export type { TabResult, TabSource };
 
@@ -16,7 +17,7 @@ export const searchPage = (source: TabSource, q: string) => {
 };
 
 export async function searchTabs(q: string, signal?: AbortSignal): Promise<{ results: TabResult[]; failed: TabSource[] }> {
-  const r = await fetch(`/api/tabs?q=${encodeURIComponent(q)}`, { signal });
+  const r = await fetch(`${API_URL}/api/tabs?q=${encodeURIComponent(q)}`, { signal });
   const data = (await r.json().catch(() => null)) as { results?: TabResult[]; failed?: TabSource[]; error?: string } | null;
   if (!r.ok) throw new Error(data?.error || `Ошибка сервера (${r.status})`);
   // A host without the function (a static copy of the app) answers with the app's own page.

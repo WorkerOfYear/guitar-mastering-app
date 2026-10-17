@@ -3,7 +3,7 @@
 // MuseScore. Only links are returned: the tabs themselves stay on those sites. None allows cross-origin requests, hence a function.
 // MuseScore sits behind a Cloudflare bot check that a server can't pass, so its scores come from a web search API limited
 // to musescore.com — Tavily (TAVILY_API_KEY) or Serper (SERPER_API_KEY); without a key the app just links to MuseScore's search.
-import { handle, HttpError } from "./_lib.js";
+import { handle, HttpError } from "./lib.js";
 
 export type TabSource = "songsterr" | "ug" | "musescore";
 

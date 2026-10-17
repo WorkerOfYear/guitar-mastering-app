@@ -11,7 +11,6 @@ import { exportData, useData, type DataState } from "@/store/data";
 import { useSettings } from "@/store/settings";
 import { BLOCK_META, type BlockKind } from "@/shared/types";
 import { SyncCard } from "./SyncCard";
-import { AudioServerCard, ScoreServerCard } from "./AudioServerCard";
 
 const DAY_LABELS = ["ВС", "ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ"];
 
@@ -145,13 +144,7 @@ export function SettingsPage() {
             />
           </Card>
 
-          <SectionTitle>Звук из видео</SectionTitle>
-          <AudioServerCard />
-
-          <SectionTitle>Ноты с MuseScore</SectionTitle>
-          <ScoreServerCard />
-
-          <SectionTitle>Синхронизация и Telegram</SectionTitle>
+          <SectionTitle>Сервер и Telegram</SectionTitle>
           <SyncCard />
 
           <SectionTitle>Бэкап</SectionTitle>

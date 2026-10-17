@@ -1,9 +1,13 @@
-# Test copy of the app, built on the server by server/dev-stand/up.sh. /api/tabs goes to the api service (server/dev-stand/api.ts);
-# the rest of /api (sync, the bot) lives on Vercel only.
-:80 {
-	# Separate handle blocks: try_files runs before a bare handle and would turn /api/tabs into /index.html.
-	handle /api/tabs {
-		reverse_proxy api:8789
+# Test copy of the app, built on the server by server/dev-stand/up.sh. /api goes to the stand's API (server/api, port 8789).
+# Host network: listen on the loopback only, the Cloudflare tunnel publishes it.
+{
+	admin off
+}
+:8788 {
+	bind 127.0.0.1
+	# Separate handle blocks: try_files runs before a bare handle and would turn /api/* into /index.html.
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8789
 	}
 	handle {
 		root * /srv/dist

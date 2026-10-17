@@ -1,45 +1,49 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import * as state from "../api/state";
-import * as remind from "../api/remind";
-import * as bot from "../api/telegram";
-import { webhookSecret } from "../api/_lib";
+import * as state from "../server/api/state";
+import * as remind from "../server/api/remind";
+import * as bot from "../server/api/telegram";
+import * as files from "../server/api/files";
+import * as session from "../server/api/session";
+import { issueToken, webhookSecret } from "../server/api/lib";
+import { closeStore, kvGet, kvSet } from "../server/api/store";
 
-// In-memory Upstash + Telegram, so the handlers run end to end.
-const db = new Map<string, string>();
+// A fresh SQLite in a temp folder and a fake Telegram, so the handlers run end to end.
 const sent: { method: string; payload: Record<string, unknown> }[] = [];
 const TOKEN = "123:abc";
+let dataDir = "";
+let auth = "";
 
 beforeEach(() => {
-  db.clear();
   sent.length = 0;
-  vi.stubEnv("KV_REST_API_URL", "https://redis.test");
-  vi.stubEnv("KV_REST_API_TOKEN", "t");
-  vi.stubEnv("SYNC_KEY", "secret-key");
+  dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "guitar-api-"));
+  vi.stubEnv("DATA_DIR", dataDir);
+  vi.stubEnv("APP_PASSWORD", "secret-password");
   vi.stubEnv("TELEGRAM_BOT_TOKEN", TOKEN);
   vi.stubEnv("SITE_URL", "https://guitar.test");
+  auth = issueToken();
   vi.stubGlobal("fetch", async (url: string, init: { body: string }) => {
     const body = JSON.parse(init.body);
-    if (url === "https://redis.test") {
-      const [cmd, key, value] = body as string[];
-      const result = cmd === "GET" ? (db.get(key) ?? null) : cmd === "SET" ? (db.set(key, value), "OK") : cmd === "DEL" ? Number(db.delete(key)) : null;
-      return new Response(JSON.stringify({ result }));
-    }
     const method = url.split("/").pop()!;
     sent.push({ method, payload: body });
     return new Response(JSON.stringify({ ok: true, result: method === "getMe" ? { username: "guitar_bot" } : true }));
   });
 });
 afterEach(() => {
+  closeStore();
+  fs.rmSync(dataDir, { recursive: true, force: true });
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 
-const req = (path: string, init: RequestInit & { key?: string | null } = {}) =>
+const req = (path: string, init: RequestInit & { token?: string | null } = {}) =>
   new Request(`https://guitar.test${path}`, {
     ...init,
-    headers: { ...(init.key !== null ? { "x-sync-key": init.key ?? "secret-key" } : {}), ...(init.headers as Record<string, string>) },
+    headers: { ...(init.token !== null ? { authorization: `Bearer ${init.token ?? auth}` } : {}), ...(init.headers as Record<string, string>) },
   });
 
 function initData(userId: number) {
@@ -52,10 +56,31 @@ function initData(userId: number) {
 
 const data = { items: [{ id: "a", title: "Гаммы", status: "active" }], sessions: [], practice: { days: [1, 3, 6] } };
 
+describe("/api/login", () => {
+  const login = (password: string, ip = "1.2.3.4") =>
+    session.login(new Request("https://guitar.test/api/login", { method: "POST", headers: { "x-forwarded-for": ip }, body: JSON.stringify({ password }) }));
+  it("gives a token for the right password, and the token opens the API", async () => {
+    expect((await login("nope")).status).toBe(401);
+    const { token } = await (await login("secret-password")).json();
+    expect((await state.GET(req("/api/state", { token }))).status).toBe(200);
+  });
+  it("slows down guessing", async () => {
+    for (let i = 0; i < 5; i++) expect((await login("nope", "6.6.6.6")).status).toBe(401);
+    expect((await login("secret-password", "6.6.6.6")).status).toBe(429);
+    expect((await login("secret-password", "7.7.7.7")).status).toBe(200);
+  });
+  it("signs every device out when the password changes", async () => {
+    vi.stubEnv("APP_PASSWORD", "another-password");
+    expect((await state.GET(req("/api/state"))).status).toBe(401);
+  });
+});
+
 describe("/api/state", () => {
-  it("rejects a wrong key", async () => {
-    expect((await state.GET(req("/api/state", { key: "nope" }))).status).toBe(401);
-    expect((await state.GET(req("/api/state", { key: null }))).status).toBe(401);
+  it("rejects a wrong or missing token", async () => {
+    expect((await state.GET(req("/api/state", { token: "123.abc" }))).status).toBe(401);
+    expect((await state.GET(req("/api/state", { token: null }))).status).toBe(401);
+    const expired = `${Math.floor(Date.now() / 1000) - 10}.${auth.split(".")[1]}`;
+    expect((await state.GET(req("/api/state", { token: expired }))).status).toBe(401);
   });
   it("stores and returns the document with an optimistic lock", async () => {
     expect(await (await state.GET(req("/api/state"))).json()).toEqual({ doc: null });
@@ -87,10 +112,10 @@ describe("Telegram binding and Mini App auth", () => {
     expect((await update(`/start ${code}`)).status).toBe(200);
     expect(String(sent.at(-1)!.payload.text)).toMatch(/Готово/);
 
-    const asUser = (id: number) => state.GET(req("/api/state", { key: null, headers: { "x-telegram-init-data": initData(id) } }));
+    const asUser = (id: number) => state.GET(req("/api/state", { token: null, headers: { "x-telegram-init-data": initData(id) } }));
     expect((await asUser(42)).status).toBe(200);
     expect((await asUser(7)).status).toBe(403);
-    expect((await state.GET(req("/api/state", { key: null, headers: { "x-telegram-init-data": "user=%7B%22id%22%3A42%7D&hash=00" } }))).status).toBe(401);
+    expect((await state.GET(req("/api/state", { token: null, headers: { "x-telegram-init-data": "user=%7B%22id%22%3A42%7D&hash=00" } }))).status).toBe(401);
 
     // The link is single-use: a stranger can't re-bind with it.
     await update(`/start ${code}`, 99);
@@ -98,37 +123,65 @@ describe("Telegram binding and Mini App auth", () => {
   });
 });
 
-describe("/api/remind", () => {
-  const atNovosibirsk = (iso: string) => {
+describe("/api/files", () => {
+  const file = (key: string, init: RequestInit = {}) => req(`/api/files?key=${encodeURIComponent(key)}`, init);
+  it("stores, lists, returns and deletes files", async () => {
+    const put = await files.PUT(
+      file("tab-1:take:000000000000042", { method: "PUT", body: new Uint8Array([1, 2, 3]), headers: { "content-type": "audio/webm", "x-meta": encodeURIComponent(JSON.stringify({ at: 42, bpm: 90 })) } }),
+    );
+    expect(put.status).toBe(200);
+    await files.PUT(file("tab-1", { method: "PUT", body: new Uint8Array([9]) }));
+    await files.PUT(file("tab-2", { method: "PUT", body: new Uint8Array([8]) }));
+
+    const list = await (await files.GET(req("/api/files?prefix=tab-1:take:"))).json();
+    expect(list.files).toMatchObject([{ key: "tab-1:take:000000000000042", mime: "audio/webm", meta: { at: 42, bpm: 90 }, size: 3 }]);
+
+    const got = await files.GET(file("tab-1:take:000000000000042"));
+    expect(got.headers.get("content-type")).toBe("audio/webm");
+    expect(JSON.parse(decodeURIComponent(got.headers.get("x-meta")!))).toEqual({ at: 42, bpm: 90 });
+    expect([...new Uint8Array(await got.arrayBuffer())]).toEqual([1, 2, 3]);
+
+    await files.DELETE(file("tab-1", { method: "DELETE" }));
+    expect((await files.GET(file("tab-1"))).status).toBe(404);
+    expect((await files.GET(file("tab-2"))).status).toBe(200);
+  });
+  it("refuses keys that could leave the files folder, and strangers", async () => {
+    expect((await files.GET(file("../guitar.db"))).status).toBe(400);
+    expect((await files.GET(file(".."))).status).toBe(400);
+    expect((await files.GET(req("/api/files?key=tab-1", { token: null }))).status).toBe(401);
+  });
+});
+
+describe("reminders", () => {
+  const at = (iso: string) => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(iso));
   };
-  const cron = () => remind.GET(new Request("https://guitar.test/api/remind", { headers: { "user-agent": "vercel-cron/1.0" } }));
 
   beforeEach(() => {
-    db.set("guitar:tg_owner", "42");
+    kvSet("guitar:tg_owner", "42");
   });
 
-  it("only answers Vercel Cron or the owner", async () => {
-    expect((await remind.GET(new Request("https://guitar.test/api/remind"))).status).toBe(401);
-  });
-  it("reminds on a practice day without a session, with what's in progress", async () => {
-    atNovosibirsk("2026-10-12T12:00:00Z"); // Monday, 19:00 in Novosibirsk
-    db.set("guitar:state", JSON.stringify({ updatedAt: 1, data }));
-    const r = await (await cron()).json();
-    expect(r.sent).toBe(true);
+  it("reminds once at 19:00 on a practice day without a session, with what's in progress", async () => {
+    kvSet("guitar:state", JSON.stringify({ updatedAt: 1, data }));
+    at("2026-10-12T11:30:00Z"); // Monday, 18:30 in Novosibirsk: too early
+    expect((await remind.remindIfDue()).sent).toBe(false);
+    at("2026-10-12T12:00:00Z"); // 19:00
+    expect((await remind.remindIfDue()).sent).toBe(true);
     expect(String(sent.at(-1)!.payload.text)).toContain("• Гаммы");
+    expect((await remind.remindIfDue()).sent).toBe(false); // already today
+    expect(kvGet("guitar:reminded")).toBe("2026-10-12");
   });
   it("stays quiet on rest days and after a session", async () => {
-    atNovosibirsk("2026-10-13T12:00:00Z"); // Tuesday
-    db.set("guitar:state", JSON.stringify({ updatedAt: 1, data }));
-    expect((await (await cron()).json()).sent).toBe(false);
-    atNovosibirsk("2026-10-12T12:00:00Z");
-    db.set("guitar:state", JSON.stringify({ updatedAt: 1, data: { ...data, sessions: [{ date: "2026-10-12" }] } }));
-    expect((await (await cron()).json()).sent).toBe(false);
+    at("2026-10-13T12:00:00Z"); // Tuesday
+    kvSet("guitar:state", JSON.stringify({ updatedAt: 1, data }));
+    expect((await remind.remindIfDue()).sent).toBe(false);
+    at("2026-10-12T12:00:00Z");
+    kvSet("guitar:state", JSON.stringify({ updatedAt: 1, data: { ...data, sessions: [{ date: "2026-10-12" }] } }));
+    expect((await remind.remindIfDue()).sent).toBe(false);
   });
-  it("sends a test message on request", async () => {
-    atNovosibirsk("2026-10-13T12:00:00Z");
+  it("sends a test message on request, only to the owner", async () => {
+    expect((await remind.POST(req("/api/remind?test=1", { method: "POST", token: null }))).status).toBe(401);
     const r = await (await remind.POST(req("/api/remind?test=1", { method: "POST" }))).json();
     expect(r.sent).toBe(true);
     expect(String(sent.at(-1)!.payload.text)).toMatch(/Бот подключён/);

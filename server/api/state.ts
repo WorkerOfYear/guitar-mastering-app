@@ -1,8 +1,8 @@
 // GET /api/state  → { doc: {updatedAt, data} | null }
 // PUT /api/state  body {updatedAt, base, data} → stores it if the stored version is still `base` (else 409)
-import { checkAuth, handle, HttpError, json, loadState, saveState, type StateDoc } from "./_lib.js";
+import { checkAuth, handle, HttpError, json, loadState, saveState, type StateDoc } from "./lib.js";
 
-const MAX_BYTES = 900_000; // Upstash free plan: 1 MB per value
+const MAX_BYTES = 20_000_000; // files live apart (files.ts), so the library itself stays far below this
 
 export const GET = handle(async (req) => {
   await checkAuth(req);

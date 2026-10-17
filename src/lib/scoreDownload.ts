@@ -1,6 +1,6 @@
-// Sheet music from MuseScore, via the user's own server (server/score-download): a real browser opens the score page.
-// MuseScore sits behind a Cloudflare check that cloud hosting can't pass, so the app can't do it itself.
-import type { AudioServer } from "./youtubeAudio";
+// Sheet music from MuseScore: the owner's API asks its neighbour server/score-download, where a real browser opens
+// the score page. MuseScore sits behind a Cloudflare check that cloud hosting can't pass, so the app can't do it itself.
+import { apiFetch, failure } from "./api";
 
 /** MusicXML needs a MuseScore account on the server and works for free scores only. */
 export type ScoreFormat = "pdf" | "midi" | "mp3" | "musicxml";
@@ -9,42 +9,10 @@ const EXT: Record<ScoreFormat, string> = { pdf: "pdf", midi: "mid", mp3: "mp3", 
 /** A link to a score on musescore.com, or null. */
 export const museScoreLink = (links: string[]) => links.find((l) => /^https:\/\/(?:(?:s|www)\.)?musescore\.com\/\S+$/.test(l)) ?? null;
 
-const base = (s: AudioServer) => {
-  const url = s.url.trim().replace(/\/+$/, "");
-  return /^https?:\/\//.test(url) ? url : `https://${url}`;
-};
-
-async function failure(r: Response) {
-  const text = await r.text().catch(() => "");
-  try {
-    return (JSON.parse(text) as { error?: string }).error ?? `Ошибка сервера ${r.status}`;
-  } catch {
-    return `Ошибка сервера ${r.status}`;
-  }
-}
-
 /** Asks the server for the score in one format; the file name comes from MuseScore. */
-export async function fetchScore(link: string, format: ScoreFormat, server: AudioServer): Promise<{ data: ArrayBuffer; name: string }> {
-  let r: Response;
-  try {
-    r = await fetch(`${base(server)}/score?type=${format}&url=${encodeURIComponent(link)}`, { headers: { Authorization: `Bearer ${server.key.trim()}` } });
-  } catch {
-    throw new Error("Сервер не отвечает — проверь адрес в настройках");
-  }
+export async function fetchScore(link: string, format: ScoreFormat): Promise<{ data: ArrayBuffer; name: string }> {
+  const r = await apiFetch(`/api/score?type=${format}&url=${encodeURIComponent(link)}`);
   if (!r.ok) throw new Error(await failure(r));
   const name = decodeURIComponent(r.headers.get("X-Name") ?? "") || `score.${EXT[format]}`;
   return { data: await r.arrayBuffer(), name };
-}
-
-/** Checks the address and the key (an invalid format only passes the key check). */
-export async function checkScoreServer(server: AudioServer): Promise<string> {
-  let r: Response;
-  try {
-    r = await fetch(`${base(server)}/score?type=-`, { headers: { Authorization: `Bearer ${server.key.trim()}` } });
-  } catch {
-    throw new Error("Сервер не отвечает — проверь адрес");
-  }
-  if (r.status === 401) throw new Error("Сервер отвечает, но ключ неверный");
-  if (r.status !== 400) throw new Error(await failure(r));
-  return "Сервер на связи, ключ верный";
 }

@@ -12,7 +12,8 @@
   `git fetch origin dev` → если `dev` является предком текущего коммита, `git push origin HEAD:dev` (fast-forward).
   Если `dev` ушёл вперёд — сначала влей его в рабочую ветку (`git merge origin/dev`), прогони проверки и только потом пушь (затем обнови стенд, см. выше).
 - Слияние в `main` по команде: `git fetch origin main dev` → если `main` — предок `dev`, `git push origin origin/dev:main`
-  (fast-forward), иначе влить `main` в `dev`, проверить и запушить.
+  (fast-forward), иначе влить `main` в `dev`, проверить и запушить. Сразу после — обнови production-API на сервере
+  кодом из `main`: `bash server/api/up.sh` из чекаута `origin/main` (см. `server/api/README.md`), дождись `OK: API поднят`.
 - Перед заливкой должны проходить: `npx tsc --noEmit`, `npm test`, `npm run build`. Сломанное в `dev` и `main` не лей.
 - Никогда не делай force-push в `main` и `dev`.
 - Автор коммитов — владелец репозитория: `git config user.name "WorkerOfYear"`, `git config user.email "artyomlufirenko@gmail.com"`.
@@ -22,6 +23,8 @@
 ## Тестовый стенд
 
 - Разработка идёт на сервере владельца, рядом с тестовым стендом (`server/dev-stand`). Автодеплоя из GitHub нет.
+- Данные приложения — в API на сервере (`server/api`): стенд — `/srv/guitar-dev/{.env,data}`, production — `/srv/guitar/{.env,data}`.
+  Не удаляй и не перезаписывай папки `data` и `.env` — там библиотека и пароли владельца.
 - После каждой правки стенд должен работать с этим кодом: запусти `bash server/dev-stand/up.sh` и дождись строки
   `OK: стенд поднят с …`. Скрипт проверяет код, собирает, выкладывает, перезапускает `api` и сверяет `/version.txt`.
   `ОШИБКА` — разберись и почини (логи: `cd server/dev-stand && docker compose logs --tail 50`); правка не готова,

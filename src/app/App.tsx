@@ -9,6 +9,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { TodayPage } from "@/features/today/TodayPage";
 import { BottomNav, SECTION_ROOTS, SectionsMenu } from "./Nav";
 import { Backdrop } from "./Backdrop";
+import { LoginPage } from "./LoginPage";
+import { signedIn, useAuth } from "@/store/auth";
 
 // Everything but the home screen loads on first visit, so the app opens fast inside Telegram.
 const page = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) => lazy(() => load().then((m) => ({ default: m[name] })));
@@ -114,6 +116,16 @@ function Shell() {
 }
 
 export function App() {
+  // The library lives on the owner's server: a website signs in with the password first (Telegram signs in by itself).
+  const authed = useAuth(signedIn);
+  if (!authed)
+    return (
+      <>
+        <Backdrop />
+        <LoginPage />
+        <Toaster />
+      </>
+    );
   return (
     <HashRouter>
       <Shell />

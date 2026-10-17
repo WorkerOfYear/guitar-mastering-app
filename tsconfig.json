@@ -31,9 +31,8 @@
   },
   "include": [
     "src",
-    "api",
     "tests",
     "vite.config.ts",
-    "server/dev-stand"
+    "server/api"
   ]
 }

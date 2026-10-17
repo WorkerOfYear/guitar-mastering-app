@@ -1,7 +1,7 @@
 # Guitar Mastering
 
 Личный тренажёр занятий на электрогитаре: разминка, разбор нового, повторение и импровизация.
-Работает на Vercel и открывается внутри Telegram как Mini App. Требования описаны в [docs/PRD.md](docs/PRD.md).
+Сайт — на Vercel, данные и API — на своём сервере ([`server/api`](server/api/README.md)); открывается и внутри Telegram как Mini App. Требования описаны в [docs/PRD.md](docs/PRD.md).
 
 ## Что уже есть
 
@@ -25,7 +25,9 @@
     а скорость (75% и т. д.) замедляет саму запись. Переключатель «🎧 Запись / 🎹 Синтезатор».
 - **Повторение, импровизация, метроном, библиотека, прогресс, теория, синхронизация и Telegram-бот** — как раньше.
 
-Файлы Guitar Pro и записи хранятся на устройстве (IndexedDB) и не синхронизируются: на другом устройстве их нужно загрузить ещё раз. Отметки синхронизации синхронизируются.
+Библиотека, файлы Guitar Pro, записи и дубли хранятся на своём сервере — на всех устройствах одно и то же. На устройстве
+остаётся копия (IndexedDB), так что приложение открывается сразу и работает без сети; изменения уходят на сервер, когда сеть появится.
+Вход — пароль один раз на устройстве, в Telegram — автоматически.
 
 ## Стек
 
@@ -37,9 +39,10 @@ Vite + React + TypeScript, Tailwind CSS, Zustand, React Router, alphaTab (таб
 
 ```
 npm install
-npm run dev        # http://localhost:5173
-npm test           # тесты теории
+npm run dev        # http://localhost:5173, /api проксируется на локальный API (порт 8789)
+npm test           # тесты
 npm run build      # проверка типов + сборка в dist/
+npm run build:api  # API в dist-api/api.js; запуск: APP_PASSWORD=… DATA_DIR=./data node dist-api/api.js
 ```
 
 ## Деплой на Vercel
@@ -47,34 +50,27 @@ npm run build      # проверка типов + сборка в dist/
 1. [vercel.com](https://vercel.com) → **Add New… → Project** → импортируй репозиторий, ветка `main`.
    Framework Preset определится сам (**Vite**), настройки в `vercel.json`. Нажми **Deploy**.
    Каждый push в `main` обновляет сайт.
+2. Vercel отдаёт только сам сайт. Данные, вход, бот и всё остальное — API на своём сервере: как его поднять и какой
+   `VITE_API_URL` указать в Vercel → Settings → Environment Variables — в [`server/api/README.md`](server/api/README.md).
 
-## Звук из YouTube и Instagram
+## Звук из YouTube и Instagram, ноты с MuseScore
 
-Чтобы брать звук из видео YouTube или Instagram и привязывать его к табу, нужен свой небольшой сервер (облака вроде Vercel
-YouTube блокирует). Код и инструкция — в [`server/youtube-audio`](server/youtube-audio/README.md).
-Ноты с MuseScore (PDF, MIDI, mp3) по ссылке из песни скачивает такой же свой сервис (Chrome из FlareSolverr проходит проверку Cloudflare) — [`server/score-download`](server/score-download/README.md).
+Звук из видео скачивает свой небольшой сервер (облака вроде Vercel YouTube блокирует) — [`server/youtube-audio`](server/youtube-audio/README.md).
+Ноты с MuseScore (PDF, MIDI, mp3, MusicXML) по ссылке из песни — такой же сервис с Chrome из FlareSolverr — [`server/score-download`](server/score-download/README.md).
+Приложение к ним напрямую не ходит: API обращается к ним по `127.0.0.1`, а их ключи лежат в `.env` API.
 
-## Telegram: бот, напоминания и синхронизация
+## Telegram: бот и напоминания
 
-Работает только на сайте в Vercel. Схема та же, что в `my-english-vocab`.
+Бот работает через API на своём сервере.
 
-1. **Бот.** В Telegram открой [@BotFather](https://t.me/BotFather) → `/newbot` → получи токен.
-2. **Хранилище.** Vercel → проект → **Storage** → Create Database → **Upstash for Redis** (бесплатный план) → подключи к проекту.
-   Переменные окружения добавятся сами.
-3. **Переменные.** Vercel → проект → Settings → **Environment Variables**:
-   - `TELEGRAM_BOT_TOKEN` — токен от BotFather;
-   - `SYNC_KEY` — длинный пароль, который придумываешь сам: это ключ к твоим данным;
-   - необязательно: `CRON_SECRET` (защищает запуск напоминаний) и `TIMEZONE` (по умолчанию `Asia/Novosibirsk`).
-4. **Redeploy:** Deployments → ⋯ → Redeploy, чтобы переменные применились.
-5. Открой сайт → **Сегодня → ⚙️ → Синхронизация и Telegram** → введи `SYNC_KEY` → «Подключить».
-6. Нажми **«🤖 Подключить бота»** → «Открыть в Telegram» → **Start**. Бот ответит «Готово!», а у поля ввода появится кнопка «Гитара».
-7. Нажми «📨 Проверить напоминание» — в Telegram должно прийти сообщение.
+1. В Telegram открой [@BotFather](https://t.me/BotFather) → `/newbot` → получи токен.
+2. В `.env` API: `TELEGRAM_BOT_TOKEN`, `SITE_URL` (адрес сайта), `PUBLIC_URL` (адрес API), перезапусти API (`bash server/api/up.sh`).
+3. В приложении **Настройки → Сервер и Telegram → «Подключить бота»** → «Открыть в Telegram» → **Start**.
+   Бот ответит «Готово!», а у поля ввода появится кнопка «Гитара».
+4. «Проверить напоминание» — в Telegram должно прийти сообщение.
 
-Внутри Telegram ключ вводить не нужно: вход проверяется по подписанным данным Mini App, и пускают только владельца бота.
-
-**Время напоминания** задаётся в `vercel.json`: `"schedule": "0 12 * * *"` — это 12:00 UTC, то есть 19:00 по Новосибирску.
-На бесплатном плане Vercel cron срабатывает раз в день в пределах указанного часа.
-Дни занятий берутся из настроек приложения.
+Внутри Telegram пароль вводить не нужно: вход проверяется по подписанным данным Mini App, и пускают только владельца бота.
+Напоминание приходит в 19:00 (`REMIND_HOUR`, `TIMEZONE` в `.env`) в дни занятий из настроек приложения, если занятия ещё не было.
 
 ## Ноты MuseScore в поиске табов
 
@@ -89,20 +85,17 @@ MuseScore не пускает серверные запросы, поэтому 
 
 Если заданы оба, используется Tavily.
 
-1. Сайт: Vercel → проект → Settings → **Environment Variables** → переменная с ключом → Redeploy.
-2. Тестовый стенд: на сервере `echo "TAVILY_API_KEY=<ключ>" > server/dev-stand/.env` и `bash server/dev-stand/up.sh`.
-
-Один поиск песни — один запрос к сервису; повторы того же запроса сайт сутки отдаёт из кеша Vercel.
+Ключ — в `.env` API (`/srv/guitar/.env`, на стенде `/srv/guitar-dev/.env`), затем перезапусти API.
+Один поиск песни — один запрос к сервису.
 
 ## Как устроено
 
 ```
-src/            фронтенд (React): экраны, музыкальная теория (src/music), хранилища (src/store)
-api/_lib.ts     Redis (Upstash REST), авторизация (SYNC_KEY или Telegram initData), Telegram API
-api/state.ts    GET/PUT данных с optimistic lock; клиент сливает данные двух устройств (src/store/merge.ts)
-api/telegram.ts webhook бота, настройка и привязка владельца одноразовой ссылкой
-api/remind.ts   Vercel Cron: напоминание в дни занятий
-api/tabs.ts     поиск табов по песне: Songsterr (JSON-поиск) и Ultimate Guitar (JSON со страницы поиска), только ссылки;
-                ноты MuseScore — через API поисковика Tavily или Serper (сам MuseScore закрыт проверкой Cloudflare), см. выше
-tests/          тесты API с имитацией Redis и Telegram
+src/                  фронтенд (React): экраны, музыкальная теория (src/music), хранилища (src/store)
+src/store/sync.ts     синхронизация библиотеки с сервером; слияние данных двух устройств — src/store/merge.ts
+src/lib/tabFiles.ts   файлы на сервере + копия в IndexedDB
+server/api/           API на своём сервере (Node + SQLite): вход, библиотека, файлы, звук и ноты, поиск табов, бот
+server/dev-stand/     тестовый стенд
+server/youtube-audio/ звук из YouTube и Instagram
+tests/                тесты API с настоящей SQLite и имитацией Telegram
 ```

@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fetchVideoAudio } from "./youtubeAudio";
+import { useAuth } from "@/store/auth";
 
-const server = { url: "audio.example.com", key: "k" };
+useAuth.setState({ token: "t" });
 const ok = () => new Response(new Uint8Array([1, 2, 3]), { headers: { "Content-Type": "audio/mp4", "X-Title": encodeURIComponent("Песня") } });
 const fail = (status: number) => new Response(JSON.stringify({ error: `код ${status}` }), { status });
 
@@ -19,7 +20,7 @@ async function run(responses: (Response | Error)[]) {
   });
   vi.stubGlobal("fetch", fetch);
   const attempts: number[] = [];
-  const result = fetchVideoAudio({ youtubeId: "2n6qPXwKfvc" }, server, (a) => attempts.push(a)).then(
+  const result = fetchVideoAudio({ youtubeId: "2n6qPXwKfvc" }, undefined, (a) => attempts.push(a)).then(
     (v) => ({ v }),
     (e: Error) => ({ e: e.message }),
   );
@@ -39,15 +40,15 @@ describe("fetchVideoAudio", () => {
     expect(calls).toBe(3);
     expect(out).toEqual({ e: "код 502" });
   });
-  it("doesn't retry a wrong key", async () => {
-    const { out, calls } = await run([fail(401)]);
+  it("doesn't retry a refused request", async () => {
+    const { out, calls } = await run([fail(403)]);
     expect(calls).toBe(1);
-    expect(out).toEqual({ e: "код 401" });
+    expect(out).toEqual({ e: "код 403" });
   });
   it("asks for an Instagram video by its shortcode", async () => {
     const fetch = vi.fn(async () => ok());
     vi.stubGlobal("fetch", fetch);
-    await fetchVideoAudio({ instagramId: "C9xYz_12AbC" }, server);
-    expect(fetch).toHaveBeenCalledWith("https://audio.example.com/audio?ig=C9xYz_12AbC", expect.anything());
+    await fetchVideoAudio({ instagramId: "C9xYz_12AbC" }, "song-1");
+    expect(fetch).toHaveBeenCalledWith("/api/audio?ig=C9xYz_12AbC&save=song-1", { headers: { Authorization: "Bearer t" } });
   });
 });

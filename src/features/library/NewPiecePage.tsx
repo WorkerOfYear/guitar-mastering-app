@@ -10,8 +10,7 @@ import { withScheme } from "@/lib/youtubeLink";
 import { parseVideo } from "@/lib/videoLink";
 import { saveTabFile } from "@/lib/tabFiles";
 import { fileTitle, songQuery, youtubeTitle } from "@/lib/titles";
-import { serverReady } from "@/lib/youtubeAudio";
-import { useSettings } from "@/store/settings";
+import { useAuth } from "@/store/auth";
 import { useData } from "@/store/data";
 import type { BlockId } from "@/shared/types";
 
@@ -57,7 +56,7 @@ export function NewPiecePage() {
     try {
       // A video and our audio server: the card takes the sound from the video right away and binds it to the tabs
       // (a "Табы и ноты" block is added after the video if it isn't there).
-      const grabAudio = !!video && serverReady(useSettings.getState().audioServer);
+      const grabAudio = !!video && useAuth.getState().server.audio;
       const withAudio: BlockId[] = grabAudio && !has("score") ? blocks.flatMap((b) => (b === "video" ? ["video", "score"] : [b])) : blocks;
       const id = addItem({
         title: finalTitle,

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import * as tabs from "../api/tabs";
+import * as tabs from "../server/api/tabs";
 import { songQuery } from "../src/lib/titles";
 
 const songsterr = [

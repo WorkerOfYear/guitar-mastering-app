@@ -1,25 +1,27 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Bot, CircleAlert, CircleCheck, CircleDashed, ExternalLink, LoaderCircle, RefreshCw, Send } from "lucide-react";
-import { Badge, Button, Card, Input } from "@/components/ui";
+import { Bot, CircleAlert, CircleCheck, CircleDashed, ExternalLink, LoaderCircle, LogOut, RefreshCw, Send } from "lucide-react";
+import { Badge, Button, Card } from "@/components/ui";
 import { tg } from "@/app/telegram";
-import { api, syncEnabled, syncNow, useSync } from "@/store/sync";
+import { api } from "@/lib/api";
+import { useAuth } from "@/store/auth";
+import { syncEnabled, syncNow, useSync } from "@/store/sync";
 
-/** Sync key, bot binding and a test reminder. */
+/** The server: sync status, what it can do, sign-out, bot binding and a test reminder. */
 export function SyncCard() {
   const sync = useSync();
-  const [key, setKey] = useState(sync.key);
+  const { token, server, logout } = useAuth();
   const [bot, setBot] = useState<{ bot: string; linked: boolean } | null>(null);
   const [link, setLink] = useState("");
   const [busy, setBusy] = useState(false);
   const enabled = syncEnabled();
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !server.bot) return;
     api<{ bot: string; linked: boolean }>("/api/telegram?status=1")
       .then(setBot)
       .catch(() => setBot(null));
-  }, [enabled, sync.key]);
+  }, [enabled, server.bot]);
 
   const run = async (fn: () => Promise<string>) => {
     setBusy(true);
@@ -31,15 +33,6 @@ export function SyncCard() {
       setBusy(false);
     }
   };
-
-  const connect = () =>
-    run(async () => {
-      sync.setKey(key.trim());
-      await syncNow();
-      const err = useSync.getState().error;
-      if (err) throw new Error(err);
-      return "Синхронизация подключена";
-    });
 
   const setupBot = () =>
     run(async () => {
@@ -55,7 +48,7 @@ export function SyncCard() {
     });
 
   const status = !enabled
-    ? { icon: CircleDashed, tone: "text-muted", text: location.protocol === "file:" ? "Работает только на сайте в Vercel" : "Не подключено" }
+    ? { icon: CircleDashed, tone: "text-muted", text: "Работает только на сайте" }
     : sync.error
       ? { icon: CircleAlert, tone: "text-guide", text: sync.error }
       : sync.busy
@@ -68,41 +61,45 @@ export function SyncCard() {
             }
           : { icon: CircleCheck, tone: "text-good", text: "Подключено" };
 
+  const features = [
+    ["Звук из видео", server.audio],
+    ["Ноты с MuseScore", server.score],
+    ["Бот", server.bot],
+  ] as const;
+
   return (
     <Card className="space-y-3">
-      <p className="text-sm text-muted">Данные одни и те же на телефоне, компьютере и в Telegram. Бот в дни занятий напоминает позаниматься.</p>
+      <p className="text-sm text-muted">
+        Библиотека, табы и записи хранятся на твоём сервере — на телефоне, компьютере и в Telegram одно и то же. Адреса и ключи задаются на сервере.
+      </p>
       <div className="flex items-center gap-2 text-sm font-semibold">
         <status.icon className={`size-4 shrink-0 ${status.tone}`} />
         {status.text}
       </div>
-
-      {!tg && (
-        <div className="flex gap-2">
-          <Input
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            type="password"
-            autoComplete="off"
-            placeholder="SYNC_KEY из настроек Vercel"
-            className="flex-1"
-          />
-          <Button onClick={connect} disabled={!key.trim() || busy}>
-            Подключить
-          </Button>
-        </div>
-      )}
+      <div className="flex flex-wrap gap-1.5">
+        {features.map(([label, on]) => (
+          <Badge key={label} variant={on ? "good" : "outline"}>
+            {label}: {on ? "есть" : "не подключено"}
+          </Badge>
+        ))}
+      </div>
 
       {enabled && (
         <div className="grid grid-cols-2 gap-2">
           <Button variant="secondary" onClick={() => void syncNow()} disabled={sync.busy}>
             <RefreshCw className={`size-4 ${sync.busy ? "animate-spin" : ""}`} /> Синхронизировать
           </Button>
-          {sync.key ? (
-            <Button variant="secondary" onClick={setupBot} disabled={busy}>
-              <Bot className="size-4" /> {bot?.linked ? "Перепривязать бота" : "Подключить бота"}
+          {token ? (
+            <Button variant="secondary" onClick={logout}>
+              <LogOut className="size-4" /> Выйти
             </Button>
           ) : (
             <div />
+          )}
+          {server.bot && token && (
+            <Button variant="secondary" onClick={setupBot} disabled={busy} className="col-span-2">
+              <Bot className="size-4" /> {bot?.linked ? "Перепривязать бота" : "Подключить бота"}
+            </Button>
           )}
           {bot?.linked && (
             <Button variant="secondary" onClick={test} disabled={busy} className="col-span-2">
@@ -115,6 +112,7 @@ export function SyncCard() {
         <p className="flex items-center gap-2 text-xs text-muted">
           <Bot className="size-4" /> @{bot.bot}
           <Badge variant={bot.linked ? "good" : "outline"}>{bot.linked ? "привязан" : "ещё не привязан"}</Badge>
+          {tg && <span>· открыто в Telegram</span>}
         </p>
       )}
       {link && (

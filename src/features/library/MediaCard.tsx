@@ -33,11 +33,12 @@ import { choiceOf, theoryView } from "@/music/theoryView";
 import type { ScoreInfo } from "@/components/tab/TabPlayer";
 import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
 import { audio } from "@/audio/player";
-import { deleteAudioFile, deleteTabFile, loadAudioFile, loadTabFile, saveAudioFile, saveTabFile } from "@/lib/tabFiles";
+import { cacheAudioFile, deleteAudioFile, deleteTabFile, loadAudioFile, loadTabFile, saveAudioFile, saveTabFile } from "@/lib/tabFiles";
 import { audioBlob, downloadAudio } from "@/lib/audioType";
 import { AudioSync, detectSync } from "./AudioSync";
 import { SectionStrip } from "./SectionStrip";
-import { fetchVideoAudio, serverReady } from "@/lib/youtubeAudio";
+import { fetchVideoAudio } from "@/lib/youtubeAudio";
+import { useAuth } from "@/store/auth";
 import { fetchScore, museScoreLink, type ScoreFormat } from "@/lib/scoreDownload";
 import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
@@ -232,9 +233,10 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
   const mediaReady = !item.audioFile || audioData !== null || missing.audio;
   const hasTab = !!(item.tab || file);
 
-  /** A new recording: sync the tab to it right away when there is one. */
-  const setRecording = async (data: ArrayBuffer, meta: NonNullable<Item["audioFile"]>) => {
-    await saveAudioFile(item.id, data);
+  /** A new recording: sync the tab to it right away when there is one. `storedAt`: the server already keeps it. */
+  const setRecording = async (data: ArrayBuffer, meta: NonNullable<Item["audioFile"]>, storedAt?: number | null) => {
+    if (storedAt) await cacheAudioFile(item.id, data, storedAt);
+    else await saveAudioFile(item.id, data);
     setAudioData(data);
     setMissing((m) => ({ ...m, audio: false }));
     setPlaying(false);
@@ -256,17 +258,17 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
     await setRecording(await f.arrayBuffer(), { name: f.name, size: f.size });
   };
 
-  // The recording taken from the item's video by the user's server.
-  const audioServer = useSettings((s) => s.audioServer);
+  // The recording taken from the item's video by the owner's server (it keeps the file right away).
+  const audioReady = useAuth((s) => s.server.audio);
   const [grabbing, setGrabbing] = useState(false);
   const [grabAttempt, setGrabAttempt] = useState(1);
   const grabAudio = async () => {
     if (!item.video) return;
-    if (!serverReady(audioServer)) return toast.error("Укажи сервер для звука в настройках");
+    if (!audioReady) return toast.error("Сервер звука не подключён к API — см. server/api/README.md");
     setGrabbing(true);
     try {
-      const { data, name } = await fetchVideoAudio(item.video, audioServer, setGrabAttempt);
-      await setRecording(data, { name, size: data.byteLength, fromVideo: true });
+      const { data, name, updatedAt } = await fetchVideoAudio(item.video, item.id, setGrabAttempt);
+      await setRecording(data, { name, size: data.byteLength, fromVideo: true }, updatedAt);
     } catch (e) {
       toast.error("Не удалось взять звук из видео", { description: (e as Error).message });
     } finally {
@@ -283,15 +285,15 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
   }, []);
 
   // Sheet music from the MuseScore link attached to the item, taken by the user's server (server/score-download).
-  const scoreServer = useSettings((s) => s.scoreServer);
+  const scoreReady = useAuth((s) => s.server.score);
   const scoreLink = museScoreLink(item.links);
   const [scoreBusy, setScoreBusy] = useState<ScoreFormat | null>(null);
   const grabScore = async (format: ScoreFormat) => {
     if (!scoreLink) return;
-    if (!serverReady(scoreServer)) return toast.error("Укажи сервер для нот MuseScore в настройках");
+    if (!scoreReady) return toast.error("Сервер нот MuseScore не подключён к API — см. server/api/README.md");
     setScoreBusy(format);
     try {
-      const { data, name } = await fetchScore(scoreLink, format, scoreServer);
+      const { data, name } = await fetchScore(scoreLink, format);
       if (format === "mp3") return await setRecording(data, { name, size: data.byteLength });
       if (format === "musicxml") return await setTab(data, name);
       const url = URL.createObjectURL(new Blob([data]));
@@ -688,8 +690,8 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
       </div>
     );
     // Two ways to bind the sound: from the item's video, or a file of one's own.
-    const videoOk = !!item.video && serverReady(audioServer);
-    const videoHint = !item.video ? "сначала добавь блок «Видео»" : !serverReady(audioServer) ? "нужен сервер звука в настройках" : "табы пойдут за записью из видео";
+    const videoOk = !!item.video && audioReady;
+    const videoHint = !item.video ? "сначала добавь блок «Видео»" : !audioReady ? "сервер звука не подключён" : "табы пойдут за записью из видео";
     const audioFileInput = (
       <input ref={audioInput} type="file" accept={AUDIO_ACCEPT} hidden onChange={(e) => e.target.files?.[0] && void uploadAudio(e.target.files[0])} />
     );

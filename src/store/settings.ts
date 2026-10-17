@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { AudioServer } from "@/lib/youtubeAudio";
 
 export type LabelMode = "note" | "degree" | "chord" | "finger" | "none";
 /** How the tab player draws music: tablature, standard notation, or both */
@@ -32,12 +31,6 @@ interface SettingsStore {
   tabView: TabView;
   theme: ThemeMode;
   setTheme: (theme: ThemeMode) => void;
-  /** The user's server that takes the audio out of YouTube and Instagram videos (kept on this device only) */
-  audioServer: AudioServer;
-  setAudioServer: (s: AudioServer) => void;
-  /** The user's server that downloads sheet music from MuseScore (kept on this device only) */
-  scoreServer: AudioServer;
-  setScoreServer: (s: AudioServer) => void;
   setTabView: (view: TabView) => void;
   setFretboard: (patch: Partial<FretboardSettings>) => void;
   setTheory: (patch: Partial<TheoryState>) => void;
@@ -51,10 +44,6 @@ export const useSettings = create<SettingsStore>()(
       tabView: "tab",
       theme: "auto",
       setTheme: (theme) => set({ theme }),
-      audioServer: { url: "", key: "" },
-      setAudioServer: (audioServer) => set({ audioServer }),
-      scoreServer: { url: "", key: "" },
-      setScoreServer: (scoreServer) => set({ scoreServer }),
       setTabView: (tabView) => set({ tabView }),
       setFretboard: (patch) => set((s) => ({ fretboard: { ...s.fretboard, ...patch } })),
       setTheory: (patch) => set((s) => ({ theory: { ...s.theory, ...patch } })),

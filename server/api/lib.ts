@@ -1,6 +1,7 @@
-// Shared helpers for the serverless functions (files starting with "_" are not exposed as routes).
-// Same design as my-english-vocab: one JSON document in Upstash Redis, auth by SYNC_KEY or Telegram Mini App data.
+// Shared helpers for the API on the owner's server (server/api/main.ts serves the routes).
+// One JSON document with the library in SQLite (store.ts); auth by the app password (a signed token) or Telegram Mini App data.
 import crypto from "node:crypto";
+import { kvGet, kvSet } from "./store.js";
 
 const KEY_STATE = "guitar:state";
 const KEY_OWNER = "guitar:tg_owner"; // chat id of the owner (private chat id == Telegram user id)
@@ -32,32 +33,6 @@ export const handle =
     }
   };
 
-// ---------- storage: Upstash Redis REST API (Vercel Marketplace → Upstash for Redis)
-// Vercel may prefix the variable names (e.g. STORAGE_KV_REST_API_URL), so match by suffix.
-const envBySuffix = (re: RegExp) => {
-  const name = Object.keys(process.env).find((k) => re.test(k) && !/READ_ONLY/.test(k) && process.env[k]);
-  return name ? process.env[name] : undefined;
-};
-
-function redisConfig() {
-  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || envBySuffix(/(KV_REST_API|REDIS_REST)_URL$/);
-  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || envBySuffix(/(KV_REST_API|REDIS_REST)_TOKEN$/);
-  if (!url || !token) throw new HttpError(500, "Хранилище не подключено: добавь Upstash for Redis в Vercel → Storage");
-  return { url, token };
-}
-
-export async function redis(...command: (string | number)[]): Promise<unknown> {
-  const { url, token } = redisConfig();
-  const r = await fetch(url, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(command),
-  });
-  const data = (await r.json().catch(() => ({}))) as { result?: unknown; error?: string };
-  if (!r.ok || data.error) throw new HttpError(502, "Ошибка хранилища: " + (data.error || r.status));
-  return data.result;
-}
-
 /** Subset of the client's DataState that the server reads. */
 export interface ServerData {
   items?: { id: string; title: string; status: string; warmup?: boolean; sections?: { id: string; title: string; status: string }[] }[];
@@ -72,15 +47,15 @@ export interface StateDoc {
 }
 
 export async function loadState(): Promise<StateDoc | null> {
-  const raw = (await redis("GET", KEY_STATE)) as string | null;
+  const raw = kvGet(KEY_STATE);
   return raw ? (JSON.parse(raw) as StateDoc) : null;
 }
-export const saveState = (doc: StateDoc) => redis("SET", KEY_STATE, JSON.stringify(doc));
+export const saveState = async (doc: StateDoc) => kvSet(KEY_STATE, JSON.stringify(doc));
 
 export async function ownerId(): Promise<string | null> {
-  return process.env.TELEGRAM_CHAT_ID || ((await redis("GET", KEY_OWNER)) as string | null) || null;
+  return process.env.TELEGRAM_CHAT_ID || kvGet(KEY_OWNER) || null;
 }
-export const setOwner = (id: string) => redis("SET", KEY_OWNER, id);
+export const setOwner = async (id: string) => kvSet(KEY_OWNER, id);
 
 // ---------- auth
 export const safeEqual = (a: string, b: string) => {
@@ -89,11 +64,26 @@ export const safeEqual = (a: string, b: string) => {
   return x.length === y.length && crypto.timingSafeEqual(x, y);
 };
 
-export function checkSyncKey(req: Request) {
-  const expected = process.env.SYNC_KEY;
-  if (!expected) throw new HttpError(500, "На сервере не задан SYNC_KEY");
-  const got = req.headers.get("x-sync-key");
-  if (!got || !safeEqual(got, expected)) throw new HttpError(401, "Неверный ключ синхронизации");
+// The password is typed once per device; the device then keeps a signed token "<expiry>.<signature>".
+// Changing APP_PASSWORD signs every device out.
+function authSecret() {
+  const password = process.env.APP_PASSWORD;
+  if (!password) throw new HttpError(500, "На сервере не задан APP_PASSWORD");
+  return crypto.createHash("sha256").update("auth:" + password).digest();
+}
+const sign = (exp: string) => crypto.createHmac("sha256", authSecret()).update(exp).digest("base64url");
+
+export const checkPassword = (password: string) => safeEqual(password, process.env.APP_PASSWORD || "") && !!process.env.APP_PASSWORD;
+
+export function issueToken(days = 365) {
+  const exp = String(Math.floor(Date.now() / 1000) + days * 86400);
+  return `${exp}.${sign(exp)}`;
+}
+
+export function checkToken(req: Request) {
+  const token = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  const [exp, sig] = token.split(".");
+  if (!exp || !sig || Number(exp) < Date.now() / 1000 || !safeEqual(sig, sign(exp))) throw new HttpError(401, "Нужно войти заново");
 }
 
 // Telegram Mini App launch data, signed with the bot token:
@@ -120,22 +110,22 @@ export function verifyInitData(initData: string, maxAgeSec = 7 * 24 * 3600): { i
   }
 }
 
-/** Either the sync key (website) or valid Mini App data from the bot's owner (inside Telegram). */
+/** Either the password token (website) or valid Mini App data from the bot's owner (inside Telegram). */
 export async function checkAuth(req: Request) {
   const init = req.headers.get("x-telegram-init-data");
-  if (init && !req.headers.get("x-sync-key")) {
+  if (init && !req.headers.get("authorization")) {
     const user = verifyInitData(init);
     if (!user) throw new HttpError(401, "Не удалось проверить вход через Telegram — открой приложение заново");
     const owner = await ownerId();
     if (!owner || String(user.id) !== String(owner)) throw new HttpError(403, "Это личное приложение: бот привязан к другому аккаунту");
     return;
   }
-  checkSyncKey(req);
+  checkToken(req);
 }
 
 /** Secret Telegram sends back with every webhook call, so nobody else can post fake updates. */
 export function webhookSecret() {
-  const base = process.env.WEBHOOK_SECRET || process.env.SYNC_KEY || "";
+  const base = process.env.WEBHOOK_SECRET || process.env.APP_PASSWORD || "";
   return crypto.createHash("sha256").update("webhook:" + base).digest("hex").slice(0, 48);
 }
 
@@ -164,9 +154,15 @@ export async function telegram<T = unknown>(method: string, payload: Record<stri
   return data.result as T;
 }
 
+/** Where the app itself opens (the site on Vercel); on the test stand the app and the API share one address. */
 export function siteUrl(req: Request) {
   if (process.env.SITE_URL) return process.env.SITE_URL.replace(/\/$/, "");
-  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  return new URL(req.url).origin;
+}
+
+/** The API's own public address, for the bot's webhook. */
+export function publicUrl(req: Request) {
+  if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/$/, "");
   return new URL(req.url).origin;
 }
 

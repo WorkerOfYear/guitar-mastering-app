@@ -1,46 +1,31 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { tg } from "@/app/telegram";
+import { api } from "@/lib/api";
+import { flushFiles } from "@/lib/tabFiles";
+import { signedIn, useAuth, type ServerFeatures } from "./auth";
 import { exportData, useData, type DataState } from "./data";
 import { mergeData, sameData } from "./merge";
 
-// Keeps the phone browser, the computer and the Telegram Mini App on the same data through /api/state.
-// Inside Telegram the signed launch data replaces the sync key. Works only on the deployed site.
+// The library lives on the owner's server (/api/state); this device keeps a copy to work offline and merges with
+// the server's whenever it can, so the phone, the computer and the Telegram Mini App see the same data.
 
 interface SyncState {
-  key: string;
   /** updatedAt of the server copy we last merged with */
   base: number | null;
   lastOk: number;
   error: string;
   busy: boolean;
-  setKey: (key: string) => void;
 }
 
 export const useSync = create<SyncState>()(
-  persist(
-    (set) => ({ key: "", base: null, lastOk: 0, error: "", busy: false, setKey: (key) => set({ key, base: null, error: "" }) }),
-    { name: "guitar:sync", partialize: ({ key, base, lastOk }) => ({ key, base, lastOk }) },
-  ),
+  persist(() => ({ base: null, lastOk: 0, error: "", busy: false }) as SyncState, {
+    name: "guitar:sync",
+    partialize: ({ base, lastOk }) => ({ base, lastOk }),
+  }),
 );
 
 const online = () => /^https?:$/.test(location.protocol);
-export const syncEnabled = () => online() && (!!useSync.getState().key || !!tg?.initData);
-
-export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const key = useSync.getState().key;
-  const r = await fetch(path, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(key ? { "x-sync-key": key } : { "x-telegram-init-data": tg?.initData ?? "" }),
-      ...(init.headers ?? {}),
-    },
-  });
-  const data = (await r.json().catch(() => ({}))) as T & { error?: string };
-  if (!r.ok) throw Object.assign(new Error(data.error || `Ошибка сервера (${r.status})`), { status: r.status });
-  return data;
-}
+export const syncEnabled = () => online() && signedIn();
 
 let applying = false;
 let running: Promise<void> | null = null;
@@ -72,6 +57,8 @@ export function syncNow() {
   if (running) return running;
   useSync.setState({ busy: true });
   running = syncOnce()
+    // Files saved while offline (and, once per device, the ones from before the server) go up after the library.
+    .then(() => flushFiles())
     .then(() => {
       useSync.setState({ lastOk: Date.now(), error: "" });
     })
@@ -85,11 +72,28 @@ export function syncNow() {
   return running;
 }
 
+/** Asks the server what it can do (audio from videos, MuseScore, the bot). */
+export async function loadServerFeatures() {
+  if (!syncEnabled()) return;
+  try {
+    useAuth.setState({ server: await api<ServerFeatures>("/api/me") });
+  } catch {
+    /* offline: keep what we knew */
+  }
+}
+
 let timer: ReturnType<typeof setTimeout> | null = null;
 
-/** Start syncing: now, a moment after local changes, and whenever the app comes back to the foreground. */
+/** Start syncing: now, a moment after local changes, whenever the app comes back to the foreground, and right after signing in. */
 export function initSync() {
   void syncNow();
+  void loadServerFeatures();
+  useAuth.subscribe((s, prev) => {
+    if (s.token && s.token !== prev.token) {
+      void syncNow();
+      void loadServerFeatures();
+    }
+  });
   useData.subscribe(() => {
     if (applying || !syncEnabled()) return;
     if (timer) clearTimeout(timer);

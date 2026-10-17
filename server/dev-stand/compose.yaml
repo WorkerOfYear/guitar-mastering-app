@@ -1,27 +1,34 @@
-# Test stand: serves /srv/guitar-dev/dist (and /api/tabs from /srv/guitar-dev/api) on 127.0.0.1:8788 and publishes it with a Cloudflare quick tunnel.
+# Test stand: serves $STAND_DIR/dist with its own API (server/api) on 127.0.0.1:8788 and publishes it with a Cloudflare quick tunnel.
+# Everything is on the host network, so the API reaches the audio and MuseScore servers at 127.0.0.1:8787 / :8790.
+# Nothing here depends on which checkout runs it: the Caddyfile, the API and the secrets live in $STAND_DIR (up.sh puts them there).
 #   docker compose up -d
 #   docker compose logs tunnel | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1
 services:
   web:
     image: caddy:2
     restart: unless-stopped
-    ports: ["127.0.0.1:8788:80"]
+    network_mode: host
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - /srv/guitar-dev:/srv
-  # Functions from api/ that work without Vercel (tab search), bundled into /srv/guitar-dev/api/api.js by up.sh,
-  # which restarts the container after each deploy. Until the first deploy it waits for the file.
+      - ${STAND_DIR:-/srv/guitar-dev}/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${STAND_DIR:-/srv/guitar-dev}:/srv
+  # The API, bundled into $STAND_DIR/api/api.js by up.sh, which restarts the container after each deploy.
+  # Its library and files: $STAND_DIR/data. Secrets (APP_PASSWORD, AUDIO_KEY, SCORE_KEY, TAVILY_API_KEY…): $STAND_DIR/.env, not in git.
   api:
     image: node:22-alpine
     container_name: guitar-dev-api
     restart: unless-stopped
+    network_mode: host
     working_dir: /srv/api
-    # TAVILY_API_KEY=… (or SERPER_API_KEY=…) here turns on MuseScore scores in tab search (see the main README). Not in git.
-    env_file: [{ path: .env, required: false }]
+    env_file: [{ path: "${STAND_DIR:-/srv/guitar-dev}/.env", required: false }]
+    environment:
+      PORT: "8789"
+      HOST: 127.0.0.1
+      DATA_DIR: /data
+      NODE_NO_WARNINGS: "1"
     command: ["sh", "-c", "until [ -f api.js ]; do sleep 5; done; exec node api.js"]
     volumes:
-      # Only the api folder (docker creates it on the host if it isn't there yet), read-only.
-      - /srv/guitar-dev/api:/srv/api:ro
+      - ${STAND_DIR:-/srv/guitar-dev}/api:/srv/api:ro
+      - ${STAND_DIR:-/srv/guitar-dev}/data:/data
   tunnel:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped

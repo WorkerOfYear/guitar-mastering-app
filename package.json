@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build:stand-api": "vite build --config server/dev-stand/vite.api.config.ts"
+    "build:api": "vite build --config server/api/vite.config.ts"
   },
   "dependencies": {
     "@coderline/alphatab": "^1.8.4",
