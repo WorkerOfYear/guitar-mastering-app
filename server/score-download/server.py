@@ -34,7 +34,8 @@ from flaresolverr_service import click_verify
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 
-KEY = os.environ.get("KEY", "")
+# SCORE_KEY: the name in the shared .env of server/production and server/dev-stand; KEY: running on its own.
+KEY = os.environ.get("SCORE_KEY") or os.environ.get("KEY", "")
 PORT = int(os.environ.get("PORT", "8080"))
 MAX_PAGES = int(os.environ.get("MAX_PAGES", "150"))
 IDLE_SECONDS = 600  # the browser takes up to 1 GB, so it closes when nobody downloads

@@ -24,14 +24,16 @@ VERSION="$(git rev-parse --short HEAD)$([ -z "$(git status --porcelain)" ] || ec
 echo "$VERSION" > dist/version.txt
 
 # The app: copy next to the live one, then swap, so the stand never serves a half-copied build.
-mkdir -p "$STAND_DIR" "$STAND_DIR/api" "$STAND_DIR/data"
+mkdir -p "$STAND_DIR" "$STAND_DIR/api" "$STAND_DIR/data" "$STAND_DIR/audio" "$STAND_DIR/score"
+chown 1000:1000 "$STAND_DIR/score" 2>/dev/null || true
 cp server/dev-stand/Caddyfile "$STAND_DIR/Caddyfile"
 rm -rf "$STAND_DIR/dist.new" && cp -r dist "$STAND_DIR/dist.new"
 rm -rf "$STAND_DIR/dist.old" && { [ ! -d "$STAND_DIR/dist" ] || mv "$STAND_DIR/dist" "$STAND_DIR/dist.old"; }
 mv "$STAND_DIR/dist.new" "$STAND_DIR/dist"
-# The API, then restart its container (and Caddy, for a changed Caddyfile); `up -d` also starts the stand if it isn't running.
+# The API, then restart its container (and Caddy, for a changed Caddyfile); `up -d --build` also starts the rest of the
+# stand and rebuilds the audio and score services when their code changed.
 rm -rf "$STAND_DIR/api"/* && cp -r dist-api/. "$STAND_DIR/api/"
-(cd server/dev-stand && docker compose up -d >/dev/null && docker restart guitar-dev-api dev-stand-web-1 >/dev/null)
+(cd server/dev-stand && docker compose up -d --build >/dev/null && docker restart guitar-dev-api dev-stand-web-1 >/dev/null)
 
 # The stand must serve this build, and its API must answer.
 for _ in $(seq 20); do

@@ -1,0 +1,50 @@
+# Production: everything the app needs on the server — the API (server/api), audio from videos (server/youtube-audio)
+# and scores from MuseScore (server/score-download). One private network: the API reaches the others as audio:8080 and
+# score:8080, only the API is published, on 127.0.0.1:8791 (Tailscale Funnel gives it HTTPS, see README.md).
+# Data and secrets live in $GUITAR_DIR (default /srv/guitar): data/ (library and files), audio/ (Instagram cookies.txt,
+# optional), score/ (MuseScore login); secrets split so each service sees only its own: .env (the API), audio.env
+# (AUDIO_KEY), score.env (SCORE_KEY, MS_EMAIL, MS_PASSWORD) — the API reads all three. Deployed by up.sh:
+#   bash server/production/up.sh
+#   cd server/production && docker compose up -d --force-recreate     # after editing a .env file
+name: guitar
+services:
+  api:
+    image: node:22-alpine
+    container_name: guitar-api
+    restart: unless-stopped
+    working_dir: /srv/api
+    env_file:
+      - { path: "${GUITAR_DIR:-/srv/guitar}/.env", required: false }
+      - { path: "${GUITAR_DIR:-/srv/guitar}/audio.env", required: false }
+      - { path: "${GUITAR_DIR:-/srv/guitar}/score.env", required: false }
+    environment:
+      PORT: "8791"
+      HOST: 0.0.0.0
+      DATA_DIR: /data
+      AUDIO_URL: http://audio:8080
+      SCORE_URL: http://score:8080
+      NODE_NO_WARNINGS: "1"
+    command: ["sh", "-c", "until [ -f api.js ]; do sleep 5; done; exec node api.js"]
+    ports: ["127.0.0.1:8791:8791"]
+    volumes:
+      - ${GUITAR_DIR:-/srv/guitar}/api:/srv/api:ro
+      - ${GUITAR_DIR:-/srv/guitar}/data:/data
+  audio:
+    build: ../youtube-audio
+    container_name: guitar-audio
+    restart: unless-stopped
+    env_file: [{ path: "${GUITAR_DIR:-/srv/guitar}/audio.env", required: false }]
+    environment:
+      PORT: "8080"
+    volumes:
+      - ${GUITAR_DIR:-/srv/guitar}/audio:/data
+  score:
+    build: ../score-download
+    container_name: guitar-score
+    restart: unless-stopped
+    env_file: [{ path: "${GUITAR_DIR:-/srv/guitar}/score.env", required: false }]
+    environment:
+      PORT: "8080"
+    volumes:
+      # The MuseScore account's cookies. Owned by the image's user (uid 1000).
+      - ${GUITAR_DIR:-/srv/guitar}/score:/data

@@ -15,7 +15,8 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-KEY = os.environ.get("KEY", "")
+# AUDIO_KEY: the name in the shared .env of server/production and server/dev-stand; KEY: running on its own.
+KEY = os.environ.get("AUDIO_KEY") or os.environ.get("KEY", "")
 PORT = int(os.environ.get("PORT", "8080"))
 MAX_MINUTES = int(os.environ.get("MAX_MINUTES", "30"))
 YTDLP = os.environ.get("YTDLP", "yt-dlp")

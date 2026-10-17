@@ -15,13 +15,14 @@ bash server/dev-stand/up.sh
 - `SKIP_CHECKS=1 bash server/dev-stand/up.sh` — без `tsc` и тестов (быстрее, для мелочей).
 - `STAND_DIR=…` — другая папка вместо `/srv/guitar-dev`.
 
-Caddy отдаёт сборку на `127.0.0.1:8788`, `/api/*` уходит в контейнер `api` (свой API стенда на `127.0.0.1:8789`
-со своей базой в `/srv/guitar-dev/data` — production-данные стенд не трогает). Всё в сети хоста, поэтому API сам
-достаёт звук и ноты с серверов на `127.0.0.1:8787` и `:8790`. Туннель Cloudflare даёт https-адрес.
+Стенд — тот же набор сервисов, что [production](../production/README.md) (API, звук из видео, ноты MuseScore),
+со своими данными, плюс Caddy и туннель Cloudflare: Caddy отдаёт сборку на `127.0.0.1:8788`, `/api/*` уходит в API
+стенда, туннель даёт https-адрес. Production-данные стенд не трогает.
 
-Секреты стенда — `/srv/guitar-dev/.env` (не в git, не зависит от того, из какого клона запущен `up.sh`):
-`APP_PASSWORD` (пароль входа на стенд), `AUDIO_KEY`, `SCORE_KEY`, `TAVILY_API_KEY` — описание в [`server/api/README.md`](../api/README.md).
-После правки `.env` запусти `up.sh` (или `cd server/dev-stand && docker compose up -d`).
+Данные и секреты стенда — в `/srv/guitar-dev` (не в git, не зависит от того, из какого клона запущен `up.sh`):
+`.env` (`APP_PASSWORD` — пароль входа на стенд, `TAVILY_API_KEY`), `audio.env` (`AUDIO_KEY`), `score.env`
+(`SCORE_KEY`, `MS_EMAIL`, `MS_PASSWORD`), `data/`. После правки: `cd server/dev-stand && docker compose up -d --force-recreate api audio score`
+(без `tunnel` — иначе сменится адрес).
 
 ## Установка (один раз)
 
@@ -37,4 +38,4 @@ bash server/dev-stand/up.sh          # соберёт, поднимет конт
 и ключ `~/.ssh/github-dev-stand` на сервере больше не нужны — их можно удалить.
 
 Ноты MuseScore в поиске табов: ключ Tavily или Serper в `/srv/guitar-dev/.env` (`TAVILY_API_KEY=…` или `SERPER_API_KEY=…`)
-и `up.sh`. Как получить ключ — в README в корне.
+и перезапуск, как выше. Как получить ключ — в README в корне.

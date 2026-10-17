@@ -1,34 +1,55 @@
-# Test stand: serves $STAND_DIR/dist with its own API (server/api) on 127.0.0.1:8788 and publishes it with a Cloudflare quick tunnel.
-# Everything is on the host network, so the API reaches the audio and MuseScore servers at 127.0.0.1:8787 / :8790.
-# Nothing here depends on which checkout runs it: the Caddyfile, the API and the secrets live in $STAND_DIR (up.sh puts them there).
-#   docker compose up -d
+# Test stand: the same services as production (server/production), with their own data, plus Caddy serving the built app
+# and a Cloudflare quick tunnel giving it an https address. Caddy is published on 127.0.0.1:8788 (the tunnel's target);
+# /api goes to the stand's API, which reaches its own audio and score services as audio:8080 / score:8080.
+# Nothing here depends on which checkout runs it: the Caddyfile, the built app and API, data and secrets live in $STAND_DIR
+# (default /srv/guitar-dev), put there by up.sh. Secrets as in production: .env (API), audio.env, score.env.
+#   bash server/dev-stand/up.sh
 #   docker compose logs tunnel | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1
 services:
   web:
     image: caddy:2
     restart: unless-stopped
-    network_mode: host
+    ports: ["127.0.0.1:8788:80"]
     volumes:
       - ${STAND_DIR:-/srv/guitar-dev}/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ${STAND_DIR:-/srv/guitar-dev}:/srv
-  # The API, bundled into $STAND_DIR/api/api.js by up.sh, which restarts the container after each deploy.
-  # Its library and files: $STAND_DIR/data. Secrets (APP_PASSWORD, AUDIO_KEY, SCORE_KEY, TAVILY_API_KEY…): $STAND_DIR/.env, not in git.
+      # The whole folder, not dist itself: up.sh swaps dist for a new copy by renaming.
+      - ${STAND_DIR:-/srv/guitar-dev}:/srv:ro
   api:
     image: node:22-alpine
     container_name: guitar-dev-api
     restart: unless-stopped
-    network_mode: host
     working_dir: /srv/api
-    env_file: [{ path: "${STAND_DIR:-/srv/guitar-dev}/.env", required: false }]
+    env_file:
+      - { path: "${STAND_DIR:-/srv/guitar-dev}/.env", required: false }
+      - { path: "${STAND_DIR:-/srv/guitar-dev}/audio.env", required: false }
+      - { path: "${STAND_DIR:-/srv/guitar-dev}/score.env", required: false }
     environment:
       PORT: "8789"
-      HOST: 127.0.0.1
+      HOST: 0.0.0.0
       DATA_DIR: /data
+      AUDIO_URL: http://audio:8080
+      SCORE_URL: http://score:8080
       NODE_NO_WARNINGS: "1"
     command: ["sh", "-c", "until [ -f api.js ]; do sleep 5; done; exec node api.js"]
     volumes:
       - ${STAND_DIR:-/srv/guitar-dev}/api:/srv/api:ro
       - ${STAND_DIR:-/srv/guitar-dev}/data:/data
+  audio:
+    build: ../youtube-audio
+    restart: unless-stopped
+    env_file: [{ path: "${STAND_DIR:-/srv/guitar-dev}/audio.env", required: false }]
+    environment:
+      PORT: "8080"
+    volumes:
+      - ${STAND_DIR:-/srv/guitar-dev}/audio:/data
+  score:
+    build: ../score-download
+    restart: unless-stopped
+    env_file: [{ path: "${STAND_DIR:-/srv/guitar-dev}/score.env", required: false }]
+    environment:
+      PORT: "8080"
+    volumes:
+      - ${STAND_DIR:-/srv/guitar-dev}/score:/data
   tunnel:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped

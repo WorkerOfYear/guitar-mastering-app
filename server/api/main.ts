@@ -1,5 +1,5 @@
 // The app's API on the owner's server: the library (sync), its files, the helper servers, tab search and the Telegram bot.
-// Built into one file by `npm run build:api` (dist-api/api.js), run with plain `node api.js` — see server/api/README.md.
+// Built into one file by `npm run build:api` (dist-api/api.js), run with plain `node api.js` — server/production and server/dev-stand run it.
 // Env: PORT (8789), HOST (127.0.0.1), DATA_DIR, APP_PASSWORD, AUDIO_KEY, SCORE_KEY, TELEGRAM_BOT_TOKEN, SITE_URL, PUBLIC_URL…
 import http from "node:http";
 import * as files from "./files";

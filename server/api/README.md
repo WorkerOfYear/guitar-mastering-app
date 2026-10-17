@@ -11,44 +11,14 @@
   по `127.0.0.1`, так что их туннели и меняющиеся адреса приложению не нужны.
 - `tabs.ts` — поиск табов, `telegram.ts` и `remind.ts` — бот и напоминание в 19:00 в дни занятий.
 
-## .env
+## Где и как запущен
 
-```bash
-APP_PASSWORD=придумай-длинный-пароль    # смена пароля разлогинит все устройства
-AUDIO_KEY=…           # KEY из server/youtube-audio/.env
-SCORE_KEY=…           # KEY сервера нот MuseScore (/srv/score-download/.env)
-TAVILY_API_KEY=…      # необязательно: ноты MuseScore в поиске табов
-# Бот (необязательно):
-TELEGRAM_BOT_TOKEN=…
-SITE_URL=https://<сайт на vercel>      # что открывает кнопка бота
-PUBLIC_URL=https://<адрес этого API>   # куда Telegram шлёт сообщения
-TIMEZONE=Asia/Novosibirsk  REMIND_HOUR=19
-# Если серверы звука и нот не на стандартных портах: AUDIO_URL=http://127.0.0.1:8787  SCORE_URL=http://127.0.0.1:8790
-```
+- Production — [`server/production`](../production/README.md): API, звук и ноты одним compose, данные и секреты в `/srv/guitar`.
+- Тестовый стенд — [`server/dev-stand`](../dev-stand/README.md): то же самое со своей базой в `/srv/guitar-dev`.
 
-## Тестовый стенд
-
-Свой API со своей базой: `.env` — `/srv/guitar-dev/.env`, данные — `/srv/guitar-dev/data`. Поднимается
-`bash server/dev-stand/up.sh` вместе со стендом (тот же адрес, `/api/*`).
-
-## Production (сайт на Vercel)
-
-Один раз:
-
-```bash
-sudo mkdir -p /srv/guitar && sudo nano /srv/guitar/.env      # см. выше
-git checkout main && bash server/api/up.sh                   # → OK: API поднят
-tailscale funnel --bg 8791                                    # постоянный https://<машина>.<сеть>.ts.net
-```
-
-Потом в Vercel → проект → Settings → Environment Variables: `VITE_API_URL=https://<машина>.<сеть>.ts.net`
-и Redeploy. Бот: в `.env` задай `PUBLIC_URL` (тот же адрес) и `SITE_URL`, затем в приложении
-**Настройки → Сервер и Telegram → Подключить бота**.
-
-Обновление после слияния в `main`: `git checkout main && git pull && bash server/api/up.sh`.
-
-Бэкап: папка `/srv/guitar/data` целиком (или «Бэкап» в настройках приложения — только библиотека, без файлов).
-Логи: `cd server/api && docker compose logs -f`.
+Переменные: `APP_PASSWORD`, `AUDIO_KEY` и `SCORE_KEY` (ключи к серверам звука и нот), `AUDIO_URL` и `SCORE_URL` (их адреса,
+в compose — `http://audio:8080` и `http://score:8080`), `TAVILY_API_KEY`, `TELEGRAM_BOT_TOKEN`, `SITE_URL`, `PUBLIC_URL`,
+`TIMEZONE`, `REMIND_HOUR`, `DATA_DIR`, `PORT`, `HOST`.
 
 Первый вход на устройстве, где библиотека уже была в браузере, сливает её с серверной, а файлы из браузера
 загружаются на сервер — ничего не теряется.

@@ -1,7 +1,7 @@
 # Guitar Mastering
 
 Личный тренажёр занятий на электрогитаре: разминка, разбор нового, повторение и импровизация.
-Сайт — на Vercel, данные и API — на своём сервере ([`server/api`](server/api/README.md)); открывается и внутри Telegram как Mini App. Требования описаны в [docs/PRD.md](docs/PRD.md).
+Сайт — на Vercel, данные и API — на своём сервере ([`server/production`](server/production/README.md)); открывается и внутри Telegram как Mini App. Требования описаны в [docs/PRD.md](docs/PRD.md).
 
 ## Что уже есть
 
@@ -51,20 +51,20 @@ npm run build:api  # API в dist-api/api.js; запуск: APP_PASSWORD=… DATA
    Framework Preset определится сам (**Vite**), настройки в `vercel.json`. Нажми **Deploy**.
    Каждый push в `main` обновляет сайт.
 2. Vercel отдаёт только сам сайт. Данные, вход, бот и всё остальное — API на своём сервере: как его поднять и какой
-   `VITE_API_URL` указать в Vercel → Settings → Environment Variables — в [`server/api/README.md`](server/api/README.md).
+   `VITE_API_URL` указать в Vercel → Settings → Environment Variables — в [`server/production/README.md`](server/production/README.md).
 
 ## Звук из YouTube и Instagram, ноты с MuseScore
 
 Звук из видео скачивает свой небольшой сервер (облака вроде Vercel YouTube блокирует) — [`server/youtube-audio`](server/youtube-audio/README.md).
 Ноты с MuseScore (PDF, MIDI, mp3, MusicXML) по ссылке из песни — такой же сервис с Chrome из FlareSolverr — [`server/score-download`](server/score-download/README.md).
-Приложение к ним напрямую не ходит: API обращается к ним по `127.0.0.1`, а их ключи лежат в `.env` API.
+Оба запускаются вместе с API одним compose ([`server/production`](server/production/README.md)); приложение к ним напрямую не ходит.
 
 ## Telegram: бот и напоминания
 
 Бот работает через API на своём сервере.
 
 1. В Telegram открой [@BotFather](https://t.me/BotFather) → `/newbot` → получи токен.
-2. В `.env` API: `TELEGRAM_BOT_TOKEN`, `SITE_URL` (адрес сайта), `PUBLIC_URL` (адрес API), перезапусти API (`bash server/api/up.sh`).
+2. В `.env` API: `TELEGRAM_BOT_TOKEN`, `SITE_URL` (адрес сайта), `PUBLIC_URL` (адрес API), перезапусти (`cd server/production && docker compose up -d --force-recreate`).
 3. В приложении **Настройки → Сервер и Telegram → «Подключить бота»** → «Открыть в Telegram» → **Start**.
    Бот ответит «Готово!», а у поля ввода появится кнопка «Гитара».
 4. «Проверить напоминание» — в Telegram должно прийти сообщение.
@@ -85,7 +85,7 @@ MuseScore не пускает серверные запросы, поэтому 
 
 Если заданы оба, используется Tavily.
 
-Ключ — в `.env` API (`/srv/guitar/.env`, на стенде `/srv/guitar-dev/.env`), затем перезапусти API.
+Ключ — в `.env` (`/srv/guitar/.env`, на стенде `/srv/guitar-dev/.env`), затем перезапусти.
 Один поиск песни — один запрос к сервису.
 
 ## Как устроено
@@ -95,7 +95,8 @@ src/                  фронтенд (React): экраны, музыкальн
 src/store/sync.ts     синхронизация библиотеки с сервером; слияние данных двух устройств — src/store/merge.ts
 src/lib/tabFiles.ts   файлы на сервере + копия в IndexedDB
 server/api/           API на своём сервере (Node + SQLite): вход, библиотека, файлы, звук и ноты, поиск табов, бот
-server/dev-stand/     тестовый стенд
+server/production/    production: API, звук и ноты одним compose
+server/dev-stand/     тестовый стенд — то же со своими данными
 server/youtube-audio/ звук из YouTube и Instagram
 tests/                тесты API с настоящей SQLite и имитацией Telegram
 ```

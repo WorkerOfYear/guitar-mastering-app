@@ -1,6 +1,10 @@
 # Ноты с MuseScore — свой сервер
 
-Сервис скачивает ноты с MuseScore по ссылке: MusicXML, PDF, MIDI или mp3. Приложение ходит к нему напрямую из браузера.
+> Обычно сервис поднимается не сам по себе, а вместе с API в [`server/production`](../production/README.md)
+> (и на стенде — в [`server/dev-stand`](../dev-stand/README.md)): там ему не нужны ни туннель, ни HTTPS, ни порт `8790`,
+> а ключ берётся из `score.env` (`SCORE_KEY`). Ниже — как запустить его отдельно.
+
+Сервис скачивает ноты с MuseScore по ссылке: MusicXML, PDF, MIDI или mp3. К нему ходит API приложения.
 
 - `GET /score?url=<ссылка на ноты musescore.com>&type=musicxml|pdf|midi|mp3` с заголовком `Authorization: Bearer <KEY>` → файл.
 - Принимает только ссылки `https://musescore.com/…` и четыре формата — сервер нельзя заставить качать произвольные адреса.
