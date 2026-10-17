@@ -23,13 +23,18 @@ export async function detectSync(tab: ArrayBuffer, audio: ArrayBuffer) {
   const shift = r.scale === 1 ? "" : `, запись ${r.scale > 1 ? "медленнее" : "быстрее"} таба на ${Math.abs(Math.round((r.scale - 1) * 1000) / 10)}%`;
   const repeat = r.skippedRepeat ? " В записи повтор в начале звучит один раз — с записью он тоже играется один раз." : "";
   const start = r.bar1Ms === null ? "" : `такт 1 на ${formatClockMs(r.bar1Ms)}`;
-  const ok = r.confidence >= 1.3;
+  // Whether the recording fits the tab at all (another tuning, another song, a part of it) — see matchCheck.ts.
+  const warnings = r.check?.warnings ?? [];
+  const sure = r.confidence >= 1.3;
   return {
-    ok,
-    patch: { audioSync: r.points, audioUnrepeat: r.unrepeat.length ? r.unrepeat : undefined },
-    message: ok
-      ? `Готово: ${start}${shift}, ${r.points.length} отметок.${repeat} Проверь на слух.`
-      : `Совпадение неуверенное — проверь на слух и поправь отметки вручную${start ? ` (${start})` : ""}.`,
+    ok: sure && !warnings.length,
+    warnings,
+    patch: { audioSync: r.points, audioUnrepeat: r.unrepeat.length ? r.unrepeat : undefined, audioWarnings: warnings.length ? warnings : undefined },
+    message: warnings.length
+      ? `${warnings.join(" ")} Проверь на слух.`
+      : sure
+        ? `Готово: ${start}${shift}, ${r.points.length} отметок.${repeat} Проверь на слух.`
+        : `Совпадение неуверенное — проверь на слух и поправь отметки вручную${start ? ` (${start})` : ""}.`,
   };
 }
 

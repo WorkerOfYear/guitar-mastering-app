@@ -1,6 +1,7 @@
 import type { SyncPoint } from "@/shared/types";
 import { CHROMA_FPS, scoreChroma, type ScoreNote } from "./chroma";
 import { refineBars } from "./beats";
+import type { MatchCheck } from "./matchCheck";
 
 // The number crunching of auto-sync, kept free of alphaTab and the DOM so it can run in a Web Worker
 // (on a laptop it takes 10–20 s, which would freeze the page).
@@ -142,6 +143,8 @@ export interface AutoSyncResult {
   scale: number;
   /** How much the best match stands out (≥ 1.5 is a confident match) */
   confidence: number;
+  /** Whether the recording fits the tab (matchCheck.ts; added by the worker) */
+  check?: MatchCheck;
 }
 
 /**

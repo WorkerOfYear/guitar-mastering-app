@@ -21,6 +21,7 @@ import {
   Plus,
   RefreshCw,
   Trash2,
+  TriangleAlert,
   Video,
   WandSparkles,
 } from "lucide-react";
@@ -110,6 +111,22 @@ export const AUDIO_ACCEPT = "audio/*,.mp3,.m4a,.wav,.ogg,.flac";
 export const AUDIO_MAX = 40_000_000;
 
 const ICON = "flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent/12 text-accent [&_svg]:size-[18px]";
+
+/** What the check found when the recording was bound to the tab (another tuning, another song…). */
+function MatchWarnings({ warnings }: { warnings?: string[] }) {
+  if (!warnings?.length) return null;
+  return (
+    <div className="flex gap-2 rounded-2xl bg-guide/15 p-3 text-sm">
+      <TriangleAlert className="mt-0.5 size-4 shrink-0 text-guide" />
+      <div className="space-y-1">
+        <div className="font-semibold">Запись не сходится с табами</div>
+        {warnings.map((w) => (
+          <p key={w}>{w}</p>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /** One material: icon, what it is, then the same icon actions everywhere (replace, delete). */
 function MaterialRow({ icon, title, sub, actions }: { icon: ReactNode; title: string; sub?: ReactNode; actions: ReactNode }) {
@@ -240,14 +257,15 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
     setAudioData(data);
     setMissing((m) => ({ ...m, audio: false }));
     setPlaying(false);
-    updateItem(item.id, { audioFile: meta, audioSync: undefined, audioUnrepeat: undefined });
+    updateItem(item.id, { audioFile: meta, audioSync: undefined, audioUnrepeat: undefined, audioWarnings: undefined });
     const tab = fileRef.current ?? (item.tabFile ? await loadTabFile(item.id) : null);
     if (!tab) return;
     const id = toast.loading("Связываю табы с записью…");
     try {
       const r = await detectSync(tab, data);
       updateItem(item.id, r.patch);
-      (r.ok ? toast.success : toast.warning)(r.ok ? "Табы связаны с записью" : "Табы связаны, но не уверенно", { id, description: r.message });
+      const title = r.ok ? "Табы связаны с записью" : r.warnings.length ? "Запись не сходится с табами" : "Табы связаны, но не уверенно";
+      (r.ok ? toast.success : toast.warning)(title, { id, description: r.message, duration: r.warnings.length ? 12_000 : undefined });
     } catch (e) {
       toast.error("Не удалось связать табы с записью", { id, description: (e as Error).message });
     }
@@ -313,7 +331,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
     await deleteAudioFile(item.id);
     setAudioData(null);
     setPlaying(false);
-    updateItem(item.id, { audioFile: undefined, audioSync: undefined, audioUnrepeat: undefined });
+    updateItem(item.id, { audioFile: undefined, audioSync: undefined, audioUnrepeat: undefined, audioWarnings: undefined });
   };
 
   const setTab = async (data: ArrayBuffer, name: string) => {
@@ -321,7 +339,8 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
     setFile(data);
     setMissing((m) => ({ ...m, tab: false }));
     setScore(null);
-    updateItem(item.id, { tabFile: { name, size: data.byteLength } });
+    // Another tab: what the check said about the old one no longer holds.
+    updateItem(item.id, { tabFile: { name, size: data.byteLength }, audioWarnings: undefined });
   };
 
   const upload = async (f: File) => {
@@ -333,7 +352,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
     await deleteTabFile(item.id);
     setFile(null);
     setScore(null);
-    updateItem(item.id, { tabFile: undefined });
+    updateItem(item.id, { tabFile: undefined, audioWarnings: undefined });
   };
 
   const [videoUrl, setVideoUrl] = useState("");
@@ -425,29 +444,32 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
   const recording = (
     <>
       {item.audioFile ? (
-        <MaterialRow
-          icon={<Headphones />}
-          title={hasTab ? "Звук для табов" : "Запись"}
-          sub={[
-            item.audioFile.fromVideo ? "из видео" : item.audioFile.name,
-            missing.audio ? "загрузи на этом устройстве" : hasTab ? (synced ? "синхронизирован" : "без синхронизации") : "",
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-          actions={
-            <>
-              {audioData && (
-                <IconAction label="Скачать запись" onClick={() => downloadAudio(audioData, item.audioFile!.name)}>
-                  <Download className="size-4" />
+        <>
+          <MaterialRow
+            icon={<Headphones />}
+            title={hasTab ? "Звук для табов" : "Запись"}
+            sub={[
+              item.audioFile.fromVideo ? "из видео" : item.audioFile.name,
+              missing.audio ? "загрузи на этом устройстве" : hasTab ? (synced ? "синхронизирован" : "без синхронизации") : "",
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+            actions={
+              <>
+                {audioData && (
+                  <IconAction label="Скачать запись" onClick={() => downloadAudio(audioData, item.audioFile!.name)}>
+                    <Download className="size-4" />
+                  </IconAction>
+                )}
+                <FileAction label="Заменить запись" accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)} />
+                <IconAction label="Удалить запись" onClick={() => void removeAudio()}>
+                  <Trash2 className="size-4" />
                 </IconAction>
-              )}
-              <FileAction label="Заменить запись" accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)} />
-              <IconAction label="Удалить запись" onClick={() => void removeAudio()}>
-                <Trash2 className="size-4" />
-              </IconAction>
-            </>
-          }
-        />
+              </>
+            }
+          />
+          <MatchWarnings warnings={item.audioWarnings} />
+        </>
       ) : (
         <>
           {item.video && (
@@ -689,6 +711,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
             </>
           }
         />
+        <MatchWarnings warnings={item.audioWarnings} />
         {showSync && file && audioData && (
           <div className="rounded-2xl bg-surface-2/40 p-3">
             <AudioSync item={item} audio={audioData} tab={file} sections={score?.sections ?? []} bars={score?.bars ?? 1} />
