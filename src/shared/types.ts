@@ -22,11 +22,15 @@ export interface SyncPoint {
   ms: number;
 }
 
-export interface VideoLink {
-  youtubeId: string;
-  /** Start offset in seconds */
-  start?: number;
-}
+/** Play-along video: a YouTube video, or an Instagram post/reel by its shortcode (instagram.com/reel/<id>). */
+export type VideoLink =
+  | {
+      youtubeId: string;
+      /** Start offset in seconds */
+      start?: number;
+      instagramId?: undefined;
+    }
+  | { instagramId: string; youtubeId?: undefined; start?: undefined };
 
 /** Opens the Theory screen with these settings. */
 export interface TheoryLink {
@@ -56,12 +60,12 @@ export interface Item {
   theory?: TheoryLink;
   /** Tab in alphaTex — played Songsterr-style with a cursor and sound */
   tab?: string;
-  /** Play-along video (YouTube) */
+  /** Play-along video (YouTube or Instagram) */
   video?: VideoLink;
   /** A Guitar Pro file is stored on this device for this item (IndexedDB) */
   tabFile?: { name: string; size: number };
   /** The recording the tab was written from (IndexedDB), played in sync with the notes */
-  audioFile?: { name: string; size: number; /** Taken from the item's YouTube video */ fromVideo?: boolean };
+  audioFile?: { name: string; size: number; /** Taken from the item's video */ fromVideo?: boolean };
   /** Where bars start in the recording: bar (1-based) → milliseconds. Sorted by bar. */
   audioSync?: SyncPoint[];
   /** Repeats (by closing bar) the recording plays only once — switched off when playing along with it */

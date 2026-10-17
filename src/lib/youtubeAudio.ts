@@ -1,5 +1,7 @@
-// Audio of a YouTube video, from the user's own server (server/youtube-audio). YouTube blocks
-// downloads from cloud hosting like Vercel, so the app can't do it itself.
+// Audio of a YouTube or Instagram video, from the user's own server (server/youtube-audio). YouTube
+// blocks downloads from cloud hosting like Vercel, so the app can't do it itself.
+
+import type { VideoLink } from "@/shared/types";
 
 export interface AudioServer {
   url: string;
@@ -27,20 +29,22 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Downloads the audio; the file name is the video title. A dropped connection or a 5xx (server busy,
- * tunnel hiccup, YouTube refusing once) is retried; a wrong key or id is not.
+ * tunnel hiccup, the site refusing once) is retried; a wrong key or id is not.
  */
-export async function fetchYoutubeAudio(
-  videoId: string,
+export async function fetchVideoAudio(
+  video: VideoLink,
   server: AudioServer,
   onAttempt?: (attempt: number, of: number) => void,
 ): Promise<{ data: ArrayBuffer; name: string }> {
+  const videoId = video.instagramId ?? video.youtubeId;
+  const query = `${video.instagramId !== undefined ? "ig" : "id"}=${encodeURIComponent(videoId)}`;
   let r: Response | null = null;
   let error = "";
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
     if (attempt > 1) await sleep(attempt * 2000);
     onAttempt?.(attempt, ATTEMPTS);
     try {
-      r = await fetch(`${base(server)}/audio?id=${encodeURIComponent(videoId)}`, { headers: { Authorization: `Bearer ${server.key.trim()}` } });
+      r = await fetch(`${base(server)}/audio?${query}`, { headers: { Authorization: `Bearer ${server.key.trim()}` } });
     } catch {
       r = null;
       error = "Сервер не отвечает — проверь адрес в настройках";

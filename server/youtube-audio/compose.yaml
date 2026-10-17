@@ -10,6 +10,8 @@ services:
     environment:
       KEY: ${KEY:?задай KEY в .env}
     ports: ["127.0.0.1:${PORT:-8787}:8080"]
+    volumes:
+      - ./data:/data  # data/cookies.txt — Instagram login, optional (README.md)
   caddy:
     image: caddy:2
     profiles: [caddy]

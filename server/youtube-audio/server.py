@@ -1,7 +1,7 @@
 """
-YouTube audio for the guitar app: GET /audio?id=<video id> with "Authorization: Bearer <KEY>"
-returns the video's audio (m4a when YouTube has it). Only YouTube video ids are accepted, so the
-server can't be used to fetch arbitrary URLs. Personal use: one key, two downloads at a time.
+Video audio for the guitar app: GET /audio?id=<YouTube video id> or /audio?ig=<Instagram shortcode>
+with "Authorization: Bearer <KEY>" returns the video's audio (m4a when the site has it). Only ids are
+accepted, so the server can't be used to fetch arbitrary URLs. Personal use: one key, two downloads at a time.
 """
 
 import json
@@ -20,6 +20,9 @@ PORT = int(os.environ.get("PORT", "8080"))
 MAX_MINUTES = int(os.environ.get("MAX_MINUTES", "30"))
 YTDLP = os.environ.get("YTDLP", "yt-dlp")
 VIDEO_ID = re.compile(r"^[\w-]{11}$")
+INSTAGRAM_ID = re.compile(r"^[\w-]{5,64}$")
+# Instagram often wants a signed-in session; a cookies.txt exported from the browser can be mounted here.
+COOKIES = os.environ.get("COOKIES", "/data/cookies.txt")
 slots = threading.BoundedSemaphore(2)
 
 TYPES = {"m4a": "audio/mp4", "webm": "audio/webm", "mp3": "audio/mpeg", "opus": "audio/ogg"}
@@ -32,7 +35,8 @@ def update_forever():
         time.sleep(24 * 3600)
 
 
-def download(video, folder):
+def download(url, folder):
+    cookies = ["--cookies", COOKIES] if os.path.isfile(COOKIES) else []
     return subprocess.run(
         [
             YTDLP, "--no-playlist", "--quiet", "--no-warnings",
@@ -42,7 +46,8 @@ def download(video, folder):
             "--max-filesize", "80M",
             "--print", "after_move:%(title)s",
             "-o", os.path.join(folder, "audio.%(ext)s"),
-            f"https://www.youtube.com/watch?v={video}",
+            *cookies,
+            url,
         ],
         capture_output=True, text=True, timeout=240,
     )
@@ -82,18 +87,24 @@ class Handler(BaseHTTPRequestHandler):
             return self.fail(404, "Нет такого адреса")
         if not KEY or self.headers.get("Authorization", "") != f"Bearer {KEY}":
             return self.fail(401, "Неверный ключ")
-        video = urllib.parse.parse_qs(url.query).get("id", [""])[0]
-        if not VIDEO_ID.match(video):
-            return self.fail(400, "Нужен id видео YouTube")
+        query = urllib.parse.parse_qs(url.query)
+        video = query.get("id", [""])[0]
+        post = query.get("ig", [""])[0]
+        if VIDEO_ID.match(video):
+            source = f"https://www.youtube.com/watch?v={video}"
+        elif INSTAGRAM_ID.match(post):
+            video, source = post, f"https://www.instagram.com/reel/{post}/"
+        else:
+            return self.fail(400, "Нужен id видео YouTube или Instagram")
         if not slots.acquire(timeout=60):
             return self.fail(503, "Сервер занят, попробуй через минуту")
         tmp = tempfile.mkdtemp()
         try:
             r = None
-            for attempt in range(2):  # YouTube sometimes refuses once; a second run usually goes through
+            for attempt in range(2):  # the site sometimes refuses once; a second run usually goes through
                 shutil.rmtree(tmp, ignore_errors=True)
                 os.makedirs(tmp, exist_ok=True)
-                r = download(video, tmp)
+                r = download(source, tmp)
                 if r.returncode == 0 and os.listdir(tmp):
                     break
                 time.sleep(2)

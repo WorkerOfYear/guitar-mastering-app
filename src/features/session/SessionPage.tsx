@@ -6,7 +6,7 @@ import { CompactMetronome } from "@/components/metronome/MetronomePanel";
 import { Button, IconButton, Progress } from "@/components/ui";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { BLOCK_ICON } from "@/components/ui/icons";
-import { YouTubePlayer } from "@/components/video/YouTubePlayer";
+import { VideoPlayer } from "@/components/video/VideoPlayer";
 import type { PlayerControl } from "@/components/tab/TabPlayer";
 import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
 import { audio } from "@/audio/player";
@@ -376,7 +376,7 @@ function Stage({ block, entry, item, playing, control, onBlocked }: StageProps) 
   if (item.video) {
     return (
       <div className="space-y-3">
-        <YouTubePlayer key={item.id} videoId={item.video.youtubeId} start={item.video.start} playing={playing} onBlocked={onBlocked} control={control} />
+        <VideoPlayer key={item.id} video={item.video} playing={playing} onBlocked={onBlocked} control={control} />
         {item.description && <p className="px-1 text-sm text-muted">{item.description}</p>}
       </div>
     );

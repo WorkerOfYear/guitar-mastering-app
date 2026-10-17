@@ -23,14 +23,14 @@ import {
 import { Badge, Button, Card, Input, NumberField, Segmented } from "@/components/ui";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { YouTubePlayer } from "@/components/video/YouTubePlayer";
+import { VideoPlayer } from "@/components/video/VideoPlayer";
 import type { ScoreInfo } from "@/components/tab/TabPlayer";
 import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
 import { audio } from "@/audio/player";
 import { deleteAudioFile, deleteTabFile, loadAudioFile, loadTabFile, saveAudioFile, saveTabFile } from "@/lib/tabFiles";
 import { audioBlob, downloadAudio } from "@/lib/audioType";
 import { AudioSync, detectSync } from "./AudioSync";
-import { fetchYoutubeAudio, serverReady } from "@/lib/youtubeAudio";
+import { fetchVideoAudio, serverReady } from "@/lib/youtubeAudio";
 import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
 import { cn } from "@/lib/utils";
@@ -38,7 +38,8 @@ import type { Item, Section } from "@/shared/types";
 
 const TabPlayer = lazy(() => import("@/components/tab/TabPlayer"));
 
-import { parseYouTube, withScheme } from "@/lib/youtubeLink";
+import { withScheme } from "@/lib/youtubeLink";
+import { parseVideo, videoShortUrl, videoSite } from "@/lib/videoLink";
 
 /** The original recording or the synthesizer. */
 export function SourceSwitch({ recording, onChange }: { recording: boolean; onChange: (v: boolean) => void }) {
@@ -218,7 +219,7 @@ export function MediaCard({ item }: { item: Item }) {
     await setRecording(await f.arrayBuffer(), { name: f.name, size: f.size });
   };
 
-  // The recording taken from the item's YouTube video by the user's server.
+  // The recording taken from the item's video by the user's server.
   const audioServer = useSettings((s) => s.audioServer);
   const [grabbing, setGrabbing] = useState(false);
   const [grabAttempt, setGrabAttempt] = useState(1);
@@ -227,7 +228,7 @@ export function MediaCard({ item }: { item: Item }) {
     if (!serverReady(audioServer)) return toast.error("Укажи сервер для звука в настройках");
     setGrabbing(true);
     try {
-      const { data, name } = await fetchYoutubeAudio(item.video.youtubeId, audioServer, setGrabAttempt);
+      const { data, name } = await fetchVideoAudio(item.video, audioServer, setGrabAttempt);
       await setRecording(data, { name, size: data.byteLength, fromVideo: true });
     } catch (e) {
       toast.error("Не удалось взять звук из видео", { description: (e as Error).message });
@@ -271,8 +272,8 @@ export function MediaCard({ item }: { item: Item }) {
   const [videoUrl, setVideoUrl] = useState("");
   const [editVideo, setEditVideo] = useState(false);
   const saveVideo = () => {
-    const v = parseYouTube(videoUrl);
-    if (!v) return toast.error("Не похоже на ссылку YouTube");
+    const v = parseVideo(videoUrl);
+    if (!v) return toast.error("Не похоже на ссылку YouTube или Instagram");
     const url = withScheme(videoUrl);
     updateItem(item.id, { video: v, links: item.links.includes(url) ? item.links : [...item.links, url] });
     setVideoUrl("");
@@ -349,8 +350,8 @@ export function MediaCard({ item }: { item: Item }) {
       {item.video && !editVideo ? (
         <MaterialRow
           icon={<Video />}
-          title="Видео YouTube"
-          sub={`youtu.be/${item.video.youtubeId}`}
+          title={`Видео ${videoSite(item.video)}`}
+          sub={videoShortUrl(item.video)}
           actions={
             <>
               <IconAction label="Заменить видео" onClick={() => setEditVideo(true)}>
@@ -372,7 +373,7 @@ export function MediaCard({ item }: { item: Item }) {
               onChange={(e) => setVideoUrl(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && saveVideo()}
               inputMode="url"
-              placeholder="Ссылка YouTube"
+              placeholder="Ссылка YouTube или Instagram"
               className="h-12 pl-10 text-sm"
             />
           </div>
@@ -381,7 +382,7 @@ export function MediaCard({ item }: { item: Item }) {
           </Button>
         </div>
       ) : (
-        <AddRow icon={<Video />} title="Добавить видео" sub="ссылка YouTube" onClick={() => setEditVideo(true)} />
+        <AddRow icon={<Video />} title="Добавить видео" sub="ссылка YouTube или Instagram" onClick={() => setEditVideo(true)} />
       )}
 
       {/* Tabs */}
@@ -455,7 +456,7 @@ export function MediaCard({ item }: { item: Item }) {
           </>
         ) : (
           <>
-            {item.video && <YouTubePlayer videoId={item.video.youtubeId} start={item.video.start} playing={false} />}
+            {item.video && <VideoPlayer video={item.video} playing={false} />}
             {hasTab && mediaReady && (
               <Suspense fallback={<div className="h-72 animate-pulse rounded-3xl border border-line bg-surface" />}>
                 <TabPlayer

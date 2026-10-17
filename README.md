@@ -48,9 +48,9 @@ npm run build      # проверка типов + сборка в dist/
    Framework Preset определится сам (**Vite**), настройки в `vercel.json`. Нажми **Deploy**.
    Каждый push в `main` обновляет сайт.
 
-## Звук из YouTube
+## Звук из YouTube и Instagram
 
-Чтобы брать звук из видео YouTube и привязывать его к табу, нужен свой небольшой сервер (облака вроде Vercel
+Чтобы брать звук из видео YouTube или Instagram и привязывать его к табу, нужен свой небольшой сервер (облака вроде Vercel
 YouTube блокирует). Код и инструкция — в [`server/youtube-audio`](server/youtube-audio/README.md).
 
 ## Telegram: бот, напоминания и синхронизация

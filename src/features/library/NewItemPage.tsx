@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils";
 import { TYPE_ICON } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/Placeholder";
 import { AUDIO_ACCEPT, AUDIO_MAX, TAB_ACCEPT, TAB_MAX } from "./MediaCard";
-import { parseYouTube, withScheme } from "@/lib/youtubeLink";
+import { withScheme } from "@/lib/youtubeLink";
+import { parseVideo } from "@/lib/videoLink";
 import { saveAudioFile, saveTabFile } from "@/lib/tabFiles";
 import { fileTitle, songQuery, youtubeTitle } from "@/lib/titles";
 import { TabSearch } from "./TabSearch";
@@ -36,14 +37,15 @@ export function NewItemPage() {
   // Tab and sheet-music links picked in the web search; they go into the item's links.
   const [tabLinks, setTabLinks] = useState<string[]>([]);
 
-  const video = videoUrl.trim() ? parseYouTube(videoUrl) : null;
+  const video = videoUrl.trim() ? parseVideo(videoUrl) : null;
   const videoError = !!videoUrl.trim() && !video;
   const itemType = type;
 
   // No title typed: take the video's title, else the recording's or the tab's file name.
   useEffect(() => {
     setVideoTitle(null);
-    if (!video || source !== "video") return;
+    // Instagram's oEmbed needs an app token, so only YouTube gives a title.
+    if (!video?.youtubeId || source !== "video") return;
     const ctl = new AbortController();
     void youtubeTitle(withScheme(videoUrl), ctl.signal).then((t) => !ctl.signal.aborted && setVideoTitle(t));
     return () => ctl.abort();
@@ -124,7 +126,7 @@ export function NewItemPage() {
           <div className="text-xs text-muted">Видео или запись, которая будет звучать на занятии</div>
         </div>
         <div role="radiogroup" aria-label="Под что играть" className="grid grid-cols-2 gap-2">
-          <SourceTile active={source === "video"} onClick={() => setSource("video")} icon={<Video />} title="YouTube" sub="ссылка на видео" />
+          <SourceTile active={source === "video"} onClick={() => setSource("video")} icon={<Video />} title="Видео" sub="YouTube или Instagram" />
           <SourceTile active={source === "audio"} onClick={() => setSource("audio")} icon={<Headphones />} title="Аудиофайл" sub="mp3, m4a, wav" />
         </div>
         {source === "video" ? (
@@ -135,11 +137,11 @@ export function NewItemPage() {
                 value={videoUrl}
                 onChange={(e) => setVideoUrl(e.target.value)}
                 inputMode="url"
-                placeholder="Ссылка YouTube (можно с таймкодом)"
+                placeholder="Ссылка YouTube (можно с таймкодом) или Instagram"
                 className="pl-10 text-sm"
               />
             </div>
-            {videoError && <p className="px-1 text-xs text-guide">Не похоже на ссылку YouTube</p>}
+            {videoError && <p className="px-1 text-xs text-guide">Не похоже на ссылку YouTube или Instagram</p>}
           </div>
         ) : (
           <FileField

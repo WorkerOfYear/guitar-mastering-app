@@ -87,6 +87,7 @@ export function linkLabel(url: string) {
   try {
     const host = new URL(url).hostname.replace(/^www\./, "");
     if (host.includes("youtube") || host.includes("youtu.be")) return "YouTube";
+    if (host.includes("instagram") || host === "instagr.am") return "Instagram";
     if (host.includes("songsterr")) return "Songsterr";
     if (host.includes("ultimate-guitar")) return "Ultimate Guitar";
     if (host.includes("musescore")) return "MuseScore";

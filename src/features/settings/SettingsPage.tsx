@@ -153,7 +153,7 @@ export function SettingsPage() {
             />
           </Card>
 
-          <SectionTitle>Звук из YouTube</SectionTitle>
+          <SectionTitle>Звук из видео</SectionTitle>
           <AudioServerCard />
 
           <SectionTitle>Синхронизация и Telegram</SectionTitle>

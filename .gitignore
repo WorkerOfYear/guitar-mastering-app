@@ -7,3 +7,4 @@ dist
 public/font
 public/soundfont
 dist-api
+server/youtube-audio/data

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchYoutubeAudio } from "./youtubeAudio";
+import { fetchVideoAudio } from "./youtubeAudio";
 
 const server = { url: "audio.example.com", key: "k" };
 const ok = () => new Response(new Uint8Array([1, 2, 3]), { headers: { "Content-Type": "audio/mp4", "X-Title": encodeURIComponent("Песня") } });
@@ -19,7 +19,7 @@ async function run(responses: (Response | Error)[]) {
   });
   vi.stubGlobal("fetch", fetch);
   const attempts: number[] = [];
-  const result = fetchYoutubeAudio("2n6qPXwKfvc", server, (a) => attempts.push(a)).then(
+  const result = fetchVideoAudio({ youtubeId: "2n6qPXwKfvc" }, server, (a) => attempts.push(a)).then(
     (v) => ({ v }),
     (e: Error) => ({ e: e.message }),
   );
@@ -27,7 +27,7 @@ async function run(responses: (Response | Error)[]) {
   return { out: await result, calls: fetch.mock.calls.length, attempts };
 }
 
-describe("fetchYoutubeAudio", () => {
+describe("fetchVideoAudio", () => {
   it("retries a dropped connection and a 5xx, then succeeds", async () => {
     const { out, calls, attempts } = await run([new TypeError("network"), fail(502), ok()]);
     expect(calls).toBe(3);
@@ -43,5 +43,11 @@ describe("fetchYoutubeAudio", () => {
     const { out, calls } = await run([fail(401)]);
     expect(calls).toBe(1);
     expect(out).toEqual({ e: "код 401" });
+  });
+  it("asks for an Instagram video by its shortcode", async () => {
+    const fetch = vi.fn(async () => ok());
+    vi.stubGlobal("fetch", fetch);
+    await fetchVideoAudio({ instagramId: "C9xYz_12AbC" }, server);
+    expect(fetch).toHaveBeenCalledWith("https://audio.example.com/audio?ig=C9xYz_12AbC", expect.anything());
   });
 });

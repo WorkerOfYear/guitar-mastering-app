@@ -237,7 +237,7 @@ export function ItemPage() {
             value={newLink}
             onChange={(e) => setNewLink(e.target.value)}
             inputMode="url"
-            placeholder="https://… (YouTube, Songsterr, таб)"
+            placeholder="https://… (YouTube, Instagram, Songsterr, таб)"
             className="h-11 flex-1 text-sm"
           />
           <IconBtn
