@@ -60,3 +60,9 @@ export function SelectItem({ className, children, ...props }: ComponentProps<typ
     </SelectPrimitive.Item>
   );
 }
+
+export const SelectGroup = SelectPrimitive.Group;
+
+export function SelectLabel({ className, ...props }: ComponentProps<typeof SelectPrimitive.Label>) {
+  return <SelectPrimitive.Label className={cn("px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted", className)} {...props} />;
+}

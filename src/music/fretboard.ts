@@ -56,17 +56,48 @@ export function buildPatterns(
           }
         }
       });
-      const minFret = Math.min(...all);
-      const base = Math.max(1, minFret);
+      const rows = tuning.map((_, s) => [...cells].filter((k) => k.startsWith(`${s}:`)).map((k) => Number(k.split(":")[1])));
       const fingers = new Map<string, number>();
-      for (const key of cells) {
-        const f = Number(key.split(":")[1]);
-        fingers.set(key, f === 0 ? 0 : Math.min(4, Math.max(1, f - base + 1)));
-      }
-      return { cells, fingers, minFret, maxFret: Math.max(...all) };
+      const base = handPosition(rows);
+      rows.forEach((row, s) => fingerString(row, base).forEach((finger, f) => fingers.set(cellKey(s, f), finger)));
+      return { cells, fingers, minFret: Math.min(...all), maxFret: Math.max(...all) };
     }
     throw new Error("No playable pattern");
   });
+}
+
+/**
+ * Where the index finger sits for a box: the fret most strings start on (the lower one on a tie).
+ * Pentatonic box 2 of A minor starts on frets 8 7 7 7 8 8 → the hand sits at fret 7.
+ */
+export function handPosition(rows: number[][]): number {
+  const starts = rows.map((r) => r.filter((f) => f > 0)).filter((r) => r.length).map((r) => Math.min(...r));
+  if (!starts.length) return 1;
+  const count = (f: number) => starts.filter((x) => x === f).length;
+  return [...new Set(starts)].sort((a, b) => count(b) - count(a) || a - b)[0];
+}
+
+/**
+ * Fingers for the notes on one string (fret → finger, 0 for an open string), the way guitarists play boxes:
+ * one finger per fret from the hand position; a string reaching past it shifts the hand on that string only;
+ * a stretch wider than four frets goes index…pinky, the middle note by the closer step
+ * (whole-whole and half-whole → 1-2-4, whole-half → 1-3-4). Different frets never share a finger.
+ */
+export function fingerString(frets: number[], base: number): Map<number, number> {
+  const out = new Map<number, number>();
+  const fretted = [...new Set(frets)].filter((f) => f > 0).sort((a, b) => a - b);
+  if (frets.includes(0)) out.set(0, 0);
+  if (!fretted.length) return out;
+  const lo = fretted[0];
+  const hi = fretted[fretted.length - 1];
+  const assign = (from: number) => fretted.forEach((f) => out.set(f, f - from + 1));
+  if (lo >= base && hi <= base + 3) assign(base);
+  else if (hi - lo <= 3) assign(hi > base + 3 ? hi - 3 : lo);
+  else if (fretted.length === 3) {
+    const [a, b, c] = fretted;
+    [a, b, c].forEach((f, i) => out.set(f, [1, b - a <= c - b ? 2 : 3, 4][i]));
+  } else fretted.forEach((f, i) => out.set(f, i === fretted.length - 1 ? 4 : Math.min(i + 1, 3)));
+  return out;
 }
 
 export type Role = "root" | "guide" | "chord" | "scale";

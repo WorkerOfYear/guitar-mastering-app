@@ -4,7 +4,7 @@ import { m } from "motion/react";
 import { ChevronRight, Dices, Library, ListChecks, Music, Play, PlayCircle, Plus, Video } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { BLOCK_ICON, IconTile } from "@/components/ui/icons";
-import { PageHeader, SettingsLink } from "@/components/ui/Placeholder";
+import { PageHeader } from "@/components/ui/Placeholder";
 import { audio } from "@/audio/player";
 import { buildPlan, templateSize } from "@/features/session/plan";
 import { resolveProgression } from "@/music/improv";
@@ -50,7 +50,6 @@ export function TodayPage() {
       <PageHeader
         title="План занятия"
         subtitle={new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
-        action={<SettingsLink />}
       />
       {active ? (
         <Button asChild size="xl" className="w-full">
@@ -69,7 +68,7 @@ export function TodayPage() {
                 <div className="mt-0.5 text-sm text-muted">Добавь упражнения и песни — они появятся в плане</div>
               </div>
               <Button asChild>
-                <Link to="/library/new">
+                <Link to="/library">
                   <Plus /> Добавить
                 </Link>
               </Button>

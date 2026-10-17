@@ -7,12 +7,15 @@ import { BeatFlash } from "@/components/metronome/MetronomePanel";
 import { Button } from "@/components/ui";
 import { Toaster } from "@/components/ui/sonner";
 import { TodayPage } from "@/features/today/TodayPage";
+import { BottomNav, SECTION_ROOTS, SectionsMenu } from "./Nav";
+import { Backdrop } from "./Backdrop";
 
 // Everything but the home screen loads on first visit, so the app opens fast inside Telegram.
 const page = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) => lazy(() => load().then((m) => ({ default: m[name] })));
 const LibraryPage = page(() => import("@/features/library/LibraryPage"), "LibraryPage");
 const ItemPage = page(() => import("@/features/library/ItemPage"), "ItemPage");
-const NewItemPage = page(() => import("@/features/library/NewItemPage"), "NewItemPage");
+const NewExercisePage = page(() => import("@/features/library/NewExercisePage"), "NewExercisePage");
+const NewPiecePage = page(() => import("@/features/library/NewPiecePage"), "NewPiecePage");
 const TheoryPage = page(() => import("@/features/theory/TheoryPage"), "TheoryPage");
 const ProgressPage = page(() => import("@/features/progress/ProgressPage"), "ProgressPage");
 const SettingsPage = page(() => import("@/features/settings/SettingsPage"), "SettingsPage");
@@ -21,8 +24,8 @@ const MetronomePage = page(() => import("@/features/metronome/MetronomePage"), "
 const ImprovPage = page(() => import("@/features/improv/ImprovPage"), "ImprovPage");
 const SessionPage = page(() => import("@/features/session/SessionPage"), "SessionPage");
 
-// One main screen for now; the others stay reachable from settings and from plan entries.
-const TAB_ROOTS = ["/"];
+// Section roots (bottom bar / "Разделы" menu) have no back button.
+const TAB_ROOTS = SECTION_ROOTS;
 
 /** Telegram's native back button for screens that are not tab roots. */
 function TelegramBack() {
@@ -43,11 +46,12 @@ function TelegramBack() {
 function BackButton() {
   const location = useLocation();
   const navigate = useNavigate();
-  if (tg || location.pathname === "/" || location.pathname === "/session") return null;
+  if (tg || TAB_ROOTS.includes(location.pathname) || location.pathname === "/session") return null;
   // Opened by a direct link there is no history to go back to — go home instead.
   const back = () => (location.key === "default" ? navigate("/") : navigate(-1));
   return (
-    <Button variant="ghost" size="sm" onClick={back} className="-ml-2 mb-1 gap-0.5 pl-1.5">
+    // Same height and line as page titles' row (pt-2, 44px), so it lines up with the sections menu.
+    <Button variant="ghost" size="sm" onClick={back} className="-ml-2 mb-1 mt-2 h-11 gap-0.5 pl-1.5">
       <ChevronLeft />
       Назад
     </Button>
@@ -67,8 +71,17 @@ function Shell() {
   return (
     <LazyMotion features={motionFeatures} strict>
       <MotionConfig reducedMotion="user">
+        <Backdrop />
         <TelegramBack />
-        <main className="mx-auto max-w-3xl px-4 pb-10 pt-[max(env(safe-area-inset-top),0.5rem)]">
+        <main
+          className={`relative mx-auto max-w-3xl px-4 pt-[max(env(safe-area-inset-top),0.5rem)] ${location.pathname === "/session" ? "pb-10" : "pb-28 md:pb-10"}`}
+        >
+          {/* Wide screens: the sections menu always in the same spot, top right, on every screen (page titles leave room for it). */}
+          {location.pathname !== "/session" && (
+            <div className="absolute right-4 top-[calc(max(env(safe-area-inset-top),0.5rem)+0.5rem)] z-10 hidden md:block">
+              <SectionsMenu />
+            </div>
+          )}
           <BackButton />
           {/* Opacity only: a transform here would break position: fixed inside the pages. */}
           <m.div key={location.pathname} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2, ease: "easeOut" }}>
@@ -76,7 +89,9 @@ function Shell() {
               <Routes location={location}>
                 <Route path="/" element={<StartPage />} />
                 <Route path="/library" element={<LibraryPage />} />
-                <Route path="/library/new" element={<NewItemPage />} />
+                <Route path="/library/new" element={<Navigate to="/library/new/exercise" replace />} />
+                <Route path="/library/new/exercise" element={<NewExercisePage />} />
+                <Route path="/library/new/piece" element={<NewPiecePage />} />
                 <Route path="/library/:id" element={<ItemPage />} />
                 <Route path="/theory" element={<TheoryPage />} />
                 <Route path="/progress" element={<ProgressPage />} />
@@ -90,6 +105,7 @@ function Shell() {
             </Suspense>
           </m.div>
         </main>
+        <BottomNav />
         <BeatFlash />
         <Toaster />
       </MotionConfig>

@@ -1,127 +1,94 @@
 import { useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { ChordDiagram } from "@/components/fretboard/ChordDiagram";
-import { ScaleBoard, highlightOf } from "@/components/fretboard/ScaleBoard";
+import { ScaleBoard } from "@/components/fretboard/ScaleBoard";
+import { ChordSelect, ScaleSelect, TonicSelect } from "@/components/fretboard/TheorySelects";
 import { Chip, ScrollRow, Segmented, SectionTitle } from "@/components/ui";
 import { strum } from "@/audio/player";
-import { CHORD_TYPES, chordTones, chordTypeById, voicings } from "@/music/chords";
-import { buildPatterns, STANDARD_TUNING } from "@/music/fretboard";
-import { SCALES, diatonicChords, scaleById, scaleTones } from "@/music/scales";
-import { TONICS, noteName, parseNote } from "@/music/notes";
+import { voicings } from "@/music/chords";
+import { STANDARD_TUNING } from "@/music/fretboard";
+import { theoryView } from "@/music/theoryView";
 import { useSettings } from "@/store/settings";
+import { Glossary } from "./Glossary";
 
 export function TheoryPage() {
   const { theory, setTheory } = useSettings();
   const { tab, tonic, scaleId, chordType, diatonic } = theory;
-  const scale = scaleById(scaleId);
+  // The glossary is a view of its own, kept in the address so "back" returns to it.
+  const [params, setParams] = useSearchParams();
+  const terms = params.get("view") === "terms";
 
-  const view = useMemo(() => {
-    if (tab === "chord") {
-      const tones = chordTones(tonic, chordType);
-      const type = chordTypeById(chordType);
-      return {
-        title: `${noteName(parseNote(tonic))}${type.symbol}`,
-        subtitle: type.name,
-        tones,
-        chord: highlightOf(tones),
-        patterns: buildPatterns(tones, STANDARD_TUNING, { perString: 2 }),
-        chords: [],
-        voicingRoot: tonic,
-        voicingType: chordType,
-      };
-    }
-    const tones = scaleTones(tonic, scaleId);
-    const chords = diatonicChords(tonic, scaleId);
-    const dc = chords.find((c) => c.degree === diatonic);
-    const chordToneSet = dc ? (dc.typeId ? chordTones(dc.rootName, dc.typeId) : dc.tones) : null;
-    const base = scale.patternBase ? scaleTones(tonic, scale.patternBase) : tones;
-    return {
-      title: `${noteName(parseNote(tonic))} — ${scale.name.toLowerCase()}`,
-      subtitle: dc ? `Аккорд ${dc.roman}: ${dc.symbol}` : `${tones.length} нот`,
-      tones,
-      chord: chordToneSet ? highlightOf(chordToneSet) : null,
-      patterns: buildPatterns(base, STANDARD_TUNING, { extra: scale.patternBase ? tones : undefined }),
-      chords,
-      voicingRoot: dc?.rootName,
-      voicingType: dc?.typeId,
-    };
-  }, [tab, tonic, scaleId, chordType, diatonic, scale]);
+  const view = useMemo(() => theoryView({ tab, tonic, scaleId, chordType, diatonic }), [tab, tonic, scaleId, chordType, diatonic]);
 
   const vs = view.voicingRoot && view.voicingType ? voicings(view.voicingRoot, view.voicingType, STANDARD_TUNING) : [];
 
   return (
     <div className="space-y-3">
-      <header className="flex items-center justify-between gap-3 pt-2">
+      <header className="flex flex-wrap items-center justify-between gap-3 pt-2 md:pr-14">
         <h1 className="text-[1.75rem] font-bold tracking-tight">Теория</h1>
-        <div className="w-52">
-          <Segmented
-            value={tab}
-            onChange={(v) => setTheory({ tab: v, position: 0 })}
-            options={[
-              { value: "scale", label: "Лады" },
-              { value: "chord", label: "Аккорды" },
-            ]}
-          />
+        <div className="flex items-center gap-2">
+          <div className="w-72 max-[420px]:w-64">
+            <Segmented
+              value={terms ? "terms" : tab}
+              onChange={(v) => {
+                setParams(v === "terms" ? { view: "terms" } : {}, { replace: true });
+                if (v !== "terms") setTheory({ tab: v, position: 0 });
+              }}
+              options={[
+                { value: "scale", label: "Лады" },
+                { value: "chord", label: "Аккорды" },
+                { value: "terms", label: "Термины" },
+              ]}
+            />
+          </div>
         </div>
       </header>
 
-      <ScrollRow>
-        {TONICS.map((t) => (
-          <Chip key={t} active={t === tonic} onClick={() => setTheory({ tonic: t })}>
-            {noteName(parseNote(t))}
-          </Chip>
-        ))}
-      </ScrollRow>
-
-      {tab === "scale" ? (
-        <ScrollRow>
-          {SCALES.map((s) => (
-            <Chip key={s.id} active={s.id === scaleId} sub={s.group} onClick={() => setTheory({ scaleId: s.id, diatonic: 0, position: 0 })}>
-              {s.name}
-            </Chip>
-          ))}
-        </ScrollRow>
+      {terms ? (
+        <Glossary />
       ) : (
-        <ScrollRow>
-          {CHORD_TYPES.map((c) => (
-            <Chip key={c.id} active={c.id === chordType} onClick={() => setTheory({ chordType: c.id, position: 0 })}>
-              {c.symbol || "maj"}
-            </Chip>
-          ))}
-        </ScrollRow>
-      )}
-
-      <ScaleBoard
-        title={view.title}
-        subtitle={view.subtitle}
-        tones={view.tones}
-        chord={view.chord}
-        patterns={view.patterns}
-        position={theory.position}
-        onPosition={(position) => setTheory({ position })}
-        chordOnly={tab === "chord"}
-      />
-
-      {tab === "scale" && view.chords.length > 0 && (
         <>
-          <SectionTitle>Аккорды лада — нажми, чтобы подсветить</SectionTitle>
-          <ScrollRow>
-            {view.chords.map((c) => (
-              <Chip key={c.degree} active={c.degree === diatonic} sub={c.symbol} onClick={() => setTheory({ diatonic: c.degree === diatonic ? 0 : c.degree })}>
-                {c.roman}
-              </Chip>
-            ))}
-          </ScrollRow>
-        </>
-      )}
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-2">
+            <TonicSelect value={tonic} onChange={(t) => setTheory({ tonic: t })} />
+            {tab === "scale" ? (
+              <ScaleSelect value={scaleId} onChange={(id) => setTheory({ scaleId: id, diatonic: 0, position: 0 })} />
+            ) : (
+              <ChordSelect value={chordType} onChange={(id) => setTheory({ chordType: id, position: 0 })} />
+            )}
+          </div>
 
-      {vs.length > 0 && (
-        <>
-          <SectionTitle>Аппликатуры — нажми, чтобы сыграть</SectionTitle>
-          <ScrollRow>
-            {vs.map((v) => (
-              <ChordDiagram key={v.group} voicing={v} title={v.group} onPlay={() => strum(v.notes.map((n) => n.midi))} />
-            ))}
-          </ScrollRow>
+          <ScaleBoard
+            tones={view.tones}
+            chord={view.chord}
+            patterns={view.patterns}
+            position={theory.position}
+            onPosition={(position) => setTheory({ position })}
+            chordOnly={tab === "chord"}
+          />
+
+          {tab === "scale" && view.chords.length > 0 && (
+            <>
+              <SectionTitle>Аккорды лада</SectionTitle>
+              <ScrollRow>
+                {view.chords.map((c) => (
+                  <Chip key={c.degree} active={c.degree === diatonic} sub={c.symbol} onClick={() => setTheory({ diatonic: c.degree === diatonic ? 0 : c.degree })}>
+                    {c.roman}
+                  </Chip>
+                ))}
+              </ScrollRow>
+            </>
+          )}
+
+          {vs.length > 0 && (
+            <>
+              <SectionTitle>Аппликатуры</SectionTitle>
+              <ScrollRow>
+                {vs.map((v) => (
+                  <ChordDiagram key={v.group} voicing={v} title={v.group} onPlay={() => strum(v.notes.map((n) => n.midi))} />
+                ))}
+              </ScrollRow>
+            </>
+          )}
         </>
       )}
     </div>

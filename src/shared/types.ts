@@ -41,6 +41,9 @@ export interface TheoryLink {
   diatonic?: number;
 }
 
+/** Building blocks of an exercise or a piece, in the order they appear on its card (and open in a session). */
+export type BlockId = "video" | "audio" | "score" | "board" | "metronome" | "notes" | "recorder";
+
 export interface Item {
   id: string;
   type: ItemType;
@@ -70,6 +73,8 @@ export interface Item {
   audioSync?: SyncPoint[];
   /** Repeats (by closing bar) the recording plays only once — switched off when playing along with it */
   audioUnrepeat?: number[];
+  /** An exercise's blocks; when missing they follow from the fields that are filled in */
+  blocks?: BlockId[];
   /** How long this item takes in a session; otherwise the block time is split evenly */
   minutes?: number;
   notes?: string;
@@ -142,7 +147,7 @@ export const BLOCK_META: Record<BlockKind, { icon: string; title: string; hint: 
 
 export const TYPE_META: Record<ItemType, { icon: string; title: string }> = {
   technique: { icon: "⚡", title: "Техника" },
-  song: { icon: "🎵", title: "Песня" },
+  song: { icon: "🎵", title: "Произведение" },
   lick: { icon: "〰️", title: "Лик" },
   theory: { icon: "🎼", title: "Теория" },
 };

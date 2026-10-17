@@ -52,6 +52,7 @@ npm run build      # проверка типов + сборка в dist/
 
 Чтобы брать звук из видео YouTube или Instagram и привязывать его к табу, нужен свой небольшой сервер (облака вроде Vercel
 YouTube блокирует). Код и инструкция — в [`server/youtube-audio`](server/youtube-audio/README.md).
+Ноты с MuseScore (PDF, MIDI, mp3) по ссылке из песни скачивает такой же свой сервис (Chrome из FlareSolverr проходит проверку Cloudflare) — [`server/score-download`](server/score-download/README.md).
 
 ## Telegram: бот, напоминания и синхронизация
 
@@ -75,6 +76,24 @@ YouTube блокирует). Код и инструкция — в [`server/yout
 На бесплатном плане Vercel cron срабатывает раз в день в пределах указанного часа.
 Дни занятий берутся из настроек приложения.
 
+## Ноты MuseScore в поиске табов
+
+MuseScore не пускает серверные запросы, поэтому его ноты ищутся через API поисковика по сайту musescore.com.
+Нужен ключ одного из двух сервисов (оба без карты). Без ключа поиск работает как раньше, а для MuseScore остаётся
+ссылка на его поиск.
+
+- **Tavily** — 1000 запросов в месяц бесплатно. Войди на [app.tavily.com](https://app.tavily.com) (Google или GitHub),
+  ключ `tvly-…` — на главной странице. Переменная `TAVILY_API_KEY`.
+- **Serper** (выдача Google) — 2500 бесплатных запросов один раз. Зарегистрируйся на [serper.dev](https://serper.dev),
+  ключ — в разделе API Key. Переменная `SERPER_API_KEY`.
+
+Если заданы оба, используется Tavily.
+
+1. Сайт: Vercel → проект → Settings → **Environment Variables** → переменная с ключом → Redeploy.
+2. Тестовый стенд: на сервере `echo "TAVILY_API_KEY=<ключ>" > server/dev-stand/.env` и `bash server/dev-stand/up.sh`.
+
+Один поиск песни — один запрос к сервису; повторы того же запроса сайт сутки отдаёт из кеша Vercel.
+
 ## Как устроено
 
 ```
@@ -84,6 +103,6 @@ api/state.ts    GET/PUT данных с optimistic lock; клиент слива
 api/telegram.ts webhook бота, настройка и привязка владельца одноразовой ссылкой
 api/remind.ts   Vercel Cron: напоминание в дни занятий
 api/tabs.ts     поиск табов по песне: Songsterr (JSON-поиск) и Ultimate Guitar (JSON со страницы поиска), только ссылки;
-                MuseScore закрыт проверкой Cloudflare — для нот в приложении ссылка на его поиск
+                ноты MuseScore — через API поисковика Tavily или Serper (сам MuseScore закрыт проверкой Cloudflare), см. выше
 tests/          тесты API с имитацией Redis и Telegram
 ```

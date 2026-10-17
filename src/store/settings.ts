@@ -5,12 +5,13 @@ import type { AudioServer } from "@/lib/youtubeAudio";
 export type LabelMode = "note" | "degree" | "chord" | "finger" | "none";
 /** How the tab player draws music: tablature, standard notation, or both */
 export type TabView = "tab" | "score" | "both";
+/** Light or dark; "auto" follows Telegram inside it, the system elsewhere */
+export type ThemeMode = "auto" | "dark" | "light";
 
 interface FretboardSettings {
   labelMode: LabelMode;
   leftHanded: boolean;
   frets: number;
-  zoom: number;
   showOutside: boolean;
 }
 
@@ -29,9 +30,14 @@ interface SettingsStore {
   fretboard: FretboardSettings;
   theory: TheoryState;
   tabView: TabView;
-  /** The user's server that takes the audio out of YouTube videos (kept on this device only) */
+  theme: ThemeMode;
+  setTheme: (theme: ThemeMode) => void;
+  /** The user's server that takes the audio out of YouTube and Instagram videos (kept on this device only) */
   audioServer: AudioServer;
   setAudioServer: (s: AudioServer) => void;
+  /** The user's server that downloads sheet music from MuseScore (kept on this device only) */
+  scoreServer: AudioServer;
+  setScoreServer: (s: AudioServer) => void;
   setTabView: (view: TabView) => void;
   setFretboard: (patch: Partial<FretboardSettings>) => void;
   setTheory: (patch: Partial<TheoryState>) => void;
@@ -40,11 +46,15 @@ interface SettingsStore {
 export const useSettings = create<SettingsStore>()(
   persist(
     (set) => ({
-      fretboard: { labelMode: "degree", leftHanded: false, frets: 15, zoom: 1, showOutside: true },
+      fretboard: { labelMode: "degree", leftHanded: false, frets: 15, showOutside: true },
       theory: { tab: "scale", tonic: "A", scaleId: "minor-pentatonic", chordType: "m7", diatonic: 0, position: 0 },
       tabView: "tab",
+      theme: "auto",
+      setTheme: (theme) => set({ theme }),
       audioServer: { url: "", key: "" },
       setAudioServer: (audioServer) => set({ audioServer }),
+      scoreServer: { url: "", key: "" },
+      setScoreServer: (scoreServer) => set({ scoreServer }),
       setTabView: (tabView) => set({ tabView }),
       setFretboard: (patch) => set((s) => ({ fretboard: { ...s.fretboard, ...patch } })),
       setTheory: (patch) => set((s) => ({ theory: { ...s.theory, ...patch } })),

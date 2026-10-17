@@ -3,10 +3,11 @@ import { Navigate } from "react-router-dom";
 import { AnimatePresence, m } from "motion/react";
 import { Check, ChevronsRight, Metronome, Minus, Pause, Play, Plus, SkipBack, SkipForward, Volume2, X } from "lucide-react";
 import { CompactMetronome } from "@/components/metronome/MetronomePanel";
-import { Button, IconButton, Progress } from "@/components/ui";
+import { Button, IconButton, Progress, Segmented } from "@/components/ui";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { BLOCK_ICON } from "@/components/ui/icons";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
+import { ItemBoard } from "@/components/fretboard/ItemBoard";
 import type { PlayerControl } from "@/components/tab/TabPlayer";
 import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
 import { audio } from "@/audio/player";
@@ -16,6 +17,8 @@ import { ImprovPanel } from "@/features/improv/ImprovPanel";
 import { formatClock, useNow, useWakeLock } from "@/lib/hooks";
 import { localDate } from "@/lib/date";
 import { findSection, startingBpm, unitTitle } from "@/lib/progress";
+import { MATERIAL_LABEL, hasBlock, materialsOf, shownText, withMetronome, type Material } from "@/lib/library";
+import { RecordButton } from "@/features/library/Takes";
 import { loadAudioFile, loadTabFile } from "@/lib/tabFiles";
 import { audioBlob } from "@/lib/audioType";
 import { SourceSwitch } from "@/features/library/MediaCard";
@@ -84,10 +87,8 @@ export function SessionPage() {
     stopMetronome();
     if (entry) {
       const it = data.items.find((i) => i.id === entry.itemId);
-      useMetronome.getState().set({
-        bpm: startingBpm(data.log, it, entry, localDate()),
-        ...(it?.subdivision ? { subdivision: it.subdivision } : {}),
-      });
+      // Only the tempo: the rhythm is the player's choice on the metronome, it can change within an exercise.
+      useMetronome.getState().set({ bpm: startingBpm(data.log, it, entry, localDate()) });
     }
     if (phase === "paused") return;
     setCount(isFirstOfBlock ? COUNT_BLOCK : COUNT_ENTRY);
@@ -108,8 +109,13 @@ export function SessionPage() {
     return () => clearTimeout(t);
   }, [phase, count, countKey]);
 
-  // Plain exercises (no tab, no video) and improvisation play along with the metronome.
-  const usesMetronome = !!block && (block.kind === "improv" || (!!item && !item.tab && !item.video && !item.tabFile && !item.audioFile));
+  // An exercise with several materials (video, tab, neck) shows one at a time; each new exercise opens on its first.
+  const materials = item ? materialsOf(item) : [];
+  const [picked, setPicked] = useState<{ slot: string; material: Material } | null>(null);
+  const material = picked?.slot === slotKey && materials.includes(picked.material) ? picked.material : materials[0];
+
+  // Improvisation, and exercises with the metronome block while nothing else plays (just the card or the neck).
+  const usesMetronome = !!block && (block.kind === "improv" || (!!item && (!material || material === "board") && withMetronome(item)));
   useEffect(() => {
     if (phase === "play" && usesMetronome) startMetronome();
     else stopMetronome();
@@ -214,7 +220,19 @@ export function SessionPage() {
         <Progress className="mt-2.5 h-1" value={Math.min(1, (spent - slot.start) / (slot.end - slot.start || 1)) * 100} />
       </div>
 
-      <Stage block={block.kind} entry={entry} item={item} playing={playing} control={control} onBlocked={setBlocked} />
+      {block.kind !== "improv" && materials.length > 1 && (
+        <Segmented
+          className="mb-3"
+          value={material!}
+          onChange={(v) => setPicked({ slot: slotKey, material: v })}
+          options={materials.map((value) => ({ value, label: MATERIAL_LABEL[value] }))}
+        />
+      )}
+      <Stage block={block.kind} entry={entry} item={item} material={material} playing={playing} control={control} onBlocked={setBlocked} />
+
+      {block.kind !== "improv" && item && hasBlock(item, "recorder") && (
+        <RecordButton key={slotKey} itemId={item.id} bpm={withMetronome(item) ? useMetronome.getState().bpm : null} className="mt-3 w-full" />
+      )}
 
       {block.kind === "improv" && block.improv && (
         <div className="mt-3">
@@ -361,36 +379,45 @@ interface StageProps {
   block: string;
   entry?: PlanEntry;
   item?: Item;
+  material?: Material;
   playing: boolean;
   control: RefObject<PlayerControl | null>;
   onBlocked: (b: boolean) => void;
 }
 
-/** What plays for the current exercise: video, tab, Guitar Pro file, or the card with a metronome. */
-function Stage({ block, entry, item, playing, control, onBlocked }: StageProps) {
+/** What plays for the current exercise: the chosen material (video, notes, neck), or the card with a metronome. */
+function Stage({ block, entry, item, material, playing, control, onBlocked }: StageProps) {
   if (block === "improv") return <CompactMetronome />;
   if (!entry || !item) return null;
-  // A tab with its recording beats the video: the notes follow the sound.
-  if (item.tabFile && item.audioFile)
-    return <SongStage key={`${item.id}#${entry.sectionId ?? ""}`} item={item} entry={entry} playing={playing} control={control} onBlocked={onBlocked} />;
-  if (item.video) {
+  const songKey = `${item.id}#${entry.sectionId ?? ""}`;
+  if (material === "video" && item.video)
     return (
       <div className="space-y-3">
         <VideoPlayer key={item.id} video={item.video} playing={playing} onBlocked={onBlocked} control={control} />
-        {item.description && <p className="px-1 text-sm text-muted">{item.description}</p>}
+        <Description item={item} />
       </div>
     );
+  if (material === "score") {
+    // A Guitar Pro file with its recording comes first: the notes follow the sound.
+    if (item.tabFile && item.audioFile) return <SongStage key={songKey} item={item} entry={entry} playing={playing} control={control} onBlocked={onBlocked} />;
+    if (item.tab) return <TabStage key={item.id} item={item} playing={playing} control={control} onBlocked={onBlocked} />;
+    if (item.tabFile) return <SongStage key={songKey} item={item} entry={entry} playing={playing} control={control} onBlocked={onBlocked} />;
+    if (item.audioFile) return <AudioStage key={item.id} item={item} entry={entry} playing={playing} control={control} onBlocked={onBlocked} />;
   }
-  if (item.tab) return <TabStage key={item.id} item={item} playing={playing} control={control} onBlocked={onBlocked} />;
-  if (item.tabFile)
-    return <SongStage key={`${item.id}#${entry.sectionId ?? ""}`} item={item} entry={entry} playing={playing} control={control} onBlocked={onBlocked} />;
-  if (item.audioFile) return <AudioStage key={item.id} item={item} entry={entry} playing={playing} control={control} onBlocked={onBlocked} />;
   return (
     <div className="space-y-3">
+      {material === "board" && item.theory && <ItemBoard link={item.theory} />}
       <EntryCard entry={entry} />
-      <CompactMetronome />
+      {withMetronome(item) && <CompactMetronome />}
     </div>
   );
+}
+
+/** The exercise's description under a video or a tab, which take the screen otherwise. */
+function Description({ item }: { item: Item }) {
+  const text = shownText(item);
+  const shown = text.description ?? text.notes;
+  return shown ? <p className="mt-2 whitespace-pre-wrap px-1 text-sm text-muted">{shown}</p> : null;
 }
 
 /** A recording without a tab: loops it at the chosen speed (pitch is kept). */
@@ -491,6 +518,7 @@ function TabStage({ item, playing, control, onBlocked }: { item: Item; playing: 
       <div className="mt-2">
         <TabViewSwitch />
       </div>
+      <Description item={item} />
     </div>
   );
 }
@@ -564,6 +592,7 @@ function SongStage({
       {section && !section.bars && (
         <p className="mt-2 px-1 text-xs text-muted">Раздел не привязан к тактам — играет весь файл. Привязать можно в карточке песни.</p>
       )}
+      {!section && <Description item={item} />}
     </div>
   );
 }

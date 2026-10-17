@@ -1,4 +1,4 @@
-// Telegram Mini App integration: theme, full height, native back button, haptics.
+// Telegram Mini App integration: full height, native back button, haptics (the theme is in theme.ts).
 // Everything is a no-op in a normal browser.
 
 interface TelegramWebApp {
@@ -30,22 +30,6 @@ export function initTelegram() {
   tg.ready();
   tg.expand();
   tg.disableVerticalSwipes?.(); // horizontal fretboard scrolling shouldn't close the app
-  const apply = () => {
-    const root = document.documentElement;
-    const p = tg.themeParams;
-    root.dataset.theme = tg.colorScheme;
-    const set = (name: string, value?: string) => value && root.style.setProperty(name, value);
-    set("--bg", p.secondary_bg_color || p.bg_color);
-    set("--surface", p.section_bg_color || p.bg_color);
-    set("--text", p.text_color);
-    set("--muted", p.hint_color);
-    if (p.secondary_bg_color) {
-      tg.setHeaderColor?.(p.secondary_bg_color);
-      tg.setBackgroundColor?.(p.secondary_bg_color);
-    }
-  };
-  apply();
-  tg.onEvent("themeChanged", apply);
 }
 
 export const haptic = () => tg?.HapticFeedback?.selectionChanged();

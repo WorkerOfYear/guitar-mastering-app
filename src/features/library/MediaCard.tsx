@@ -1,11 +1,15 @@
 import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
+import { DropdownMenu } from "radix-ui";
 import { toast } from "sonner";
 import {
   Check,
   ChevronDown,
   Download,
   FileMusic,
+  Grid3x3,
+  Music2,
+  Pencil,
   Headphones,
   Link2,
   ListTree,
@@ -20,23 +24,51 @@ import {
   Video,
   WandSparkles,
 } from "lucide-react";
-import { Badge, Button, Card, Input, NumberField, Segmented } from "@/components/ui";
+import { Badge, Button, Card, Input, Segmented, buttonVariants } from "@/components/ui";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
+import { DEFAULT_BOARD, TheoryPicker } from "@/components/fretboard/TheoryPicker";
+import { choiceOf, theoryView } from "@/music/theoryView";
 import type { ScoreInfo } from "@/components/tab/TabPlayer";
 import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
 import { audio } from "@/audio/player";
 import { deleteAudioFile, deleteTabFile, loadAudioFile, loadTabFile, saveAudioFile, saveTabFile } from "@/lib/tabFiles";
 import { audioBlob, downloadAudio } from "@/lib/audioType";
 import { AudioSync, detectSync } from "./AudioSync";
+import { SectionStrip } from "./SectionStrip";
 import { fetchVideoAudio, serverReady } from "@/lib/youtubeAudio";
+import { fetchScore, museScoreLink, type ScoreFormat } from "@/lib/scoreDownload";
 import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
 import { cn } from "@/lib/utils";
 import type { Item, Section } from "@/shared/types";
 
 const TabPlayer = lazy(() => import("@/components/tab/TabPlayer"));
+
+/** Buttons lying on the tabs: 70% visible so the notes under them show, each solid on its own under the pointer,
+ *  with keyboard focus or while open (the track list). */
+const ON_TAB = "opacity-70 transition-opacity duration-200 hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100";
+
+/** The view switch is one button that steps tab → notes → both, marked the way music is: "TAB", a note, both. */
+const VIEW_NEXT = { tab: "score", score: "both", both: "tab" } as const;
+// The note and "TAB" are drawn the same height in every view, centred on one line, so switching doesn't jump.
+const TabMark = () => <span className="text-[13px] font-semibold leading-none">TAB</span>;
+const NoteMark = () => <Music2 className="!size-[15px]" />;
+const VIEW_META = {
+  tab: { mark: <TabMark />, name: "Табы" },
+  score: { mark: <NoteMark />, name: "Ноты" },
+  both: {
+    mark: (
+      <span className="flex items-center gap-1">
+        <NoteMark />
+        <span className="text-[13px] font-medium leading-none text-muted">+</span>
+        <TabMark />
+      </span>
+    ),
+    name: "Ноты и табы",
+  },
+} as const;
 
 import { withScheme } from "@/lib/youtubeLink";
 import { parseVideo, videoShortUrl, videoSite } from "@/lib/videoLink";
@@ -159,8 +191,13 @@ function FileAction({ label, accept, onFile }: { label: string; accept: string; 
   );
 }
 
-/** Video, tabs and recording of an item: the players up front, everything else in the "Материалы" sheet. */
-export function MediaCard({ item }: { item: Item }) {
+/**
+ * Video, tabs and recording of an item: the players up front, everything else in the "Материалы" sheet.
+ * `part` "score": the "Табы и ноты" block — the tabs or notes, their sections, the file and the sound bound to them
+ * (the video and the neck are blocks of their own).
+ */
+export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "score" }) {
+  const scoreOnly = part !== "all";
   const { updateItem } = useData();
   const [file, setFile] = useState<ArrayBuffer | null>(null);
   const fileRef = useRef<ArrayBuffer | null>(null);
@@ -245,6 +282,31 @@ export function MediaCard({ item }: { item: Item }) {
     void grabAudio();
   }, []);
 
+  // Sheet music from the MuseScore link attached to the item, taken by the user's server (server/score-download).
+  const scoreServer = useSettings((s) => s.scoreServer);
+  const scoreLink = museScoreLink(item.links);
+  const [scoreBusy, setScoreBusy] = useState<ScoreFormat | null>(null);
+  const grabScore = async (format: ScoreFormat) => {
+    if (!scoreLink) return;
+    if (!serverReady(scoreServer)) return toast.error("Укажи сервер для нот MuseScore в настройках");
+    setScoreBusy(format);
+    try {
+      const { data, name } = await fetchScore(scoreLink, format, scoreServer);
+      if (format === "mp3") return await setRecording(data, { name, size: data.byteLength });
+      if (format === "musicxml") return await setTab(data, name);
+      const url = URL.createObjectURL(new Blob([data]));
+      const a = Object.assign(document.createElement("a"), { href: url, download: name });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (e) {
+      toast.error("Не удалось скачать с MuseScore", { description: (e as Error).message });
+    } finally {
+      setScoreBusy(null);
+    }
+  };
+
   const removeAudio = async () => {
     await deleteAudioFile(item.id);
     setAudioData(null);
@@ -252,14 +314,17 @@ export function MediaCard({ item }: { item: Item }) {
     updateItem(item.id, { audioFile: undefined, audioSync: undefined, audioUnrepeat: undefined });
   };
 
-  const upload = async (f: File) => {
-    if (f.size > TAB_MAX) return toast.error("Файл больше 5 МБ — это точно табы?");
-    const data = await f.arrayBuffer();
+  const setTab = async (data: ArrayBuffer, name: string) => {
     await saveTabFile(item.id, data);
     setFile(data);
     setMissing((m) => ({ ...m, tab: false }));
     setScore(null);
-    updateItem(item.id, { tabFile: { name: f.name, size: f.size } });
+    updateItem(item.id, { tabFile: { name, size: data.byteLength } });
+  };
+
+  const upload = async (f: File) => {
+    if (f.size > TAB_MAX) return toast.error("Файл больше 5 МБ — это точно табы?");
+    await setTab(await f.arrayBuffer(), f.name);
   };
 
   const removeFile = async () => {
@@ -271,6 +336,7 @@ export function MediaCard({ item }: { item: Item }) {
 
   const [videoUrl, setVideoUrl] = useState("");
   const [editVideo, setEditVideo] = useState(false);
+  const [editBoard, setEditBoard] = useState(false);
   const saveVideo = () => {
     const v = parseVideo(videoUrl);
     if (!v) return toast.error("Не похоже на ссылку YouTube или Instagram");
@@ -309,12 +375,20 @@ export function MediaCard({ item }: { item: Item }) {
 
   const synced = !!item.audioSync?.length;
   const sectionCount = item.sections?.length ?? 0;
-  const empty = !item.video && !item.tabFile && !item.tab && !item.audioFile;
+  const empty = !item.tabFile && !item.tab && !item.audioFile && (scoreOnly || (!item.video && !item.theory));
   const [showSync, setShowSync] = useState(false);
+  const audioInput = useRef<HTMLInputElement>(null);
+  const tabView = useSettings((s) => s.tabView);
+  const setTabView = useSettings((s) => s.setTabView);
 
   const badges = (
     <>
-      {item.video && (
+      {item.theory && !scoreOnly && (
+        <Badge variant="soft">
+          <Grid3x3 /> гриф
+        </Badge>
+      )}
+      {item.video && !scoreOnly && (
         <Badge variant="soft">
           <Video /> видео
         </Badge>
@@ -344,10 +418,72 @@ export function MediaCard({ item }: { item: Item }) {
     </>
   );
 
+  // The original recording: what it is, and how to replace, download or remove it; or how to get one.
+  const recording = (
+    <>
+      {item.audioFile ? (
+        <MaterialRow
+          icon={<Headphones />}
+          title={hasTab ? "Звук для табов" : "Запись"}
+          sub={[
+            item.audioFile.fromVideo ? "из видео" : item.audioFile.name,
+            missing.audio ? "загрузи на этом устройстве" : hasTab ? (synced ? "синхронизирован" : "без синхронизации") : "",
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+          actions={
+            <>
+              {audioData && (
+                <IconAction label="Скачать запись" onClick={() => downloadAudio(audioData, item.audioFile!.name)}>
+                  <Download className="size-4" />
+                </IconAction>
+              )}
+              <FileAction label="Заменить запись" accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)} />
+              <IconAction label="Удалить запись" onClick={() => void removeAudio()}>
+                <Trash2 className="size-4" />
+              </IconAction>
+            </>
+          }
+        />
+      ) : (
+        <>
+          {item.video && (
+            <AddRow
+              icon={<WandSparkles />}
+              title={grabbing ? `Беру звук из видео…${grabAttempt > 1 ? ` (попытка ${grabAttempt})` : ""}` : "Звук из видео"}
+              sub={hasTab ? "табы будут играть под запись из видео, а не синтезатор" : "запись можно будет замедлять без смены тона"}
+              busy={grabbing}
+              onClick={() => void grabAudio()}
+            />
+          )}
+          <AddRow icon={<Headphones />} title="Своя запись" sub="mp3, m4a, wav" accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)} />
+        </>
+      )}
+    </>
+  );
+
+  // Sheet music from MuseScore, when the item links to it.
+  const museRow = scoreLink && (
+        <MaterialRow
+          icon={<FileMusic />}
+          title="Ноты с MuseScore"
+          sub="XML — в табы, mp3 — как запись, PDF и MIDI — файлом"
+          actions={
+            <>
+              {(["musicxml", "pdf", "midi", "mp3"] as const).map((f) => (
+                <Button key={f} variant="ghost" size="sm" disabled={!!scoreBusy} onClick={() => void grabScore(f)} className="px-2 text-xs uppercase">
+                  {scoreBusy === f ? <LoaderCircle className="size-4 animate-spin" /> : f === "musicxml" ? "xml" : f}
+                </Button>
+              ))}
+            </>
+          }
+        />
+      );
+
   const materials = (
     <div className="space-y-2">
       {/* Video */}
-      {item.video && !editVideo ? (
+      {scoreOnly ? null : item.video && !editVideo ? (
         <MaterialRow
           icon={<Video />}
           title={`Видео ${videoSite(item.video)}`}
@@ -404,59 +540,237 @@ export function MediaCard({ item }: { item: Item }) {
         <AddRow icon={<FileMusic />} title="Добавить табы" sub="Guitar Pro или MusicXML" accept={TAB_ACCEPT} onFile={(f) => void upload(f)} />
       )}
 
-      {/* Recording */}
-      {item.audioFile ? (
+      {/* The neck: a scale or a chord shown on the fretboard */}
+      {scoreOnly ? null : item.theory && !editBoard ? (
         <MaterialRow
-          icon={<Headphones />}
-          title={hasTab ? "Звук для табов" : "Запись"}
-          sub={[
-            item.audioFile.fromVideo ? "из видео" : item.audioFile.name,
-            missing.audio ? "загрузи на этом устройстве" : hasTab ? (synced ? "синхронизирован" : "без синхронизации") : "",
-          ]
-            .filter(Boolean)
-            .join(" · ")}
+          icon={<Grid3x3 />}
+          title="Гриф"
+          sub={theoryView(choiceOf(item.theory)).title}
           actions={
             <>
-              {audioData && (
-                <IconAction label="Скачать запись" onClick={() => downloadAudio(audioData, item.audioFile!.name)}>
-                  <Download className="size-4" />
-                </IconAction>
-              )}
-              <FileAction label="Заменить запись" accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)} />
-              <IconAction label="Удалить запись" onClick={() => void removeAudio()}>
+              <IconAction label="Изменить гриф" onClick={() => setEditBoard(true)}>
+                <Pencil className="size-4" />
+              </IconAction>
+              <IconAction label="Убрать гриф" onClick={() => updateItem(item.id, { theory: undefined })}>
                 <Trash2 className="size-4" />
               </IconAction>
             </>
           }
         />
+      ) : editBoard ? (
+        <div className="space-y-2 rounded-2xl bg-surface-2/50 p-3">
+          <TheoryPicker value={item.theory ?? DEFAULT_BOARD} onChange={(theory) => updateItem(item.id, { theory })} />
+          <Button variant="secondary" onClick={() => setEditBoard(false)} className="w-full">
+            <Check /> Готово
+          </Button>
+        </div>
       ) : (
-        <>
-          {item.video && (
-            <AddRow
-              icon={<WandSparkles />}
-              title={grabbing ? `Беру звук из видео…${grabAttempt > 1 ? ` (попытка ${grabAttempt})` : ""}` : "Звук из видео"}
-              sub={hasTab ? "табы будут играть под запись из видео, а не синтезатор" : "запись можно будет замедлять без смены тона"}
-              busy={grabbing}
-              onClick={() => void grabAudio()}
-            />
-          )}
-          <AddRow icon={<Headphones />} title="Своя запись" sub="mp3, m4a, wav" accept={AUDIO_ACCEPT} onFile={(f) => void uploadAudio(f)} />
-        </>
+        <AddRow
+          icon={<Grid3x3 />}
+          title="Добавить гриф"
+          sub="гамма, лад или аккорд по позициям"
+          onClick={() => {
+            updateItem(item.id, { theory: DEFAULT_BOARD });
+            setEditBoard(true);
+          }}
+        />
       )}
+
+      {recording}
+      {museRow}
     </div>
   );
+
+  if (part === "score") {
+    const View = VIEW_META[tabView];
+    const playBtn = hasTab && (
+      <Button
+        size="icon"
+        aria-label={playing ? "Пауза" : "Играть"}
+        title={playing ? "Пауза" : "Играть"}
+        onClick={() => {
+          audio();
+          setPlaying(!playing);
+        }}
+        className={cn("size-10 shrink-0 shadow-none", ON_TAB)}
+      >
+        {playing ? <Pause fill="currentColor" className="!size-4" /> : <Play fill="currentColor" className="!size-4" />}
+      </Button>
+    );
+    const viewBtn = hasTab && (
+      <Button
+        variant="secondary"
+        size="icon"
+        aria-label={`Вид: ${View.name}. Переключить`}
+        title={`${View.name} — нажми, чтобы переключить`}
+        onClick={() => setTabView(VIEW_NEXT[tabView])}
+        className={cn("h-10 w-[4.75rem] shrink-0 px-0", ON_TAB)}
+      >
+        {View.mark}
+      </Button>
+    );
+    const player = hasTab && mediaReady && (
+      <Suspense fallback={<div className="h-72 animate-pulse rounded-3xl border border-line bg-surface" />}>
+        <TabPlayer
+          tex={file ? undefined : item.tab}
+          file={file ?? undefined}
+          audio={file && useRecording ? audioData : null}
+          sync={item.audioSync}
+          unrepeat={item.audioUnrepeat}
+          bpm={file ? undefined : (item.startBpm ?? undefined)}
+          playing={playing}
+          track={track}
+          countIn
+          height="40vh"
+          onScore={setScore}
+        />
+      </Suspense>
+    );
+    // Like "Заменить видео" under the video: one wide button under the tabs.
+    const fileRow = item.tabFile ? (
+      <label className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "w-full cursor-pointer")}>
+        <RefreshCw className="size-4" /> {missing.tab ? "Загрузить табы на этом устройстве" : "Заменить табы"}
+        <input type="file" accept={TAB_ACCEPT} hidden onChange={(e) => e.target.files?.[0] && void upload(e.target.files[0])} />
+      </label>
+    ) : (
+      !item.tab && <AddRow icon={<FileMusic />} title="Загрузить табы или ноты" sub="Guitar Pro, MusicXML" accept={TAB_ACCEPT} onFile={(f) => void upload(f)} />
+    );
+    const trackSelect = score && score.tracks.length > 1 && (
+      <Select value={String(track)} onValueChange={(v) => setTrack(Number(v))}>
+        <SelectTrigger aria-label="Дорожка" title="Дорожка" className={cn("h-10 w-auto max-w-36 rounded-xl border-0 bg-surface-2 px-3 text-xs font-semibold", ON_TAB)}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {score.tracks.map((t, i) => (
+            <SelectItem key={i} value={String(i)}>
+              {t}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+    const bound = !!item.audioFile;
+    const audioRow = bound && (
+      <div className="space-y-2">
+        <MaterialRow
+          icon={<Headphones />}
+          title={item.audioFile!.fromVideo ? "Звук из видео" : item.audioFile!.name}
+          sub={missing.audio ? "загрузи на этом устройстве" : hasTab ? (useRecording ? (synced ? "табы идут за записью" : "без синхронизации") : "сейчас играет синтезатор") : "запись"}
+          actions={
+            <>
+              {file && audioData && (
+                <IconAction
+                  label={useRecording ? "Играть синтезатором" : "Играть с записью"}
+                  onClick={() => {
+                    setPlaying(false);
+                    setUseRecording(!useRecording);
+                  }}
+                >
+                  {useRecording ? <Piano className="size-4" /> : <Headphones className="size-4" />}
+                </IconAction>
+              )}
+              {file && audioData && (
+                <IconAction label="Поправить синхронизацию" onClick={() => setShowSync(!showSync)}>
+                  <Link2 className="size-4" />
+                </IconAction>
+              )}
+              <IconAction label="Отвязать аудио" onClick={() => void removeAudio()}>
+                <Trash2 className="size-4" />
+              </IconAction>
+            </>
+          }
+        />
+        {showSync && file && audioData && (
+          <div className="rounded-2xl bg-surface-2/40 p-3">
+            <AudioSync item={item} audio={audioData} tab={file} sections={score?.sections ?? []} bars={score?.bars ?? 1} />
+          </div>
+        )}
+      </div>
+    );
+    // Two ways to bind the sound: from the item's video, or a file of one's own.
+    const videoOk = !!item.video && serverReady(audioServer);
+    const videoHint = !item.video ? "сначала добавь блок «Видео»" : !serverReady(audioServer) ? "нужен сервер звука в настройках" : "табы пойдут за записью из видео";
+    const audioFileInput = (
+      <input ref={audioInput} type="file" accept={AUDIO_ACCEPT} hidden onChange={(e) => e.target.files?.[0] && void uploadAudio(e.target.files[0])} />
+    );
+    const videoTitle = grabbing ? `Беру звук из видео…${grabAttempt > 1 ? ` (${grabAttempt})` : ""}` : "Из видео";
+    // "Привязать аудио ▾" opens the two ways: the video's sound or a file of one's own.
+    const bindMenu = !bound && (
+      <div className="flex">
+        <DropdownMenu.Root modal={false}>
+          <DropdownMenu.Trigger asChild>
+            <Button variant="dashed" size="sm" className="group h-10 active:scale-100">
+              {grabbing ? <LoaderCircle className="size-4 animate-spin" /> : <Link2 className="size-4" />} {grabbing ? videoTitle : "Привязать аудио"}
+              <ChevronDown className="size-4 text-muted transition-transform group-data-[state=open]:rotate-180" />
+            </Button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content align="start" sideOffset={6} className="z-50 w-72 rounded-2xl border border-line bg-surface p-1.5 text-fg shadow-xl">
+              <DropdownMenu.Item
+                disabled={!videoOk}
+                onSelect={() => void grabAudio()}
+                className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2 outline-none data-[disabled]:cursor-default data-[disabled]:opacity-50 data-[highlighted]:bg-surface-2"
+              >
+                <Video className="size-5 shrink-0 text-accent" />
+                <span>
+                  <span className="block text-sm font-semibold">Звук из видео</span>
+                  <span className="block text-xs text-muted">{videoHint}</span>
+                </span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                onSelect={() => audioInput.current?.click()}
+                className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2 outline-none data-[highlighted]:bg-surface-2"
+              >
+                <Headphones className="size-5 shrink-0 text-accent" />
+                <span>
+                  <span className="block text-sm font-semibold">Свой файл</span>
+                  <span className="block text-xs text-muted">mp3, m4a, wav с устройства</span>
+                </span>
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+      </div>
+    );
+    const strip = <SectionStrip item={item} />;
+
+    // Controls sit on the tabs (top right); under them the sections, the file and the sound.
+    return (
+      <div className="space-y-3">
+        {player && (
+          <div className="relative">
+            {player}
+            {/* Clear of the tab's own scrollbar on the right. Each button is see-through (ON_TAB) so the notes show. */}
+            <div className="absolute right-6 top-2 z-10 flex gap-1.5">
+              {trackSelect}
+              {viewBtn}
+              {playBtn}
+            </div>
+          </div>
+        )}
+        {strip}
+        {fileRow}
+        {audioFileInput}
+        {audioRow || bindMenu}
+        {museRow}
+      </div>
+    );
+  }
 
   return (
     <>
       <Card className="space-y-3 p-3">
         {empty ? (
           <>
-            <div className="px-1 text-sm text-muted">Добавь видео, табы или запись — под них и будешь играть.</div>
+            <div className="px-1 text-sm text-muted">
+              {scoreOnly ? "Загрузи ноты (Guitar Pro, MusicXML) или запись — под них и будешь играть." : "Добавь видео, табы, запись или гриф — под них и будешь играть."}
+            </div>
             {materials}
+            <SectionStrip item={item} />
           </>
         ) : (
           <>
-            {item.video && <VideoPlayer video={item.video} playing={false} />}
+            {item.video && !scoreOnly && <VideoPlayer video={item.video} playing={false} />}
             {hasTab && mediaReady && (
               <Suspense fallback={<div className="h-72 animate-pulse rounded-3xl border border-line bg-surface" />}>
                 <TabPlayer
@@ -475,6 +789,8 @@ export function MediaCard({ item }: { item: Item }) {
               </Suspense>
             )}
             {!hasTab && audioData && <AudioPreview data={audioData} />}
+            {/* The song's sections live with its notes: a strip right under the player. */}
+            <SectionStrip item={item} />
             {hasTab && <TabViewSwitch />}
             <div className="flex items-center gap-2">
               {hasTab ? (
@@ -562,12 +878,6 @@ export function MediaCard({ item }: { item: Item }) {
               </Button>
             )}
 
-            <NumberField
-              label="Длительность в занятии, мин (0 — поровну с остальными)"
-              min={0}
-              value={item.minutes ?? 0}
-              onChange={(v) => updateItem(item.id, { minutes: v || undefined })}
-            />
             <p className="px-1 text-xs text-muted">Файлы табов и записей хранятся на этом устройстве.</p>
           </div>
         </DrawerContent>

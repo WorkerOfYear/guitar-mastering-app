@@ -138,7 +138,7 @@ function Picker({ block, chosen, onAdd, onDone }: { block: TemplateBlock; chosen
           <div className="space-y-3 px-2 py-6 text-center text-sm text-muted">
             <p>В библиотеке пока ничего нет.</p>
             <Button asChild>
-              <Link to="/library/new">
+              <Link to="/library">
                 <Plus /> Добавить в библиотеку
               </Link>
             </Button>

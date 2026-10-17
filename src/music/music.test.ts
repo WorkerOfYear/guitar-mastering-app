@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { parseInterval, parseNote, transpose, noteName } from "./notes";
-import { scaleTones, diatonicChords, scaleById } from "./scales";
-import { chordTones, voicings } from "./chords";
+import { SCALES, scaleTones, diatonicChords, scaleById } from "./scales";
+import { CHORD_TYPES, chordTones, voicings } from "./chords";
 import { buildPatterns, fretNotes, STANDARD_TUNING } from "./fretboard";
 
 const names = (tonic: string, id: string) => scaleTones(tonic, id).map((t) => t.name).join(" ");
 const shape = (p: { cells: Set<string> }) =>
   [0, 1, 2, 3, 4, 5].map((s) => [...p.cells].filter((k) => k.startsWith(`${s}:`)).map((k) => Number(k.split(":")[1])).sort((a, b) => a - b));
+
+/** Fingers per string, low E first, in fret order. */
+const fingersOf = (p: { cells: Set<string>; fingers: Map<string, number> }) => shape(p).map((row, s) => row.map((f) => p.fingers.get(`${s}:${f}`)));
 
 describe("notes", () => {
   it("parses intervals", () => {
@@ -58,6 +61,31 @@ describe("patterns", () => {
     const base = scaleTones("A", scaleById("blues").patternBase!);
     const [box] = buildPatterns(base, STANDARD_TUNING, { extra: blues });
     expect(shape(box)[1]).toEqual([5, 6, 7]); // E♭ on the A string
+  });
+  it("fingers pentatonic boxes the standard way", () => {
+    const boxes = buildPatterns(scaleTones("A", "minor-pentatonic"));
+    expect(fingersOf(boxes[0])).toEqual([[1, 4], [1, 3], [1, 3], [1, 3], [1, 4], [1, 4]]);
+    expect(fingersOf(boxes[1])).toEqual([[2, 4], [1, 4], [1, 4], [1, 3], [2, 4], [2, 4]]);
+    // Box 3: the hand sits at fret 10, the G string reaches back to 9 with the index.
+    expect(fingersOf(boxes[2])).toEqual([[1, 3], [1, 3], [1, 3], [1, 4], [1, 4], [1, 3]]);
+  });
+  it("fingers three-notes-per-string modes 1-2-4 / 1-3-4", () => {
+    const [box] = buildPatterns(scaleTones("G", "ionian"));
+    // whole-whole 1-2-4, half-whole 1-2-4, whole-half 1-3-4
+    expect(fingersOf(box)).toEqual([[1, 2, 4], [1, 2, 4], [1, 2, 4], [1, 2, 4], [1, 3, 4], [1, 3, 4]]);
+  });
+  it("never puts one finger on two frets of a string", () => {
+    for (const tonic of ["C", "E", "F#", "Ab", "B"])
+      for (const def of SCALES)
+        for (const p of buildPatterns(scaleTones(tonic, def.patternBase ?? def.id), STANDARD_TUNING, { extra: def.patternBase ? scaleTones(tonic, def.id) : undefined }))
+          for (const row of fingersOf(p)) {
+            const fretted = row.filter((f): f is number => f! > 0);
+            expect(new Set(fretted).size).toBe(fretted.length);
+            for (const f of fretted) expect(f).toBeLessThanOrEqual(4);
+          }
+    for (const c of CHORD_TYPES)
+      for (const p of buildPatterns(chordTones("A", c.id), STANDARD_TUNING, { perString: 2 }))
+        for (const row of fingersOf(p)) expect(new Set(row.filter((f) => f! > 0)).size).toBe(row.filter((f) => f! > 0).length);
   });
   it("never produces negative frets", () => {
     for (const tonic of ["C", "E", "F", "Ab"]) {
