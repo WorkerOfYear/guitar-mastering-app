@@ -33,7 +33,7 @@ import { choiceOf, theoryView } from "@/music/theoryView";
 import type { ScoreInfo } from "@/components/tab/TabPlayer";
 import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
 import { audio } from "@/audio/player";
-import { cacheAudioFile, deleteAudioFile, deleteTabFile, loadAudioFile, loadTabFile, saveAudioFile, saveTabFile } from "@/lib/tabFiles";
+import { cacheAudioFile, deleteAudioFile, deleteInstagramVideo, deleteTabFile, loadAudioFile, loadTabFile, saveAudioFile, saveTabFile } from "@/lib/tabFiles";
 import { audioBlob, downloadAudio } from "@/lib/audioType";
 import { AudioSync, detectSync } from "./AudioSync";
 import { SectionStrip } from "./SectionStrip";
@@ -343,6 +343,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
     const v = parseVideo(videoUrl);
     if (!v) return toast.error("Не похоже на ссылку YouTube или Instagram");
     const url = withScheme(videoUrl);
+    if (item.video?.instagramId && item.video.instagramId !== v.instagramId) void deleteInstagramVideo(item.id, item.video.instagramId);
     updateItem(item.id, { video: v, links: item.links.includes(url) ? item.links : [...item.links, url] });
     setVideoUrl("");
     setEditVideo(false);
@@ -495,7 +496,13 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
               <IconAction label="Заменить видео" onClick={() => setEditVideo(true)}>
                 <RefreshCw className="size-4" />
               </IconAction>
-              <IconAction label="Удалить видео" onClick={() => updateItem(item.id, { video: undefined })}>
+              <IconAction
+                label="Удалить видео"
+                onClick={() => {
+                  if (item.video?.instagramId) void deleteInstagramVideo(item.id, item.video.instagramId);
+                  updateItem(item.id, { video: undefined });
+                }}
+              >
                 <Trash2 className="size-4" />
               </IconAction>
             </>
@@ -772,7 +779,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
           </>
         ) : (
           <>
-            {item.video && !scoreOnly && <VideoPlayer video={item.video} playing={false} />}
+            {item.video && !scoreOnly && <VideoPlayer itemId={item.id} video={item.video} playing={false} />}
             {hasTab && mediaReady && (
               <Suspense fallback={<div className="h-72 animate-pulse rounded-3xl border border-line bg-surface" />}>
                 <TabPlayer

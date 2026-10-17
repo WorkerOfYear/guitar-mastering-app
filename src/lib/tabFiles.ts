@@ -248,3 +248,30 @@ export async function loadTakes(itemId: string): Promise<Take[]> {
   const takes = await run<Take[]>("readonly", (s) => s.getAll(takeRange(itemId)));
   return takes.sort((a, b) => a.at - b.at);
 }
+
+// An Instagram video, downloaded by the server as mp4 and played in the app's own player (Instagram's embed shows the
+// account, likes and comments, and often doesn't play on iPhones). Keyed by the post too, so a replaced link isn't mixed up.
+const instagramKey = (itemId: string, code: string) => `${itemId}:ig:${code}`;
+const fetching = new Map<string, Promise<ArrayBuffer>>();
+
+/** The video from this device or the server; the first time, the server downloads it from Instagram. */
+export async function loadInstagramVideo(itemId: string, code: string): Promise<ArrayBuffer> {
+  const key = instagramKey(itemId, code);
+  const have = await load(key);
+  if (have) return have;
+  let job = fetching.get(key);
+  if (!job) {
+    job = (async () => {
+      const r = await apiFetch(`/api/video?ig=${encodeURIComponent(code)}&save=${encodeURIComponent(itemId)}`);
+      if (!r.ok) throw new Error(await failure(r));
+      const data = await r.arrayBuffer();
+      await cache(key, data);
+      setVer(key, Number(r.headers.get("X-Updated")) || Date.now());
+      return data;
+    })().finally(() => fetching.delete(key));
+    fetching.set(key, job);
+  }
+  return job;
+}
+
+export const deleteInstagramVideo = (itemId: string, code: string) => remove(instagramKey(itemId, code));

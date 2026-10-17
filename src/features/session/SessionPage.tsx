@@ -393,7 +393,7 @@ function Stage({ block, entry, item, material, playing, control, onBlocked }: St
   if (material === "video" && item.video)
     return (
       <div className="space-y-3">
-        <VideoPlayer key={item.id} video={item.video} playing={playing} onBlocked={onBlocked} control={control} />
+        <VideoPlayer key={item.id} itemId={item.id} video={item.video} playing={playing} onBlocked={onBlocked} control={control} />
         <Description item={item} />
       </div>
     );

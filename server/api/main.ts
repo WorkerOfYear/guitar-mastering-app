@@ -18,6 +18,7 @@ const ROUTES: Record<string, Partial<Record<string, Handler>>> = {
   "/api/state": { GET: state.GET, PUT: state.PUT },
   "/api/files": { GET: files.GET, PUT: files.PUT, DELETE: files.DELETE },
   "/api/audio": { GET: media.audio },
+  "/api/video": { GET: media.video },
   "/api/score": { GET: media.score },
   "/api/tabs": { GET: tabs.GET },
   "/api/telegram": { GET: bot.GET, POST: bot.POST },

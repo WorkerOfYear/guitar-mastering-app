@@ -9,6 +9,7 @@ import { addBlockPatch, blocksOf, isExercise, removeBlockPatch } from "@/lib/lib
 import { choiceOf, theoryView } from "@/music/theoryView";
 import { withScheme } from "@/lib/youtubeLink";
 import { parseVideo, videoSite } from "@/lib/videoLink";
+import { deleteInstagramVideo } from "@/lib/tabFiles";
 import { useData } from "@/store/data";
 import type { BlockId, Item } from "@/shared/types";
 import { BlockPicker, BlockShell, EXERCISE_BLOCKS, PIECE_BLOCKS } from "./blocks";
@@ -123,6 +124,7 @@ export function VideoBlock({ item, update }: { item: Item; update: (patch: Parti
   const save = () => {
     if (!parsed) return;
     const link = withScheme(url);
+    if (item.video?.instagramId && item.video.instagramId !== parsed.instagramId) void deleteInstagramVideo(item.id, item.video.instagramId);
     update({ video: parsed, links: item.links.includes(link) ? item.links : [...item.links, link] });
     setUrl("");
     setEdit(false);
@@ -130,7 +132,7 @@ export function VideoBlock({ item, update }: { item: Item; update: (patch: Parti
   if (item.video && !edit)
     return (
       <div className="space-y-2">
-        <VideoPlayer video={item.video} playing={false} />
+        <VideoPlayer itemId={item.id} video={item.video} playing={false} />
         <Button variant="ghost" size="sm" onClick={() => setEdit(true)} className="w-full">
           <RefreshCw className="size-4" /> Заменить видео
         </Button>

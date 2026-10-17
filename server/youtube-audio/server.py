@@ -1,6 +1,7 @@
 """
 Video audio for the guitar app: GET /audio?id=<YouTube video id> or /audio?ig=<Instagram shortcode>
-with "Authorization: Bearer <KEY>" returns the video's audio (m4a when the site has it). Only ids are
+with "Authorization: Bearer <KEY>" returns the video's audio (m4a when the site has it). GET /video?ig=<shortcode>
+returns an Instagram video as mp4 (H.264 + AAC, which iPhones play), so the app shows it in its own player. Only ids are
 accepted, so the server can't be used to fetch arbitrary URLs. Personal use: one key, two downloads at a time.
 """
 
@@ -26,7 +27,11 @@ INSTAGRAM_ID = re.compile(r"^[\w-]{5,64}$")
 COOKIES = os.environ.get("COOKIES", "/data/cookies.txt")
 slots = threading.BoundedSemaphore(2)
 
-TYPES = {"m4a": "audio/mp4", "webm": "audio/webm", "mp3": "audio/mpeg", "opus": "audio/ogg"}
+TYPES = {"m4a": "audio/mp4", "webm": "audio/webm", "mp3": "audio/mpeg", "opus": "audio/ogg", "mp4": "video/mp4"}
+# Audio only; for /video one file with picture and sound (no ffmpeg here to merge separate streams), mp4 first —
+# Instagram's progressive mp4 is H.264, its separate DASH streams are VP9.
+AUDIO_FORMAT = "bestaudio[ext=m4a]/bestaudio"
+VIDEO_FORMAT = "b[ext=mp4]/b"
 
 
 def update_forever():
@@ -36,17 +41,17 @@ def update_forever():
         time.sleep(24 * 3600)
 
 
-def download(url, folder):
+def download(url, folder, fmt=AUDIO_FORMAT):
     cookies = ["--cookies", COOKIES] if os.path.isfile(COOKIES) else []
     return subprocess.run(
         [
             YTDLP, "--no-playlist", "--quiet", "--no-warnings",
             "--retries", "5", "--fragment-retries", "5", "--extractor-retries", "3",
-            "-f", "bestaudio[ext=m4a]/bestaudio",
+            "-f", fmt,
             "--match-filter", f"duration <= {MAX_MINUTES * 60}",
-            "--max-filesize", "80M",
+            "--max-filesize", "60M",
             "--print", "after_move:%(title)s",
-            "-o", os.path.join(folder, "audio.%(ext)s"),
+            "-o", os.path.join(folder, "media.%(ext)s"),
             *cookies,
             url,
         ],
@@ -84,14 +89,17 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/plain")
             self.end_headers()
             return self.wfile.write(b"ok")
-        if url.path != "/audio":
+        if url.path not in ("/audio", "/video"):
             return self.fail(404, "Нет такого адреса")
+        want_video = url.path == "/video"
         if not KEY or self.headers.get("Authorization", "") != f"Bearer {KEY}":
             return self.fail(401, "Неверный ключ")
         query = urllib.parse.parse_qs(url.query)
         video = query.get("id", [""])[0]
         post = query.get("ig", [""])[0]
-        if VIDEO_ID.match(video):
+        if want_video and not INSTAGRAM_ID.match(post):
+            return self.fail(400, "Видео — только из Instagram: нужен ig=<код поста>")
+        if VIDEO_ID.match(video) and not want_video:
             source = f"https://www.youtube.com/watch?v={video}"
         elif INSTAGRAM_ID.match(post):
             video, source = post, f"https://www.instagram.com/reel/{post}/"
@@ -105,7 +113,7 @@ class Handler(BaseHTTPRequestHandler):
             for attempt in range(2):  # the site sometimes refuses once; a second run usually goes through
                 shutil.rmtree(tmp, ignore_errors=True)
                 os.makedirs(tmp, exist_ok=True)
-                r = download(source, tmp)
+                r = download(source, tmp, VIDEO_FORMAT if want_video else AUDIO_FORMAT)
                 if r.returncode == 0 and os.listdir(tmp):
                     break
                 time.sleep(2)

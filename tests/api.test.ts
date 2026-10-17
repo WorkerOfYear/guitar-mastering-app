@@ -8,6 +8,7 @@ import * as remind from "../server/api/remind";
 import * as bot from "../server/api/telegram";
 import * as files from "../server/api/files";
 import * as session from "../server/api/session";
+import * as media from "../server/api/media";
 import { issueToken, webhookSecret } from "../server/api/lib";
 import { closeStore, kvGet, kvSet } from "../server/api/store";
 
@@ -149,6 +150,26 @@ describe("/api/files", () => {
     expect((await files.GET(file("../guitar.db"))).status).toBe(400);
     expect((await files.GET(file(".."))).status).toBe(400);
     expect((await files.GET(req("/api/files?key=tab-1", { token: null }))).status).toBe(401);
+  });
+});
+
+describe("/api/video", () => {
+  it("has the audio server download an Instagram video and keeps it as the item's file", async () => {
+    vi.stubEnv("AUDIO_KEY", "audio-key");
+    const calls: [string, RequestInit][] = [];
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      calls.push([url, init]);
+      return new Response(new Uint8Array([0, 0, 0, 24]), { headers: { "Content-Type": "video/mp4" } });
+    });
+    const r = await media.video(req("/api/video?ig=DejleJDxYHu&save=song-1"));
+    expect(r.status).toBe(200);
+    expect(calls[0][0]).toBe("http://127.0.0.1:8787/video?ig=DejleJDxYHu");
+    expect((calls[0][1].headers as Record<string, string>).Authorization).toBe("Bearer audio-key");
+    const stored = await files.GET(req("/api/files?key=song-1:ig:DejleJDxYHu"));
+    expect(stored.headers.get("content-type")).toBe("video/mp4");
+    expect(stored.headers.get("x-updated")).toBe(r.headers.get("x-updated"));
+    expect((await media.video(req("/api/video?ig=../x&save=song-1"))).status).toBe(400);
+    expect((await media.video(req("/api/video?ig=DejleJDxYHu&save=song-1", { token: null }))).status).toBe(401);
   });
 });
 

@@ -1,6 +1,9 @@
 // The owner's helper servers, reached from here so the app never needs their addresses or keys:
 //   GET /api/audio?id=<YouTube id> | ?ig=<Instagram code> [&save=<item id>]  → audio from server/youtube-audio
 //       (with save it is also stored as that item's recording, so the app doesn't upload it back)
+//   GET /api/video?ig=<Instagram code>&save=<item id>                         → the Instagram video as mp4, stored as the
+//       item's file "<item id>:ig:<code>" (the app plays it itself: Instagram's embed shows the account, likes and all,
+//       and often won't play on iPhones)
 //   GET /api/score?type=<pdf|midi|mp3|musicxml>&url=<musescore link>         → a score from server/score-download
 // AUDIO_URL / SCORE_URL: where they are (http://audio:8080 and http://score:8080 in the compose files; the defaults are
 // their ports when run on their own); AUDIO_KEY / SCORE_KEY: their keys (audio.env and score.env next to .env).
@@ -53,6 +56,20 @@ export const audio = handle(async (req) => {
     const title = decodeURIComponent(headers["X-Title"] ?? "") || ig || id || "audio";
     headers["X-Updated"] = String(saveFile(`${save}:audio`, data, type, { name: `${title}.${ext}` }).updatedAt);
   }
+  return new Response(data, { headers });
+});
+
+export const video = handle(async (req) => {
+  await checkAuth(req);
+  const key = process.env.AUDIO_KEY;
+  if (!key) throw new HttpError(503, "Сервер звука не подключён: задай AUDIO_KEY в audio.env");
+  const q = new URL(req.url).searchParams;
+  const ig = q.get("ig") ?? "";
+  const save = q.get("save") ?? "";
+  const file = `${save}:ig:${ig}`;
+  if (!/^[\w-]{5,64}$/.test(ig) || !FILE_KEY.test(file)) throw new HttpError(400, "Нужны ig=<код поста> и save=<id элемента>");
+  const { data, headers } = await forward(`${base(process.env.AUDIO_URL, "http://127.0.0.1:8787")}/video?ig=${encodeURIComponent(ig)}`, key, []);
+  headers["X-Updated"] = String(saveFile(file, data, headers["Content-Type"], null).updatedAt);
   return new Response(data, { headers });
 });
 
