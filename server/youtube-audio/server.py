@@ -48,7 +48,7 @@ def download(url, folder, fmt=AUDIO_FORMAT):
             YTDLP, "--no-playlist", "--quiet", "--no-warnings",
             "--retries", "5", "--fragment-retries", "5", "--extractor-retries", "3",
             "-f", fmt,
-            "--match-filter", f"duration <= {MAX_MINUTES * 60}",
+            "--match-filter", f"duration <=? {MAX_MINUTES * 60}",  # "?": Instagram often gives no duration
             "--max-filesize", "60M",
             "--print", "after_move:%(title)s",
             "-o", os.path.join(folder, "media.%(ext)s"),
