@@ -1,10 +1,10 @@
-# Test stand: the same services as production (server/production), with their own data, plus Caddy serving the built app
-# and a Cloudflare quick tunnel giving it an https address. Caddy is published on 127.0.0.1:8788 (the tunnel's target);
+# Test stand: the same services as production (server/production), with their own data, plus Caddy serving the built app.
+# Caddy is published on 127.0.0.1:8788, and Tailscale Funnel on the host gives it a fixed https address on port 8443
+# (443 is production's): `tailscale funnel --bg --https=8443 http://127.0.0.1:8788`, once — it survives restarts.
 # /api goes to the stand's API, which reaches its own audio and score services as audio:8080 / score:8080.
 # Nothing here depends on which checkout runs it: the Caddyfile, the built app and API, data and secrets live in $STAND_DIR
 # (default /srv/guitar-dev), put there by up.sh. Secrets as in production: .env (API), audio.env, score.env.
 #   bash server/dev-stand/up.sh
-#   docker compose logs tunnel | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1
 services:
   web:
     image: caddy:2
@@ -50,8 +50,3 @@ services:
       PORT: "8080"
     volumes:
       - ${STAND_DIR:-/srv/guitar-dev}/score:/data
-  tunnel:
-    image: cloudflare/cloudflared:latest
-    restart: unless-stopped
-    network_mode: host
-    command: tunnel --no-autoupdate --url http://127.0.0.1:8788

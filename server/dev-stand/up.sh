@@ -40,7 +40,8 @@ for _ in $(seq 20); do
   served=$(curl -fsS http://127.0.0.1:8788/version.txt 2>/dev/null || true)
   api=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8788/api/health 2>/dev/null || true)
   if [ "$served" = "$VERSION" ] && [ "$api" = "200" ]; then
-    url=$(cd server/dev-stand && docker compose logs tunnel 2>/dev/null | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1)
+    # The fixed https address, if Tailscale Funnel publishes the stand on :8443 (see README.md).
+    url=$(tailscale funnel status 2>/dev/null | grep -o 'https://[^ ]*:8443' | head -1 || true)
     echo "OK: стенд поднят с $VERSION${url:+ — $url}"
     exit 0
   fi
