@@ -16,28 +16,23 @@ bash server/dev-stand/up.sh
 - `STAND_DIR=…` — другая папка вместо `/srv/guitar-dev`.
 
 Стенд — тот же набор сервисов, что [production](../production/README.md) (API, звук из видео, ноты MuseScore),
-со своими данными, плюс Caddy: он отдаёт сборку на `127.0.0.1:8788`, `/api/*` уходит в API стенда.
-Постоянный https-адрес даёт Tailscale Funnel на порту 8443 (443 занят под production) — сейчас это
-**https://vm8667.tail0fe1b7.ts.net:8443**. Адрес не меняется при перезапусках, сертификат Let's Encrypt
-Tailscale продлевает сам. Production-данные стенд не трогает.
+со своими данными, плюс Caddy и туннель Cloudflare: Caddy отдаёт сборку на `127.0.0.1:8788`, `/api/*` уходит в API
+стенда, туннель даёт https-адрес. Production-данные стенд не трогает.
 
 Данные и секреты стенда — в `/srv/guitar-dev` (не в git, не зависит от того, из какого клона запущен `up.sh`):
 `.env` (`APP_PASSWORD` — пароль входа на стенд, `TAVILY_API_KEY`), `audio.env` (`AUDIO_KEY`), `score.env`
-(`SCORE_KEY`, `MS_EMAIL`, `MS_PASSWORD`), `data/`. После правки: `cd server/dev-stand && docker compose up -d --force-recreate api audio score`.
+(`SCORE_KEY`, `MS_EMAIL`, `MS_PASSWORD`), `data/`. После правки: `cd server/dev-stand && docker compose up -d --force-recreate api audio score`
+(без `tunnel` — иначе сменится адрес).
 
 ## Установка (один раз)
 
 ```bash
 cd ~/guitar-mastering-app && git pull
-bash server/dev-stand/up.sh          # соберёт и поднимет контейнеры (docker compose up -d)
-tailscale funnel --bg --https=8443 http://127.0.0.1:8788    # https-адрес стенда; настройка сохраняется
+bash server/dev-stand/up.sh          # соберёт, поднимет контейнеры (docker compose up -d) и напечатает адрес
 ```
 
-После этого `up.sh` печатает адрес в конце. Проверить или выключить: `tailscale funnel status`,
-`tailscale funnel --https=8443 off`. Если funnel попросит включить HTTPS/Funnel для сети — открой ссылку из сообщения.
-
-Раньше адрес давал временный туннель Cloudflare (`*.trycloudflare.com`) и менялся после каждого перезапуска сервера.
-Если контейнер `dev-stand-tunnel-1` ещё запущен, он больше не нужен: `docker rm -f dev-stand-tunnel-1`.
+Если адрес туннеля сменился (перезапуск сервера):
+`cd server/dev-stand && docker compose logs tunnel | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1`
 
 Раньше стенд обновлялся из GitHub Actions по пушу в `dev`; это убрано. Секреты `STAND_*` в настройках репозитория
 и ключ `~/.ssh/github-dev-stand` на сервере больше не нужны — их можно удалить.
