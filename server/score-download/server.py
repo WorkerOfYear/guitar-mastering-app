@@ -10,6 +10,8 @@ from the site's script), /api/jmuse answers with a link to the file on MuseScore
 PDF: every page's image, printed by the same Chrome.
 MusicXML isn't in that API: it's the site's own Download button, which needs an account (MS_EMAIL, MS_PASSWORD)
 and works for free scores only. The session's cookies are kept in /data, so the account logs in rarely.
+GET /check?url=<musescore.com link> → {"free": true|false}: whether that Download offers MusicXML (free) or asks to buy
+the score or unlock it with PRO (paid). Remembered while the server runs.
 """
 
 import base64
@@ -54,6 +56,14 @@ last_used = 0.0
 
 class Failure(Exception):
     pass
+
+
+class Paid(Failure):
+    def __init__(self):
+        super().__init__("Эти ноты на MuseScore платные — MusicXML без покупки не скачать")
+
+
+checked = {}  # score link → free or not, for /check
 
 
 def get_driver():
@@ -275,87 +285,120 @@ def log_in(d):
         print(f"cookies not saved: {e}", flush=True)
 
 
-def click_text(d, selector, text):
+def find_text(d, selector, text):
     for el in d.find_elements(By.CSS_SELECTOR, selector):
         if el.is_displayed() and el.text.strip().split("\n")[0].strip() == text:
-            el.click()
-            return True
-    return False
+            return el
+    return None
+
+
+def paywall(d):
+    return d.execute_script("return /Buy this score|Unlock this score/.test(document.querySelector('[role=dialog]')?.innerText ?? '')")
+
+
+def download_dialog(d, url):
+    """Signed in, the score's Download dialog: (id and title, its MusicXML button); Paid when it wants a purchase."""
+    log_in(d)
+    info = open_score(d, url)
+    for _ in range(10):
+        button = find_text(d, "button", "Download")
+        if button:
+            button.click()
+            break
+        time.sleep(1)
+    else:
+        raise Failure("На странице нот нет кнопки Download")
+    for _ in range(10):
+        time.sleep(1)
+        button = find_text(d, "[role=dialog] button", "MusicXML")
+        if button:
+            return info, button
+        if paywall(d):
+            raise Paid()
+    raise Failure("MuseScore не предложил MusicXML")
+
+
+def is_free(d, url):
+    """The dialog offers MusicXML for paid scores too and asks to pay only once it's clicked: so it's a download."""
+    if url not in checked:
+        try:
+            download_musicxml(d, url)
+        except Paid:
+            pass
+    return checked[url]
 
 
 def download_musicxml(d, url):
     """The site's Download → MusicXML, signed in; the file the browser saves."""
-    log_in(d)
-    info = open_score(d, url)
     folder = tempfile.mkdtemp()
     try:
         d.execute_cdp_cmd("Browser.setDownloadBehavior", {"behavior": "allow", "downloadPath": folder})
-        for _ in range(10):
-            if click_text(d, "button", "Download"):
-                break
-            time.sleep(1)
-        else:
-            raise Failure("На странице нот нет кнопки Download")
-        for _ in range(10):
-            time.sleep(1)
-            if click_text(d, "[role=dialog] button", "MusicXML"):
-                break
-            if d.execute_script("return /Buy this score|Unlock this score/.test(document.querySelector('[role=dialog]')?.innerText ?? '')"):
-                raise Failure("Эти ноты на MuseScore платные — MusicXML без покупки не скачать")
-        else:
-            raise Failure("MuseScore не предложил MusicXML")
+        info, button = download_dialog(d, url)
+        button.click()
         for _ in range(30):
             time.sleep(1)
-            if d.execute_script("return /Buy this score|Unlock this score/.test(document.querySelector('[role=dialog]')?.innerText ?? '')"):
-                raise Failure("Эти ноты на MuseScore платные — MusicXML без покупки не скачать")
+            if paywall(d):
+                raise Paid()
             files = [f for f in os.listdir(folder) if not f.endswith(".crdownload")]
             if files:
+                checked[url] = True
                 with open(os.path.join(folder, files[0]), "rb") as f:
                     return f.read(), info
         raise Failure("MuseScore не отдал MusicXML")
+    except Paid:
+        checked[url] = False
+        raise
     finally:
         shutil.rmtree(folder, ignore_errors=True)
 
 
-def fetch_score(url, kind):
-    """(file bytes, file name) of the score in one format."""
+def in_browser(fn):
+    """fn(driver), one at a time; a browser that broke is started anew next time."""
     global last_used
     with browser_lock:
         last_used = time.time()
         try:
-            d = get_driver()
-            if kind == "musicxml":
-                data, info = download_musicxml(d, url)
-                return data, f"{file_name(info)}.mxl"
-            info = open_score(d, url)
-            suffix = api_suffix(d)
-            ua = d.execute_script("return navigator.userAgent")
-            name = file_name(info)
-            if kind != "pdf":
-                link = file_links(d, info["id"], kind, [0], suffix)[0]
-                if not link:
-                    raise Failure("MuseScore не отдал файл — у этих нот его может не быть")
-                return download(link, ua), f"{name}.{EXT[kind]}"
-            count = page_count(d)
-            if count:
-                pages = download_pages(file_links(d, info["id"], "img", range(count), suffix), ua)
-            else:  # the layout didn't say: go in batches until the pages run out
-                pages = []
-                for start in range(0, MAX_PAGES, 10):
-                    batch = download_pages(file_links(d, info["id"], "img", range(start, start + 10), suffix), ua)
-                    pages += batch
-                    if len(batch) < 10:
-                        break
-            if not pages:
-                raise Failure("MuseScore не отдал страницы нот")
-            return make_pdf(d, pages), f"{name}.pdf"
+            return fn(get_driver())
         except Failure:
             raise
         except Exception:
-            close_driver()  # a broken browser is started anew next time
+            close_driver()
             raise
         finally:
             last_used = time.time()
+
+
+def fetch_score(url, kind):
+    """(file bytes, file name) of the score in one format."""
+
+    def run(d):
+        if kind == "musicxml":
+            data, info = download_musicxml(d, url)
+            return data, f"{file_name(info)}.mxl"
+        info = open_score(d, url)
+        suffix = api_suffix(d)
+        ua = d.execute_script("return navigator.userAgent")
+        name = file_name(info)
+        if kind != "pdf":
+            link = file_links(d, info["id"], kind, [0], suffix)[0]
+            if not link:
+                raise Failure("MuseScore не отдал файл — у этих нот его может не быть")
+            return download(link, ua), f"{name}.{EXT[kind]}"
+        count = page_count(d)
+        if count:
+            pages = download_pages(file_links(d, info["id"], "img", range(count), suffix), ua)
+        else:  # the layout didn't say: go in batches until the pages run out
+            pages = []
+            for start in range(0, MAX_PAGES, 10):
+                batch = download_pages(file_links(d, info["id"], "img", range(start, start + 10), suffix), ua)
+                pages += batch
+                if len(batch) < 10:
+                    break
+        if not pages:
+            raise Failure("MuseScore не отдал страницы нот")
+        return make_pdf(d, pages), f"{name}.pdf"
+
+    return in_browser(run)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -388,11 +431,13 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/plain")
             self.end_headers()
             return self.wfile.write(b"ok")
-        if url.path != "/score":
+        if url.path not in ("/score", "/check"):
             return self.fail(404, "Нет такого адреса")
         if not KEY or self.headers.get("Authorization", "") != f"Bearer {KEY}":
             return self.fail(401, "Неверный ключ")
         q = urllib.parse.parse_qs(url.query)
+        if url.path == "/check":
+            return self.check(q.get("url", [""])[0])
         kind = q.get("type", [""])[0]
         link = q.get("url", [""])[0]
         if kind not in TYPES:
@@ -413,6 +458,24 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Name", urllib.parse.quote(name))
         self.end_headers()
         self.wfile.write(data)
+
+    def check(self, link):
+        if not SCORE_URL.match(link):
+            return self.fail(400, "Нужна ссылка на ноты с musescore.com")
+        try:
+            free = checked[link] if link in checked else in_browser(lambda d: is_free(d, link))
+        except Failure as e:
+            return self.fail(502, str(e))
+        except Exception as e:
+            print(f"error: {e!r}", flush=True)
+            return self.fail(502, "Не удалось открыть ноты на MuseScore")
+        body = json.dumps({"free": free}).encode()
+        self.send_response(200)
+        self.cors()
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def log_message(self, fmt, *args):
         print(f"{self.address_string()} {fmt % args}", flush=True)

@@ -16,3 +16,25 @@ export async function fetchScore(link: string, format: ScoreFormat): Promise<{ d
   const name = decodeURIComponent(r.headers.get("X-Name") ?? "") || `score.${EXT[format]}`;
   return { data: await r.arrayBuffer(), name };
 }
+
+// Answers already had: a score doesn't turn free or paid while the app is open.
+const freeScores = new Map<string, boolean>();
+
+/**
+ * Whether the score's MusicXML downloads free with the server's account; null when it couldn't tell. Official scores
+ * (musescore.com/official_scores/…) are always sold, so they aren't asked about.
+ */
+export async function isScoreFree(link: string, signal?: AbortSignal): Promise<boolean | null> {
+  if (/\/official_scores\//.test(link)) return false;
+  const known = freeScores.get(link);
+  if (known !== undefined) return known;
+  try {
+    const r = await apiFetch(`/api/score-check?url=${encodeURIComponent(link)}`, { signal });
+    if (!r.ok) return null;
+    const { free } = (await r.json()) as { free: boolean };
+    freeScores.set(link, free);
+    return free;
+  } catch {
+    return null;
+  }
+}
