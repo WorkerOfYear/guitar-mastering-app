@@ -24,7 +24,6 @@ export function NewPiecePage() {
   const [videoTitle, setVideoTitle] = useState<string | null>(null);
   const [tabFile, setTabFile] = useState<File | null>(null);
   // Tab and sheet-music links picked in the web search; they go into the item's links.
-  const [tabLinks, setTabLinks] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -65,7 +64,7 @@ export function NewPiecePage() {
         status: "active",
         blocks: withAudio,
         sections: [],
-        links: [...(video ? [withScheme(videoUrl)] : []), ...(has("score") ? tabLinks : [])],
+        links: video ? [withScheme(videoUrl)] : [],
         ...(video ? { video } : {}),
         ...(has("notes") ? { notes } : {}),
       });
@@ -86,7 +85,7 @@ export function NewPiecePage() {
         return <VideoField value={videoUrl} onChange={setVideoUrl} error={videoError} />;
       case "score":
         return (
-          <ScoreFields file={tabFile} onFile={setTabFile} links={tabLinks} onLinks={setTabLinks} query={query} auto={!!(video && videoTitle)} initialMode="search" />
+          <ScoreFields file={tabFile} onFile={setTabFile} query={query} auto={!!(video && videoTitle)} initialMode="search" />
         );
       case "notes":
         return <Textarea autoFocus value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Мысли по поводу произведения" />;

@@ -24,20 +24,16 @@ export function VideoField({ value, onChange, error }: { value: string; onChange
   );
 }
 
-/** Own file or links found online. Both stay mounted: switching back keeps the results and the chosen file. */
+/** Own file, or a search that opens tabs and scores on their sites. Both stay mounted: switching back keeps the results and the chosen file. */
 export function ScoreFields({
   file,
   onFile,
-  links,
-  onLinks,
   query,
   auto,
   initialMode = "file",
 }: {
   file: File | null;
   onFile: (f: File | null) => void;
-  links: string[];
-  onLinks: (l: string[]) => void;
   query: string;
   auto: boolean;
   initialMode?: "file" | "search";
@@ -55,23 +51,7 @@ export function ScoreFields({
         </FileField>
       </div>
       <div hidden={mode !== "search"}>
-        <TabSearch
-          query={query}
-          auto={auto}
-          picked={links}
-          onToggle={(url) => onLinks(links.includes(url) ? links.filter((u) => u !== url) : [...links, url])}
-          onScore={(data, name, url) => {
-            onFile(new File([data], name));
-            if (!links.includes(url)) onLinks([...links, url]);
-          }}
-        />
-        {file && (
-          <div className="mt-2">
-            <FileField icon={<FileMusic />} file={file} accept={TAB_ACCEPT} onFile={onFile} onClear={() => onFile(null)}>
-              {file.name}
-            </FileField>
-          </div>
-        )}
+        <TabSearch query={query} auto={auto} />
       </div>
     </>
   );

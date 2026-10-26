@@ -26,7 +26,6 @@ export function NewExercisePage() {
   const [videoUrl, setVideoUrl] = useState("");
   const [videoTitle, setVideoTitle] = useState<string | null>(null);
   const [tabFile, setTabFile] = useState<File | null>(null);
-  const [tabLinks, setTabLinks] = useState<string[]>([]);
   const [board, setBoard] = useState<TheoryLink>(DEFAULT_BOARD);
   const [tempo, setTempo] = useState<{ startBpm: number | null; targetBpm: number | null }>({
     startBpm: 60,
@@ -72,7 +71,7 @@ export function NewExercisePage() {
         type: "technique",
         status: "active",
         blocks,
-        links: [...(video ? [withScheme(videoUrl)] : []), ...(has("score") ? tabLinks : [])],
+        links: video ? [withScheme(videoUrl)] : [],
         ...fields,
       });
       if (tabFile && has("score")) {
@@ -97,7 +96,7 @@ export function NewExercisePage() {
       case "score":
         return (
           <div className="space-y-3">
-            <ScoreFields file={tabFile} onFile={setTabFile} links={tabLinks} onLinks={setTabLinks} query={finalTitle} auto={false} />
+            <ScoreFields file={tabFile} onFile={setTabFile} query={finalTitle} auto={false} />
           </div>
         );
       case "board":

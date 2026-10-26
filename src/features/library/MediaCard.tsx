@@ -351,21 +351,11 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
     await setTab(await f.arrayBuffer(), f.name);
   };
 
-  // Tabs and scores found online for this item: links are attached, a MuseScore score can go straight into the tabs.
+  // Tabs and scores for this item online: each opens on its site.
   const [findScore, setFindScore] = useState(false);
-  const toggleLink = (url: string) => updateItem(item.id, { links: item.links.includes(url) ? item.links.filter((u) => u !== url) : [...item.links, url] });
   const findRow = findScore ? (
     <div className="space-y-2 rounded-2xl bg-surface-2/50 p-3">
-      <TabSearch
-        query={songQuery(item.title)}
-        auto
-        picked={item.links}
-        onToggle={toggleLink}
-        onScore={async (data, name, url) => {
-          await setTab(data, name);
-          if (!item.links.includes(url)) updateItem(item.id, { links: [...item.links, url] });
-        }}
-      />
+      <TabSearch query={songQuery(item.title)} auto />
       <Button variant="ghost" size="sm" onClick={() => setFindScore(false)} className="w-full text-muted">
         Скрыть поиск
       </Button>
