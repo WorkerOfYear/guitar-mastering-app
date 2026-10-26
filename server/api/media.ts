@@ -5,7 +5,6 @@
 //       item's file "<item id>:ig:<code>" (the app plays it itself: Instagram's embed shows the account, likes and all,
 //       and often won't play on iPhones)
 //   GET /api/score?type=<pdf|midi|mp3|musicxml>&url=<musescore link>         → a score from server/score-download
-//   GET /api/score-check?url=<musescore link>                                → { free }: whether its MusicXML is free
 // AUDIO_URL / SCORE_URL: where they are (http://audio:8080 and http://score:8080 in the compose files; the defaults are
 // their ports when run on their own); AUDIO_KEY / SCORE_KEY: their keys (audio.env and score.env next to .env).
 import { checkAuth, handle, HttpError } from "./lib.js";
@@ -78,26 +77,12 @@ export const video = handle(async (req) => {
   return new Response(data, { headers });
 });
 
-const scoreKey = () => {
-  const key = process.env.SCORE_KEY;
-  if (!key) throw new HttpError(503, "Сервер нот MuseScore не подключён: задай SCORE_KEY в score.env");
-  return key;
-};
-const scoreServer = () => base(process.env.SCORE_URL, "http://127.0.0.1:8790");
-
 export const score = handle(async (req) => {
   await checkAuth(req);
-  const key = scoreKey();
+  const key = process.env.SCORE_KEY;
+  if (!key) throw new HttpError(503, "Сервер нот MuseScore не подключён: задай SCORE_KEY в score.env");
   const q = new URL(req.url).searchParams;
-  const url = `${scoreServer()}/score?type=${encodeURIComponent(q.get("type") ?? "")}&url=${encodeURIComponent(q.get("url") ?? "")}`;
+  const url = `${base(process.env.SCORE_URL, "http://127.0.0.1:8790")}/score?type=${encodeURIComponent(q.get("type") ?? "")}&url=${encodeURIComponent(q.get("url") ?? "")}`;
   const { data, headers } = await forward(url, key, ["X-Name"]);
-  return new Response(data, { headers });
-});
-
-export const scoreCheck = handle(async (req) => {
-  await checkAuth(req);
-  const key = scoreKey();
-  const q = new URL(req.url).searchParams;
-  const { data, headers } = await forward(`${scoreServer()}/check?url=${encodeURIComponent(q.get("url") ?? "")}`, key, []);
   return new Response(data, { headers });
 });
