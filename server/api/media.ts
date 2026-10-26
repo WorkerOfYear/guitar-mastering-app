@@ -11,13 +11,16 @@ import { checkAuth, handle, HttpError } from "./lib.js";
 import { FILE_KEY, saveFile } from "./store.js";
 
 const TIMEOUT = 5 * 60_000;
+// The helpers' failures go out as 503: Cloudflare (the stand's tunnel) swaps a 502 or 504 for its own page, and the app
+// would show "Ошибка сервера 502" instead of the helper's message ("these scores are paid" and the like).
+const UNAVAILABLE = 503;
 
 async function forward(url: string, key: string, expose: string[]) {
   let r: Response;
   try {
     r = await fetch(url, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(TIMEOUT) });
   } catch {
-    throw new HttpError(502, "Сервер не отвечает — он запущен?");
+    throw new HttpError(UNAVAILABLE, "Сервер не отвечает — он запущен?");
   }
   if (!r.ok) {
     const body = await r.text();
@@ -28,7 +31,8 @@ async function forward(url: string, key: string, expose: string[]) {
       /* not JSON */
     }
     // 401 from the helper means a wrong KEY in our .env, not a signed-out user.
-    throw new HttpError(r.status === 401 ? 502 : r.status, r.status === 401 ? "Ключ сервера не совпал — проверь audio.env / score.env" : error);
+    if (r.status === 401) throw new HttpError(UNAVAILABLE, "Ключ сервера не совпал — проверь audio.env / score.env");
+    throw new HttpError(r.status >= 500 ? UNAVAILABLE : r.status, error);
   }
   const headers: Record<string, string> = { "Content-Type": r.headers.get("content-type") || "application/octet-stream", "Cache-Control": "no-store" };
   for (const h of expose) {
