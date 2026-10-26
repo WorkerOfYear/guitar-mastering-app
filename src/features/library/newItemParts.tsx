@@ -55,7 +55,23 @@ export function ScoreFields({
         </FileField>
       </div>
       <div hidden={mode !== "search"}>
-        <TabSearch query={query} auto={auto} picked={links} onToggle={(url) => onLinks(links.includes(url) ? links.filter((u) => u !== url) : [...links, url])} />
+        <TabSearch
+          query={query}
+          auto={auto}
+          picked={links}
+          onToggle={(url) => onLinks(links.includes(url) ? links.filter((u) => u !== url) : [...links, url])}
+          onScore={(data, name, url) => {
+            onFile(new File([data], name));
+            if (!links.includes(url)) onLinks([...links, url]);
+          }}
+        />
+        {file && (
+          <div className="mt-2">
+            <FileField icon={<FileMusic />} file={file} accept={TAB_ACCEPT} onFile={onFile} onClear={() => onFile(null)}>
+              {file.name}
+            </FileField>
+          </div>
+        )}
       </div>
     </>
   );

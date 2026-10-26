@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Download,
   FileMusic,
+  Globe,
   Grid3x3,
   Music2,
   Pencil,
@@ -38,6 +39,8 @@ import { cacheAudioFile, deleteAudioFile, deleteInstagramVideo, deleteTabFile, l
 import { audioBlob, downloadAudio } from "@/lib/audioType";
 import { AudioSync, detectSync } from "./AudioSync";
 import { SectionStrip } from "./SectionStrip";
+import { TabSearch } from "./TabSearch";
+import { songQuery } from "@/lib/titles";
 import { fetchVideoAudio } from "@/lib/youtubeAudio";
 import { useAuth } from "@/store/auth";
 import { fetchScore, museScoreLink, type ScoreFormat } from "@/lib/scoreDownload";
@@ -348,6 +351,29 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
     await setTab(await f.arrayBuffer(), f.name);
   };
 
+  // Tabs and scores found online for this item: links are attached, a MuseScore score can go straight into the tabs.
+  const [findScore, setFindScore] = useState(false);
+  const toggleLink = (url: string) => updateItem(item.id, { links: item.links.includes(url) ? item.links.filter((u) => u !== url) : [...item.links, url] });
+  const findRow = findScore ? (
+    <div className="space-y-2 rounded-2xl bg-surface-2/50 p-3">
+      <TabSearch
+        query={songQuery(item.title)}
+        auto
+        picked={item.links}
+        onToggle={toggleLink}
+        onScore={async (data, name, url) => {
+          await setTab(data, name);
+          if (!item.links.includes(url)) updateItem(item.id, { links: [...item.links, url] });
+        }}
+      />
+      <Button variant="ghost" size="sm" onClick={() => setFindScore(false)} className="w-full text-muted">
+        Скрыть поиск
+      </Button>
+    </div>
+  ) : (
+    <AddRow icon={<Globe />} title="Найти ноты в интернете" sub="Songsterr, UG, MuseScore" onClick={() => setFindScore(true)} />
+  );
+
   const removeFile = async () => {
     await deleteTabFile(item.id);
     setFile(null);
@@ -570,6 +596,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
       ) : (
         <AddRow icon={<FileMusic />} title="Добавить табы" sub="Guitar Pro или MusicXML" accept={TAB_ACCEPT} onFile={(f) => void upload(f)} />
       )}
+      {findRow}
 
       {/* The neck: a scale or a chord shown on the fretboard */}
       {scoreOnly ? null : item.theory && !editBoard ? (
@@ -782,6 +809,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
         )}
         {strip}
         {fileRow}
+        {!item.tabFile && !item.tab && findRow}
         {audioFileInput}
         {audioRow || bindMenu}
         {museRow}
