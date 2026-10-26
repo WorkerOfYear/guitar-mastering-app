@@ -36,6 +36,16 @@ export interface ScoreInfo {
   tracks: string[];
   /** Section markers from the file (Intro, Solo…), with their first bar (1-based) */
   sections: { title: string; bar: number }[];
+  /** Each bar's length in ms at the tempo written in the tab */
+  barMs: number[];
+}
+
+function barLengths(s: alphaTab.model.Score) {
+  let tempo = s.tempo;
+  return s.masterBars.map((m) => {
+    tempo = m.tempoAutomations[0]?.value ?? tempo;
+    return ((m.timeSignatureNumerator * 4) / m.timeSignatureDenominator) * (60_000 / tempo);
+  });
 }
 
 interface Props {
@@ -157,6 +167,7 @@ export default function TabPlayer({
         bars: s.masterBars.length,
         tracks: s.tracks.map((t) => t.name || `Дорожка ${t.index + 1}`),
         sections: s.masterBars.flatMap((m, i) => (m.section ? [{ title: m.section.text || m.section.marker, bar: i + 1 }] : [])),
+        barMs: barLengths(s),
       });
     });
     a.playerReady.on(() => setReady(true));

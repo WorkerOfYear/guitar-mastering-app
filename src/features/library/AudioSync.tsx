@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Eye, EyeOff, LoaderCircle, Minus, Plus, Timer, TriangleAlert, WandSparkles } from "lucide-react";
+import { Eye, EyeOff, LoaderCircle, Minus, Play, Plus, Square, Timer, TriangleAlert, WandSparkles } from "lucide-react";
 import { Button, IconButton, Input } from "@/components/ui";
 import { audioBlob } from "@/lib/audioType";
 import { formatClockMs, parseClock } from "@/lib/clock";
@@ -14,6 +14,8 @@ interface Props {
   /** Section markers of the tab, offered as sync candidates */
   sections: { title: string; bar: number }[];
   bars: number;
+  /** Each bar's length at the tab's tempo, ms: how long ▶ plays when the next bar isn't marked */
+  barMs: number[];
 }
 
 /** Automatic alignment of the recording with the tab: what to store on the item and what to tell the user. */
@@ -39,7 +41,7 @@ export async function detectSync(tab: ArrayBuffer, audio: ArrayBuffer) {
 }
 
 /** Mark where bars start in the recording: listen, and tap ⏱ when the bar begins. */
-export function AudioSync({ item, audio, tab, sections, bars }: Props) {
+export function AudioSync({ item, audio, tab, sections, bars, barMs }: Props) {
   const { updateItem } = useData();
   const player = useRef<HTMLAudioElement>(null);
   const [url, setUrl] = useState("");
@@ -78,6 +80,47 @@ export function AudioSync({ item, audio, tab, sections, bars }: Props) {
   const setPoint = (bar: number, ms: number | null) => save([...points.filter((p) => p.bar !== bar || p.occurrence), ...(ms === null ? [] : [{ bar, ms }])]);
   const now = () => Math.round((player.current?.currentTime ?? 0) * 1000);
 
+  // Where the next bar starts in the recording: its mark, or the bar's length in the tab, stretched like the
+  // recording between the marks around it (a live take is rarely at the tab's tempo).
+  const nextMs = (bar: number, ms: number) => {
+    const firsts = points.filter((x) => !x.occurrence);
+    const next = firsts.find((x) => x.bar === bar + 1);
+    if (next && next.ms > ms) return next.ms;
+    const tabAt = (b: number) => barMs.slice(0, b - 1).reduce((a, x) => a + x, 0);
+    const before = [...firsts].reverse().find((x) => x.bar <= bar);
+    const after = firsts.find((x) => x.bar > bar);
+    const [a, b] = before && after ? [before, after] : firsts.length > 1 ? [firsts.at(-2)!, firsts.at(-1)!] : [null, null];
+    const tabSpan = a && b ? tabAt(b.bar) - tabAt(a.bar) : 0;
+    const scale = a && b && tabSpan > 0 && b.ms > a.ms ? (b.ms - a.ms) / tabSpan : 1;
+    return ms + (barMs[bar - 1] ?? 2000) * scale;
+  };
+
+  // ▶ next to a mark: plays from it to the next bar, to hear whether the mark falls on the downbeat.
+  const [playingBar, setPlayingBar] = useState<number | null>(null);
+  const stopAt = useRef(0);
+  const frame = useRef(0);
+  const stop = () => {
+    cancelAnimationFrame(frame.current);
+    player.current?.pause();
+    setPlayingBar(null);
+  };
+  const playBar = (bar: number, ms: number) => {
+    const el = player.current;
+    if (!el) return;
+    if (playingBar === bar) return stop();
+    cancelAnimationFrame(frame.current);
+    stopAt.current = nextMs(bar, ms) / 1000;
+    el.currentTime = ms / 1000;
+    void el.play();
+    setPlayingBar(bar);
+    const tick = () => {
+      if (el.paused || el.currentTime >= stopAt.current) return stop();
+      frame.current = requestAnimationFrame(tick);
+    };
+    frame.current = requestAnimationFrame(tick);
+  };
+  useEffect(() => () => cancelAnimationFrame(frame.current), []);
+
   return (
     <div className="space-y-2">
       {url && <audio ref={player} src={url} controls preload="metadata" className="w-full" />}
@@ -99,11 +142,14 @@ export function AudioSync({ item, audio, tab, sections, bars }: Props) {
       {candidates.map((bar) => {
         const p = points.find((x) => x.bar === bar && !x.occurrence);
         return (
-          <div key={bar} className="flex items-center gap-1.5">
+          <div key={bar} className="flex items-center gap-1">
             <div className="min-w-0 flex-1 text-sm">
               <div className="truncate font-semibold">Такт {bar}</div>
               {titleOf(bar) && <div className="truncate text-xs text-muted">{titleOf(bar)}</div>}
             </div>
+            <Button variant="secondary" size="icon-sm" className="size-8 rounded-lg" aria-label="−0,1 с" title="−0,1 с" onClick={() => p && setPoint(bar, Math.max(0, p.ms - 100))} disabled={!p}>
+              <Minus className="size-3.5" />
+            </Button>
             <input
               key={p?.ms ?? "none"}
               defaultValue={p ? formatClockMs(p.ms) : ""}
@@ -112,14 +158,14 @@ export function AudioSync({ item, audio, tab, sections, bars }: Props) {
               onBlur={(e) => setPoint(bar, e.target.value.trim() ? parseClock(e.target.value) : null)}
               className="h-11 w-20 rounded-xl border border-line bg-surface px-2 text-center text-sm tabular-nums outline-none focus:border-accent"
             />
-            <IconButton label="−0,1 с" onClick={() => p && setPoint(bar, Math.max(0, p.ms - 100))} disabled={!p}>
-              <Minus />
-            </IconButton>
-            <IconButton label="+0,1 с" onClick={() => p && setPoint(bar, p.ms + 100)} disabled={!p}>
-              <Plus />
-            </IconButton>
+            <Button variant="secondary" size="icon-sm" className="size-8 rounded-lg" aria-label="+0,1 с" title="+0,1 с" onClick={() => p && setPoint(bar, p.ms + 100)} disabled={!p}>
+              <Plus className="size-3.5" />
+            </Button>
             <IconButton label="Отметить сейчас" onClick={() => setPoint(bar, now())} className="bg-accent/15 text-accent">
               <Timer />
+            </IconButton>
+            <IconButton label={playingBar === bar ? "Остановить" : "Сыграть такт"} onClick={() => p && playBar(bar, p.ms)} disabled={!p}>
+              {playingBar === bar ? <Square /> : <Play />}
             </IconButton>
           </div>
         );

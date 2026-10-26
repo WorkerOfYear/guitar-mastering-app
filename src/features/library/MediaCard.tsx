@@ -731,7 +731,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
         <MatchWarnings warnings={item.audioWarnings} />
         {showSync && file && audioData && (
           <div className="rounded-2xl bg-surface-2/40 p-3">
-            <AudioSync item={item} audio={audioData} tab={file} sections={score?.sections ?? []} bars={score?.bars ?? 1} />
+            <AudioSync item={item} audio={audioData} tab={file} sections={score?.sections ?? []} bars={score?.bars ?? 1} barMs={score?.barMs ?? []} />
           </div>
         )}
       </div>
@@ -887,7 +887,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
                 </button>
                 {showSync && (
                   <div className="mt-1 rounded-2xl bg-surface-2/40 p-3">
-                    <AudioSync item={item} audio={audioData} tab={file} sections={score?.sections ?? []} bars={score?.bars ?? 1} />
+                    <AudioSync item={item} audio={audioData} tab={file} sections={score?.sections ?? []} bars={score?.bars ?? 1} barMs={score?.barMs ?? []} />
                   </div>
                 )}
               </div>
