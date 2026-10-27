@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { LoaderCircle, Minus, Play, Plus, Square, Timer, Trash2, TriangleAlert, WandSparkles } from "lucide-react";
 import { Button, IconButton, Input } from "@/components/ui";
 import { audioBlob } from "@/lib/audioType";
+import { misplacedMarks } from "@/lib/backingTrack";
 import { formatClockMs, parseClock } from "@/lib/clock";
 import { useData } from "@/store/data";
 import type { Item, SyncPoint } from "@/shared/types";
@@ -79,8 +81,23 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview }
     updateItem(item.id, { audioSync: next.filter((p) => p.ms >= 0).sort((a, b) => a.bar - b.bar || (a.occurrence ?? 0) - (b.occurrence ?? 0)) });
   const same = (p: SyncPoint, q: Pick<SyncPoint, "bar" | "occurrence">) => p.bar === q.bar && (p.occurrence ?? 0) === (q.occurrence ?? 0);
   /** Sets (or with null removes) one mark: a bar's first pass, or a later one with `occurrence`. */
-  const setMark = (mark: Pick<SyncPoint, "bar" | "occurrence">, ms: number | null) =>
-    save([...points.filter((p) => !same(p, mark)), ...(ms === null ? [] : [{ ...mark, ms }])]);
+  const setMark = (mark: Pick<SyncPoint, "bar" | "occurrence">, ms: number | null) => {
+    const next = [...points.filter((p) => !same(p, mark)), ...(ms === null ? [] : [{ bar: mark.bar, ...(mark.occurrence ? { occurrence: mark.occurrence } : {}), ms }])];
+    // A bar can't start before the bars ahead of it or after the ones behind it.
+    if (ms !== null && misplacedMarks(next).some((p) => same(p, mark))) {
+      const firsts = points.filter((p) => !p.occurrence && p.bar !== mark.bar);
+      const before = firsts.filter((p) => p.bar < mark.bar).at(-1);
+      const after = firsts.find((p) => p.bar > mark.bar);
+      return toast.error(`Такт ${mark.bar} не может начинаться на ${formatClockMs(ms)}`, {
+        description: [before && `такт ${before.bar} — на ${formatClockMs(before.ms)}`, after && `такт ${after.bar} — на ${formatClockMs(after.ms)}`]
+          .filter(Boolean)
+          .join(", "),
+      });
+    }
+    save(next);
+  };
+  // Marks put at the wrong moment earlier: not used for playback, offered for removal.
+  const misplaced = misplacedMarks(points);
   const now = () => Math.round((player.current?.currentTime ?? 0) * 1000);
   const current = points.find((p) => markKey(p) === selected) ?? null;
   // Bar 1 and section starts that have no mark yet: one tap marks them at the playing moment.
@@ -145,6 +162,27 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview }
           <TriangleAlert className="mt-0.5 size-4 shrink-0 text-guide" />
           <span>Отметки посчитаны старой версией — из-за этого после повтора такты расходятся с записью. Нажми «Определить автоматически» ещё раз.</span>
         </p>
+      )}
+      {misplaced.length > 0 && (
+        <div className="space-y-2 rounded-xl bg-guide/15 p-2.5 text-sm">
+          <p className="flex gap-2">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-guide" />
+            <span>
+              {misplaced.map((p) => `такт ${p.bar} стоит на ${formatClockMs(p.ms)}`).join(", ")} — не по порядку с соседними тактами. Ноты идут без{" "}
+              {misplaced.length > 1 ? "этих отметок" : "этой отметки"}; поставь {misplaced.length > 1 ? "их" : "её"} заново или убери.
+            </span>
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {misplaced.map((p) => (
+              <Button key={markKey(p)} variant="secondary" size="sm" onClick={() => setSelected(markKey(p))} className="h-8 rounded-lg px-2.5 text-xs">
+                Показать такт {p.bar}
+              </Button>
+            ))}
+            <Button variant="secondary" size="sm" onClick={() => save(points.filter((p) => !misplaced.includes(p)))} className="h-8 rounded-lg px-2.5 text-xs">
+              <Trash2 className="size-3.5" /> Убрать {misplaced.length > 1 ? "их" : "её"}
+            </Button>
+          </div>
+        </div>
       )}
       <p className="text-xs text-muted">
         Линии — начала тактов в записи. Потяни линию, чтобы поставить её на сильную долю: на нотах видно, куда она попадает. Тап по записи —

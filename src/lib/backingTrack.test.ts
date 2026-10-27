@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as alphaTab from "@coderline/alphatab";
-import { applyBackingTrack } from "./backingTrack";
+import { applyBackingTrack, misplacedMarks } from "./backingTrack";
 import { formatClockMs, parseClock } from "./clock";
 
 const tex = `\\tempo 120 . \\track "G" \\staff {tabs} \\ts 4 4 :4 1.1 1.1 1.1 1.1 | 1.1 1.1 1.1 1.1 | 1.1 1.1 1.1 1.1 |`;
@@ -37,6 +37,23 @@ describe("backing track", () => {
     expect(points[0].syncTime).toBe(1000);
     expect(points[0].syncBpm).toBeCloseTo(96, 0); // 120 × 4/5
     expect(points[1].syncTime).toBe(6000);
+  });
+  it("finds marks out of order and leaves them out", () => {
+    // Bar 2 marked at a moment long before bar 1 (⏱ pressed while the recording was elsewhere).
+    const points = [
+      { bar: 1, ms: 1000 },
+      { bar: 2, ms: 300 },
+      { bar: 3, ms: 5000 },
+      { bar: 1, occurrence: 1, ms: 100 }, // a later pass isn't judged
+    ];
+    expect(misplacedMarks([{ bar: 1, ms: 0 }, { bar: 2, ms: 2000 }])).toEqual([]);
+    // As in a real song: a long run of marks in order and one that isn't.
+    const song = [0, 2000, 4000, 300, 8000, 10000].map((ms, i) => ({ bar: i + 1, ms }));
+    expect(misplacedMarks(song)).toEqual([{ bar: 4, ms: 300 }]);
+    const score = load();
+    const used = applyBackingTrack(score, null, points);
+    expect(used.filter((p) => !p.occurrence).length).toBe(2);
+    expect(used.some((p) => p.bar === 3)).toBe(true);
   });
   it("parses and formats times", () => {
     expect(parseClock("1:23.4")).toBe(83400);
