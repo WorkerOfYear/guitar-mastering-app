@@ -29,6 +29,7 @@ import {
 import { Badge, Button, Card, Input, Segmented, buttonVariants } from "@/components/ui";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
 import { DEFAULT_BOARD, TheoryPicker } from "@/components/fretboard/TheoryPicker";
 import { choiceOf, theoryView } from "@/music/theoryView";
@@ -706,16 +707,18 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
           sub={missing.audio ? "загрузи на этом устройстве" : hasTab ? (useRecording ? (synced ? "табы идут за записью" : "без синхронизации") : "сейчас играет синтезатор") : "запись"}
           actions={
             <>
+              {/* On: the notes play with this sound; off: with the synthesizer. */}
               {file && audioData && (
-                <IconAction
-                  label={useRecording ? "Играть синтезатором" : "Играть с записью"}
-                  onClick={() => {
+                <Switch
+                  aria-label="Играть ноты с этим звуком"
+                  title={useRecording ? "Ноты играют с этим звуком" : "Ноты играют синтезатором"}
+                  checked={useRecording}
+                  onCheckedChange={(v) => {
                     setPlaying(false);
-                    setUseRecording(!useRecording);
+                    setUseRecording(v);
                   }}
-                >
-                  {useRecording ? <Piano className="size-4" /> : <Headphones className="size-4" />}
-                </IconAction>
+                  className="mx-1"
+                />
               )}
               {file && audioData && (
                 <IconAction label="Поправить синхронизацию" onClick={() => setShowSync(!showSync)}>
