@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { LoaderCircle, Minus, Play, Plus, Square, Timer, Trash2, TriangleAlert, WandSparkles } from "lucide-react";
 import { Button, IconButton, Input } from "@/components/ui";
 import { audioBlob } from "@/lib/audioType";
-import { misplacedMarks } from "@/lib/backingTrack";
+import { misplacedMarks, shortBars, SKIPPED_MS } from "@/lib/backingTrack";
 import { formatClockMs, parseClock } from "@/lib/clock";
 import { useData } from "@/store/data";
 import type { Item, SyncPoint } from "@/shared/types";
@@ -98,6 +98,16 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview }
   };
   // Marks put at the wrong moment earlier: not used for playback, offered for removal.
   const misplaced = misplacedMarks(points);
+  // Bars the recording rushes through: most likely not in it (the tab repeats a riff once more, say).
+  const missing = shortBars(points, barMs).filter((r) => r.ms >= SKIPPED_MS);
+  const markOf = (bar: number) => points.find((p) => p.bar === bar && !p.occurrence);
+  /** The notes jump over bars from…to: they get a few ms right before the next bar's mark. */
+  const skip = (from: number, to: number) => {
+    const next = markOf(to + 1);
+    if (!next) return;
+    const marks = [...Array(to - from + 1)].map((_, i) => ({ bar: from + i, ms: next.ms - (to - from + 1 - i) * 10 }));
+    save([...points.filter((p) => p.occurrence || p.bar < from || p.bar > to), ...marks]);
+  };
   const now = () => Math.round((player.current?.currentTime ?? 0) * 1000);
   const current = points.find((p) => markKey(p) === selected) ?? null;
   // Bar 1 and section starts that have no mark yet: one tap marks them at the playing moment.
@@ -132,15 +142,17 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview }
     player.current?.pause();
     setPlayingBar(null);
   };
-  const playBar = (p: SyncPoint) => {
+  const playBar = (p: SyncPoint) => playSpan(markKey(p), p.ms, nextMs(p));
+  /** Plays the recording from…to (ms); `key` marks which button plays, pressing it again stops. */
+  const playSpan = (key: string, from: number, to: number) => {
     const el = player.current;
     if (!el) return;
-    if (playingBar === markKey(p)) return stop();
+    if (playingBar === key) return stop();
     cancelAnimationFrame(frame.current);
-    stopAt.current = nextMs(p) / 1000;
-    el.currentTime = p.ms / 1000;
+    stopAt.current = to / 1000;
+    el.currentTime = Math.max(0, from) / 1000;
     void el.play();
-    setPlayingBar(markKey(p));
+    setPlayingBar(key);
     const tick = () => {
       if (el.paused || el.currentTime >= stopAt.current) return stop();
       frame.current = requestAnimationFrame(tick);
@@ -184,6 +196,36 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview }
           </div>
         </div>
       )}
+      {missing.map((r) => {
+        const bars = r.from === r.to ? `Такт ${r.from}` : `Такты ${r.from}–${r.to}`;
+        const key = `missing:${r.from}`;
+        // From the bar before to the bar after: the place with some context around it.
+        const from = markOf(r.from - 1)?.ms ?? markOf(r.from)?.ms ?? 0;
+        const after = markOf(r.to + 1);
+        const to = (after && markOf(r.to + 2)?.ms) ?? (after ? after.ms + 2000 : from + 6000);
+        return (
+          <div key={key} className="space-y-2 rounded-xl bg-guide/15 p-2.5 text-sm">
+            <p className="flex gap-2">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0 text-guide" />
+              <span>
+                {bars} в записи — {(r.ms / 1000).toFixed(1).replace(".", ",")} с, а в её темпе {r.from === r.to ? "должен" : "должны"} занимать ~
+                {(r.expectedMs / 1000).toFixed(1).replace(".", ",")} с. Похоже, в табе здесь лишние такты (например, рифф повторён лишний раз), которых
+                нет в записи, — или отметки тут сбились. Послушай: если в записи их нет, пропусти их в нотах.
+              </span>
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              <Button variant="secondary" size="sm" onClick={() => playSpan(key, from, to)} className="h-8 rounded-lg px-2.5 text-xs">
+                {playingBar === key ? <Square className="size-3.5" /> : <Play className="size-3.5" />} Послушать это место
+              </Button>
+              {after && (
+                <Button variant="secondary" size="sm" onClick={() => skip(r.from, r.to)} className="h-8 rounded-lg px-2.5 text-xs">
+                  Пропустить в нотах: с {r.from - 1} сразу на {r.to + 1}
+                </Button>
+              )}
+            </div>
+          </div>
+        );
+      })}
       <p className="text-xs text-muted">
         Линии — начала тактов в записи. Потяни линию, чтобы поставить её на сильную долю: на нотах видно, куда она попадает. Тап по записи —
         перемотка, по пустому месту можно листать (с разгона — по инерции), на тачпаде — свайп вбок, щипок — масштаб.

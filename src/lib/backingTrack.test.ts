@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as alphaTab from "@coderline/alphatab";
-import { applyBackingTrack, misplacedMarks } from "./backingTrack";
+import { applyBackingTrack, misplacedMarks, shortBars } from "./backingTrack";
 import { formatClockMs, parseClock } from "./clock";
 
 const tex = `\\tempo 120 . \\track "G" \\staff {tabs} \\ts 4 4 :4 1.1 1.1 1.1 1.1 | 1.1 1.1 1.1 1.1 | 1.1 1.1 1.1 1.1 |`;
@@ -54,6 +54,14 @@ describe("backing track", () => {
     const used = applyBackingTrack(score, null, points);
     expect(used.filter((p) => !p.occurrence).length).toBe(2);
     expect(used.some((p) => p.bar === 3)).toBe(true);
+  });
+  it("finds bars the recording doesn't play", () => {
+    // 2 s bars in the tab, 2.06 s in the recording; bars 9–10 squeezed into 1 s (a riff the band plays once less).
+    const times = [...Array(9)].map((_, i) => i * 2060);
+    const points = [...times, 8 * 2060 + 740, 8 * 2060 + 1040, ...[...Array(8)].map((_, i) => 8 * 2060 + 1040 + (i + 1) * 2060)].map((ms, i) => ({ bar: i + 1, ms }));
+    const barMs = Array(20).fill(2000);
+    expect(shortBars(points, barMs)).toEqual([{ from: 9, to: 10, ms: 1040, expectedMs: 4120 }]);
+    expect(shortBars(points.slice(0, 9), barMs)).toEqual([]);
   });
   it("parses and formats times", () => {
     expect(parseClock("1:23.4")).toBe(83400);

@@ -28,6 +28,56 @@ export function misplacedMarks(points: SyncPoint[]): SyncPoint[] {
   return firsts.filter((_, i) => !keep.has(i));
 }
 
+/** Bars much shorter in the recording than the tab makes them: there are none of them in the recording, most likely. */
+export interface ShortBars {
+  /** First and last bar of the run */
+  from: number;
+  to: number;
+  /** Their time in the recording and what it would be at the recording's tempo there, ms */
+  ms: number;
+  expectedMs: number;
+}
+
+// Shorter than this share of the time a bar takes around it: not played in the recording.
+const SHORT = 0.5;
+// Run up to here, ms: bars skipped on purpose ("Пропустить в нотах"), not flagged again.
+export const SKIPPED_MS = 100;
+
+/**
+ * Runs of bars that the recording passes much faster than its own tempo around them (the tab plays a riff once more
+ * than the band, say). The tempo is the recording's: time per tab-millisecond over the 8 marked spans on each side.
+ * `barMs`: each bar's length in the tab. Only first passes, misplaced marks left out.
+ */
+export function shortBars(points: SyncPoint[], barMs: number[]): ShortBars[] {
+  const misplaced = new Set(misplacedMarks(points));
+  const firsts = points.filter((p) => !p.occurrence && !misplaced.has(p)).sort((a, b) => a.bar - b.bar);
+  const tabMs = (from: number, to: number) => barMs.slice(from - 1, to - 1).reduce((sum, x) => sum + x, 0);
+  const spans = firsts.slice(1).map((b, i) => {
+    const a = firsts[i];
+    const tab = tabMs(a.bar, b.bar);
+    return { a, b, rec: b.ms - a.ms, tab, rate: tab > 0 ? (b.ms - a.ms) / tab : 1 };
+  });
+  const runs: ShortBars[] = [];
+  spans.forEach((span, i) => {
+    if (span.tab <= 0) return;
+    const from = Math.max(0, i - 8);
+    const around = spans
+      .slice(from, i + 9)
+      .filter((_, j) => j !== i - from)
+      .map((x) => x.rate)
+      .sort((x, y) => x - y);
+    const rate = around.length ? around[around.length >> 1] : 1;
+    if (span.rate >= rate * SHORT) return;
+    const last = runs.at(-1);
+    if (last && last.to + 1 === span.a.bar) {
+      last.to = span.b.bar - 1;
+      last.ms += span.rec;
+      last.expectedMs += span.tab * rate;
+    } else runs.push({ from: span.a.bar, to: span.b.bar - 1, ms: span.rec, expectedMs: span.tab * rate });
+  });
+  return runs.map((r) => ({ ...r, ms: Math.round(r.ms), expectedMs: Math.round(r.expectedMs) }));
+}
+
 /**
  * Attach a recording to a score and tell alphaTab where bars start in it. Between sync points
  * alphaTab stretches its time axis, so a live recording that speeds up or slows down still lines up.
