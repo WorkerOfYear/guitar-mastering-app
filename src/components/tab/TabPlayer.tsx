@@ -190,26 +190,33 @@ export default function TabPlayer({
       cb.current.onProgress?.(bar + 1);
     });
     a.isLooping = true;
-    // A moment of the recording → a tick: through the bar marks (first passes), past the last one at the tab's tempo.
+    // A moment of the recording → a tick of the tab, the way alphaTab follows a backing track: through its sync
+    // points (tick ↔ time in the recording, repeats unrolled), past the last one at the recording's tempo there.
+    // `timePosition` won't do: it is time at the tab's own tempo, not in the recording.
+    // Regenerated only when the marks change (a drag asks many times a second).
+    let cached: { key: string; pts: ReturnType<typeof alphaTab.midi.MidiFileGenerator.generateSyncPoints> } | null = null;
     const tickAt = (ms: number) => {
       const s = score.current!;
-      const marks = (syncRef.current ?? []).filter((p) => !p.occurrence && s.masterBars[p.bar - 1]).sort((x, y) => x.ms - y.ms);
-      const pts = marks.length ? marks : [{ bar: 1, ms: 0 }];
+      const key = JSON.stringify(syncRef.current ?? []);
+      if (cached?.key !== key) {
+        // Without the recording the marks aren't on the score yet (repeats stay as written then).
+        if (!audio) applyBackingTrack(s, null, syncRef.current ?? []);
+        cached = { key, pts: alphaTab.midi.MidiFileGenerator.generateSyncPoints(s).sort((x, y) => x.syncTime - y.syncTime) };
+      }
+      const pts = cached.pts;
+      if (!pts.length) return 0;
       let i = 0;
-      while (i + 1 < pts.length && pts[i + 1].ms <= ms) i++;
+      while (i + 1 < pts.length && pts[i + 1].syncTime <= ms) i++;
       const [p, q] = [pts[i], pts[i + 1]];
-      const t = s.masterBars[p.bar - 1].start;
-      if (q && q.ms > p.ms) return Math.max(0, t + ((ms - p.ms) / (q.ms - p.ms)) * (s.masterBars[q.bar - 1].start - t));
-      return Math.max(0, t + ((ms - p.ms) * QUARTER_TICKS * s.tempo) / 60_000);
+      if (q && q.syncTime > p.syncTime) return p.synthTick + ((ms - p.syncTime) / (q.syncTime - p.syncTime)) * (q.synthTick - p.synthTick);
+      return p.synthTick + ((ms - p.syncTime) * QUARTER_TICKS * p.syncBpm) / 60_000;
     };
     if (control)
       control.current = {
         resume: () => a.play(),
         showTime: (ms) => {
           if (!score.current || a.playerState === alphaTab.synth.PlayerState.Playing) return;
-          // With the recording attached alphaTab maps its time itself, repeats included.
-          if (audio) a.timePosition = ms;
-          else a.tickPosition = tickAt(ms);
+          a.tickPosition = Math.max(0, Math.round(tickAt(ms)));
           a.scrollToCursor();
         },
       };
