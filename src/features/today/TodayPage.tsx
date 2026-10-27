@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { m } from "motion/react";
-import { ChevronRight, Dices, Library, ListChecks, Music, Play, PlayCircle, Plus, Video } from "lucide-react";
+import { ChevronRight, Dices, Library, ListChecks, Music, Play, PlayCircle, Plus, Shuffle, Video } from "lucide-react";
 import { Badge, Button, Card, Chip, ScrollRow } from "@/components/ui";
 import { BLOCK_ICON, IconTile } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/Placeholder";
@@ -10,6 +10,7 @@ import { buildPlan } from "@/features/session/plan";
 import { resolveProgression } from "@/music/improv";
 import { unitTitle } from "@/lib/progress";
 import { useData } from "@/store/data";
+import { useFree } from "@/store/free";
 import { currentPlan } from "@/store/plans";
 import { useSession } from "@/store/session";
 import { BLOCK_META, type Item } from "@/shared/types";
@@ -34,6 +35,7 @@ function MediaBadge({ item }: { item?: Item }) {
 export function TodayPage() {
   const data = useData();
   const { active, start } = useSession();
+  const freeActive = useFree((s) => !!s.active);
   const navigate = useNavigate();
   const [seed, setSeed] = useState(0);
   const chosen = currentPlan(data);
@@ -139,6 +141,11 @@ export function TodayPage() {
           <Button size="xl" onClick={begin} className="mt-3 w-full text-lg">
             <Play className="size-6" fill="currentColor" />
             Старт
+          </Button>
+          <Button asChild variant="secondary" size="lg" className="mt-2 w-full">
+            <Link to="/free">
+              <Shuffle className="size-5" /> {freeActive ? "Вернуться в свободный режим" : "Свободный режим"}
+            </Link>
           </Button>
         </>
       )}

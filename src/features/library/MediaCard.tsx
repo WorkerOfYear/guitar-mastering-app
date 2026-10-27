@@ -55,14 +55,14 @@ const SyncDialog = lazy(() => import("./SyncDialog"));
 
 /** Buttons lying on the tabs: 70% visible so the notes under them show, each solid on its own under the pointer,
  *  with keyboard focus or while open (the track list). */
-const ON_TAB = "opacity-70 transition-opacity duration-200 hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100";
+export const ON_TAB = "opacity-70 transition-opacity duration-200 hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100";
 
 /** The view switch is one button that steps tab → notes → both, marked the way music is: "TAB", a note, both. */
-const VIEW_NEXT = { tab: "score", score: "both", both: "tab" } as const;
+export const VIEW_NEXT = { tab: "score", score: "both", both: "tab" } as const;
 // The note and "TAB" are drawn the same height in every view, centred on one line, so switching doesn't jump.
 const TabMark = () => <span className="text-[13px] font-semibold leading-none">TAB</span>;
 const NoteMark = () => <Music2 className="!size-[15px]" />;
-const VIEW_META = {
+export const VIEW_META = {
   tab: { mark: <TabMark />, name: "Табы" },
   score: { mark: <NoteMark />, name: "Ноты" },
   both: {

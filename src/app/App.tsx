@@ -7,7 +7,7 @@ import { BeatFlash } from "@/components/metronome/MetronomePanel";
 import { Button } from "@/components/ui";
 import { Toaster } from "@/components/ui/sonner";
 import { TodayPage } from "@/features/today/TodayPage";
-import { BottomNav, SECTION_ROOTS, SectionsMenu } from "./Nav";
+import { BottomNav, SECTION_ROOTS, SectionsMenu, isPlayScreen } from "./Nav";
 import { Backdrop } from "./Backdrop";
 import { LoginPage } from "./LoginPage";
 import { signedIn, useAuth } from "@/store/auth";
@@ -26,6 +26,7 @@ const PlanEditorPage = page(() => import("@/features/settings/PlanBuilderPage"),
 const MetronomePage = page(() => import("@/features/metronome/MetronomePage"), "MetronomePage");
 const ImprovPage = page(() => import("@/features/improv/ImprovPage"), "ImprovPage");
 const SessionPage = page(() => import("@/features/session/SessionPage"), "SessionPage");
+const FreePage = page(() => import("@/features/session/FreePage"), "FreePage");
 
 // Section roots (bottom bar / "Разделы" menu) have no back button.
 const TAB_ROOTS = SECTION_ROOTS;
@@ -37,7 +38,7 @@ function TelegramBack() {
   useEffect(() => {
     if (!tg) return;
     const back = () => navigate(-1);
-    if (TAB_ROOTS.includes(location.pathname) || location.pathname === "/session") tg.BackButton.hide();
+    if (TAB_ROOTS.includes(location.pathname) || isPlayScreen(location.pathname)) tg.BackButton.hide();
     else tg.BackButton.show();
     tg.BackButton.onClick(back);
     return () => tg?.BackButton.offClick(back);
@@ -49,7 +50,7 @@ function TelegramBack() {
 function BackButton() {
   const location = useLocation();
   const navigate = useNavigate();
-  if (tg || TAB_ROOTS.includes(location.pathname) || location.pathname === "/session") return null;
+  if (tg || TAB_ROOTS.includes(location.pathname) || isPlayScreen(location.pathname)) return null;
   // Opened by a direct link there is no history to go back to — go home instead.
   const back = () => (location.key === "default" ? navigate("/") : navigate(-1));
   return (
@@ -77,10 +78,10 @@ function Shell() {
         <Backdrop />
         <TelegramBack />
         <main
-          className={`relative mx-auto max-w-3xl px-4 pt-[max(env(safe-area-inset-top),0.5rem)] ${location.pathname === "/session" ? "pb-10" : "pb-28 md:pb-10"}`}
+          className={`relative mx-auto max-w-3xl px-4 pt-[max(env(safe-area-inset-top),0.5rem)] ${isPlayScreen(location.pathname) ? "pb-10" : "pb-28 md:pb-10"}`}
         >
           {/* Wide screens: the sections menu always in the same spot, top right, on every screen (page titles leave room for it). */}
-          {location.pathname !== "/session" && (
+          {!isPlayScreen(location.pathname) && (
             <div className="absolute right-4 top-[calc(max(env(safe-area-inset-top),0.5rem)+0.5rem)] z-10 hidden md:block">
               <SectionsMenu />
             </div>
@@ -104,6 +105,7 @@ function Shell() {
                 <Route path="/metronome" element={<MetronomePage />} />
                 <Route path="/improv" element={<ImprovPage />} />
                 <Route path="/session" element={<SessionPage />} />
+                <Route path="/free" element={<FreePage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Suspense>

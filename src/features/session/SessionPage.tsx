@@ -1,17 +1,17 @@
-import { Suspense, lazy, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Suspense, lazy, useEffect, useRef, useState, type RefObject } from "react";
 import { Navigate } from "react-router-dom";
 import { AnimatePresence, m } from "motion/react";
-import { Check, ChevronsRight, Metronome, Minus, Pause, Play, Plus, SkipBack, SkipForward, Volume2, X } from "lucide-react";
-import { CompactMetronome } from "@/components/metronome/MetronomePanel";
-import { Button, IconButton, Progress, Segmented } from "@/components/ui";
+import { Check, ChevronRight, Headphones, Metronome, Minus, Pause, Piano, Play, Plus, Settings2, Volume2, X } from "lucide-react";
+import { MetronomePanel } from "@/components/metronome/MetronomePanel";
+import { Button, Chip, IconButton, ScrollRow, Segmented } from "@/components/ui";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BLOCK_ICON } from "@/components/ui/icons";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
 import { ItemBoard } from "@/components/fretboard/ItemBoard";
-import type { PlayerControl } from "@/components/tab/TabPlayer";
-import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
+import type { PlayerControl, ScoreInfo } from "@/components/tab/TabPlayer";
 import { audio } from "@/audio/player";
-import { signal, startMetronome, stopMetronome } from "@/audio/metronome";
+import { signal, stopMetronome, toggleMetronome } from "@/audio/metronome";
 import { haptic, tg } from "@/app/telegram";
 import { ImprovPanel } from "@/features/improv/ImprovPanel";
 import { formatClock, useNow, useWakeLock } from "@/lib/hooks";
@@ -19,117 +19,76 @@ import { localDate } from "@/lib/date";
 import { findSection, startingBpm, unitTitle } from "@/lib/progress";
 import { MATERIAL_LABEL, hasBlock, materialsOf, shownText, withMetronome, type Material } from "@/lib/library";
 import { RecordButton } from "@/features/library/Takes";
+import { ON_TAB, VIEW_META, VIEW_NEXT } from "@/features/library/MediaCard";
 import { loadAudioFile, loadTabFile } from "@/lib/tabFiles";
 import { audioBlob } from "@/lib/audioType";
-import { SourceSwitch } from "@/features/library/MediaCard";
+import { cn } from "@/lib/utils";
 import { useData } from "@/store/data";
 import { clampBpm, useMetronome } from "@/store/metronome";
+import { useSettings } from "@/store/settings";
 import { blockSeconds, plannedSeconds, useSession } from "@/store/session";
 import { BLOCK_META, type Item, type PlanEntry } from "@/shared/types";
 import { EntryCard } from "./EntryCard";
-import { ResultSheet } from "./ResultSheet";
 import { SessionSummary } from "./SessionSummary";
-import { entrySlots, slotAt, slotStart } from "./slots";
 
 const TabPlayer = lazy(() => import("@/components/tab/TabPlayer"));
 
-type Phase = "countdown" | "play" | "paused";
-const COUNT_ENTRY = 3;
-const COUNT_BLOCK = 5;
-/** The tab takes the screen between the header and the tempo/transport bars. */
-const TAB_HEIGHT = "max(16rem, calc(100dvh - 21rem))";
+/** The tab takes the screen under the header. */
+const TAB_HEIGHT = "max(16rem, calc(100dvh - 18rem))";
 
-/** Click for the 3-2-1 count. */
-function tick(accent = false) {
-  const { ctx, out } = audio();
-  const t = ctx.currentTime + 0.01;
-  const osc = ctx.createOscillator();
-  const env = ctx.createGain();
-  osc.frequency.value = accent ? 1760 : 1175;
-  env.gain.setValueAtTime(0.0001, t);
-  env.gain.exponentialRampToValueAtTime(0.9, t + 0.002);
-  env.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
-  osc.connect(env).connect(out);
-  osc.start(t);
-  osc.stop(t + 0.08);
-}
-
-/** Hands-free session: blocks and exercises switch on their own, each starts after a count-in. */
+/**
+ * A planned session: starts at once, one exercise after another as you tap "Дальше", or any block picked on top.
+ * The block's clock beeps when its time is up and keeps counting until you move on.
+ * Videos and notes start only when you press their play.
+ */
 export function SessionPage() {
   const session = useSession();
   const { active, finished } = session;
   const data = useData();
   const now = useNow(250, !!active);
-  const [phase, setPhase] = useState<Phase>("countdown");
-  const [count, setCount] = useState(COUNT_BLOCK);
   const [blocked, setBlocked] = useState(false);
-  const [sheet, setSheet] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  const [metronome, setMetronome] = useState(false);
   const control = useRef<PlayerControl | null>(null);
   useWakeLock(!!active);
 
   const block = active?.blocks[active.block];
+  const index = block ? Math.min(active!.entry, Math.max(0, block.entries.length - 1)) : 0;
+  const entry: PlanEntry | undefined = block?.entries[index];
+  const item = entry ? data.items.find((i) => i.id === entry.itemId) : undefined;
+  const entryKey = active ? `${active.id}:${active.block}:${index}` : "";
+  const isLast = !!active && active.block === active.blocks.length - 1;
+  const lastEntry = !block || index >= block.entries.length - 1;
   const planned = active ? plannedSeconds(active, active.block) : 0;
   const spent = active ? blockSeconds(active, active.block, now) : 0;
-  const slots = block ? entrySlots(block, data.items, planned) : [0];
-  const slot = slotAt(slots, spent);
-  const entry: PlanEntry | undefined = block?.entries[slot.index];
-  const item = entry ? data.items.find((i) => i.id === entry.itemId) : undefined;
-  const slotKey = active ? `${active.id}:${active.block}:${slot.index}` : "";
-  const isLast = !!active && active.block === active.blocks.length - 1;
-  const isFirstOfBlock = slot.index === 0;
+  const over = spent >= planned;
+  const running = !!active && active.runningSince !== null;
 
-  // New exercise or block → pause the clock, count in, then play.
-  const [countKey, setCountKey] = useState(0);
+  // A new exercise opens at its working tempo; the rhythm is the player's choice on the metronome.
   useEffect(() => {
     if (!active) return;
     setBlocked(false);
-    stopMetronome();
     if (entry) {
       const it = data.items.find((i) => i.id === entry.itemId);
-      // Only the tempo: the rhythm is the player's choice on the metronome, it can change within an exercise.
       useMetronome.getState().set({ bpm: startingBpm(data.log, it, entry, localDate()) });
     }
-    if (phase === "paused") return;
-    setCount(isFirstOfBlock ? COUNT_BLOCK : COUNT_ENTRY);
-    setPhase("countdown");
-    session.pause();
-    setCountKey((k) => k + 1);
-  }, [slotKey]);
+  }, [entryKey]);
 
+  // The block's time is up: one signal, the clock goes on. A block already over when the screen opens stays quiet.
+  const blockKey = active ? `${active.id}:${active.block}` : "";
+  const signalled = useRef(new Set<string>());
+  const seen = useRef(false);
   useEffect(() => {
-    if (phase !== "countdown") return;
-    if (count <= 0) {
-      session.resume();
-      setPhase("play");
-      return;
-    }
-    if (count <= 3) tick(count === 1);
-    const t = setTimeout(() => setCount((c) => c - 1), 1000);
-    return () => clearTimeout(t);
-  }, [phase, count, countKey]);
-
-  // An exercise with several materials (video, tab, neck) shows one at a time; each new exercise opens on its first.
-  const materials = item ? materialsOf(item) : [];
-  const [picked, setPicked] = useState<{ slot: string; material: Material } | null>(null);
-  const material = picked?.slot === slotKey && materials.includes(picked.material) ? picked.material : materials[0];
-
-  // Improvisation, and exercises with the metronome block while nothing else plays (just the card or the neck).
-  const usesMetronome = !!block && (block.kind === "improv" || (!!item && (!material || material === "board") && withMetronome(item)));
-  useEffect(() => {
-    if (phase === "play" && usesMetronome) startMetronome();
-    else stopMetronome();
-  }, [phase, usesMetronome, slotKey]);
-
-  // End of the block → next block (or the summary).
-  useEffect(() => {
-    if (!active || phase !== "play" || spent < planned) return;
+    if (!active || !over || signalled.current.has(blockKey)) return;
+    signalled.current.add(blockKey);
+    if (!seen.current) return;
     signal();
     navigator.vibrate?.([200, 100, 200]);
     tg?.HapticFeedback?.impactOccurred("heavy");
-    if (isLast) finish();
-    else session.goToBlock(active.block + 1);
-  }, [phase, spent >= planned]);
+  }, [blockKey, over]);
+  useEffect(() => {
+    seen.current = true;
+  }, []);
 
   useEffect(() => () => stopMetronome(), []);
 
@@ -148,91 +107,81 @@ export function SessionPage() {
 
   const togglePause = () => {
     haptic();
-    if (phase === "paused") {
-      setCount(COUNT_ENTRY);
-      setPhase("countdown");
-      setCountKey((k) => k + 1);
-    } else {
-      session.pause();
-      setPhase("paused");
-    }
+    if (running) session.pause();
+    else session.resume();
   };
-  const skip = () => {
+  const next = () => {
     haptic();
-    if (slot.index < slots.length - 1) session.seek(slotStart(slots, slot.index + 1));
+    if (!lastEntry) session.goToEntry(index + 1);
     else if (isLast) finish();
     else session.goToBlock(active.block + 1);
   };
-  // Back: to the start of this exercise, or (right after it began) to the previous one.
-  const back = () => {
-    haptic();
-    if (spent - slot.start > 5) session.seek(slot.start);
-    else if (slot.index > 0) session.seek(slotStart(slots, slot.index - 1));
-    else if (active.block > 0) session.goToBlock(active.block - 1);
-    else session.seek(0);
-  };
 
-  const playing = phase === "play";
-  const nextTitle =
-    slot.index < block.entries.length - 1
-      ? unitTitle(
-          data.items.find((i) => i.id === block.entries[slot.index + 1].itemId),
-          block.entries[slot.index + 1].sectionId,
-        )
-      : !isLast
-        ? BLOCK_META[active.blocks[active.block + 1].kind].title
-        : "Конец занятия";
+  const nextTitle = !lastEntry
+    ? unitTitle(
+        data.items.find((i) => i.id === block.entries[index + 1].itemId),
+        block.entries[index + 1].sectionId,
+      )
+    : !isLast
+      ? BLOCK_META[active.blocks[active.block + 1].kind].title
+      : "Конец занятия";
   // Section first: "Intro — Technical Difficulties" stays readable when truncated.
   const section = findSection(item, entry?.sectionId);
-  const BlockIcon = BLOCK_ICON[block.kind];
   const title = block.kind === "improv" ? "Импровизация" : section ? `${section.title} — ${item?.title}` : item ? item.title : BLOCK_META[block.kind].title;
+  const total = active.blocks.reduce((sum, _, i) => sum + blockSeconds(active, i, now), 0);
 
   return (
-    <div className="pb-28">
-      {/* header: blocks, current exercise, its clock */}
+    <div className="pb-10">
+      {/* header: the blocks to jump between, the exercise, its clock with play/pause and "next", the metronome */}
       <div className="sticky top-0 z-10 -mx-4 bg-bg/95 px-4 pb-3 pt-2 backdrop-blur">
-        <div className="flex gap-1.5">
-          {active.blocks.map((b, i) => (
-            <Progress
-              key={b.kind}
-              aria-label={BLOCK_META[b.kind].title}
-              className="h-1.5 flex-1"
-              indicatorClassName={i === active.block ? "bg-accent" : "bg-muted"}
-              value={Math.min(1, blockSeconds(active, i, now) / plannedSeconds(active, i)) * 100}
-            />
-          ))}
-        </div>
-        <div className="mt-3 flex items-end gap-3">
+        <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 truncate text-xs text-muted">
-              <BlockIcon className="size-3.5 shrink-0 text-accent" />
-              <span className="truncate">
-                {BLOCK_META[block.kind].title}
-                {block.entries.length > 1 && ` · ${slot.index + 1} из ${block.entries.length}`} · блок {formatClock(planned - spent)}
-              </span>
-            </div>
-            <div className="mt-0.5 truncate text-lg font-bold leading-tight">{title}</div>
+            <ScrollRow>
+              {active.blocks.map((b, i) => {
+                const Icon = BLOCK_ICON[b.kind];
+                return (
+                  <Chip key={b.kind} active={i === active.block} onClick={() => i !== active.block && session.goToBlock(i)} className="px-3 py-1.5">
+                    <Icon /> {BLOCK_META[b.kind].title}
+                  </Chip>
+                );
+              })}
+            </ScrollRow>
           </div>
-          <div className={`text-right text-4xl font-bold leading-none tabular-nums tracking-tight ${phase === "paused" ? "text-muted" : ""}`}>
-            {formatClock(slot.end - spent)}
-          </div>
+          <IconButton label="Завершить" onClick={() => setConfirmEnd(true)} className="size-10 shrink-0">
+            <X />
+          </IconButton>
         </div>
-        <Progress className="mt-2.5 h-1" value={Math.min(1, (spent - slot.start) / (slot.end - slot.start || 1)) * 100} />
+        <div className="mt-2.5 flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-lg font-bold leading-tight">{title}</div>
+            {block.entries.length > 1 && (
+              <div className="text-xs text-muted">
+                {index + 1} из {block.entries.length}
+              </div>
+            )}
+          </div>
+          <MetronomeButtons open={metronome} onOpen={setMetronome} />
+        </div>
+        <div className="mt-2.5 flex items-center gap-2">
+          <Clock seconds={spent} planned={planned} running={running} />
+          <IconButton label={running ? "Остановить время" : "Продолжить время"} onClick={togglePause} className="size-10 shrink-0">
+            {running ? <Pause fill="currentColor" /> : <Play fill="currentColor" />}
+          </IconButton>
+          <Button onClick={next} title={`Дальше: ${nextTitle}`} className="ml-auto h-10 min-w-0 max-w-[60%] gap-1 px-3">
+            <span className="truncate">{lastEntry && isLast ? "Закончить" : "Дальше"}</span>
+            {lastEntry && isLast ? <Check className="size-4" /> : <ChevronRight className="size-4" />}
+          </Button>
+        </div>
+        {!(lastEntry && isLast) && <div className="mt-1 truncate text-right text-xs text-muted">{nextTitle}</div>}
       </div>
 
-      {block.kind !== "improv" && materials.length > 1 && (
-        <Segmented
-          className="mb-3"
-          value={material!}
-          onChange={(v) => setPicked({ slot: slotKey, material: v })}
-          options={materials.map((value) => ({ value, label: MATERIAL_LABEL[value] }))}
-        />
+      {metronome && (
+        <div className="mb-3">
+          <MetronomePanel />
+        </div>
       )}
-      <Stage block={block.kind} entry={entry} item={item} material={material} playing={playing} control={control} onBlocked={setBlocked} />
 
-      {block.kind !== "improv" && item && hasBlock(item, "recorder") && (
-        <RecordButton key={slotKey} itemId={item.id} bpm={withMetronome(item) ? useMetronome.getState().bpm : null} className="mt-3 w-full" />
-      )}
+      <Practice key={entryKey} kind={block.kind} entry={entry} item={item} control={control} onBlocked={setBlocked} />
 
       {block.kind === "improv" && block.improv && (
         <div className="mt-3">
@@ -240,107 +189,13 @@ export function SessionPage() {
         </div>
       )}
 
-      <div className="mt-3 flex items-center gap-1.5 px-1 text-xs text-muted">
-        <ChevronsRight className="size-4 shrink-0" />
-        <span className="truncate">Дальше: {nextTitle}</span>
-      </div>
-
-      {/* transport */}
-      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-line/70 bg-surface/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl">
-        <div className="mx-auto flex max-w-3xl items-center gap-2 px-4 py-2.5">
-          <IconButton label="Завершить" onClick={() => setConfirmEnd(true)}>
-            <X />
-          </IconButton>
-          <IconButton label="Назад" onClick={back}>
-            <SkipBack />
-          </IconButton>
-          <Button size="lg" onClick={togglePause} aria-label={phase === "paused" ? "Продолжить" : "Пауза"} className="flex-1">
-            {phase === "paused" ? <Play className="size-7" fill="currentColor" /> : <Pause className="size-7" fill="currentColor" />}
-          </Button>
-          <IconButton label="Пропустить" onClick={skip}>
-            <SkipForward />
-          </IconButton>
-          {entry && (
-            <IconButton label="Записать результат" onClick={() => setSheet(true)} className="bg-good/15 text-good">
-              <Check />
-            </IconButton>
-          )}
-        </div>
-      </div>
-
-      <AnimatePresence>
-        {phase === "countdown" && (
-          <m.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-30 flex flex-col items-center justify-center bg-bg/85 backdrop-blur-md"
-            onClick={togglePause}
-          >
-            <div className="flex items-center gap-1.5 text-sm text-muted">
-              {isFirstOfBlock ? (
-                <>
-                  <BlockIcon className="size-4 text-accent" /> {BLOCK_META[block.kind].title}
-                </>
-              ) : (
-                "Следующее упражнение"
-              )}
-            </div>
-            <div className="mt-1 max-w-[90%] text-center text-2xl font-bold">{title}</div>
-            <div className="relative mt-8 flex size-40 items-center justify-center">
-              <m.div
-                key={`ring-${countKey}-${count}`}
-                className="absolute inset-0 rounded-full border-4 border-accent"
-                initial={{ scale: 0.7, opacity: 0.7 }}
-                animate={{ scale: 1.25, opacity: 0 }}
-                transition={{ duration: 0.9, ease: "easeOut" }}
-              />
-              <AnimatePresence mode="popLayout">
-                <m.div
-                  key={count}
-                  initial={{ scale: 1.6, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.6, opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                  className="text-9xl font-bold tabular-nums text-accent"
-                >
-                  {Math.max(1, count)}
-                </m.div>
-              </AnimatePresence>
-            </div>
-            <div className="mt-8 flex items-center gap-1.5 text-xs text-muted">
-              <Pause className="size-3.5" /> Нажми, чтобы поставить на паузу
-            </div>
-          </m.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {blocked && playing && (
-          <m.button
-            type="button"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            onClick={() => {
-              control.current?.resume();
-              setBlocked(false);
-            }}
-            className="fixed inset-x-4 bottom-24 z-20 flex h-16 items-center justify-center gap-2 rounded-2xl bg-guide text-base font-bold text-on-accent shadow-lg"
-          >
-            <Volume2 className="size-6" /> Нажми, чтобы включить звук
-          </m.button>
-        )}
-      </AnimatePresence>
-
-      {entry && <ResultSheet open={sheet} entry={entry} bpm={useMetronome.getState().bpm} onClose={() => setSheet(false)} />}
+      <SoundBlocked show={blocked} onTap={() => setBlocked(false)} control={control} />
 
       <Drawer open={confirmEnd} onOpenChange={setConfirmEnd}>
         <DrawerContent>
           <DrawerHeader>
             <DrawerTitle>Завершить занятие?</DrawerTitle>
-            <DrawerDescription>Прошло {formatClock(active.blocks.reduce((sum, _, i) => sum + blockSeconds(active, i, now), 0))}</DrawerDescription>
+            <DrawerDescription>Прошло {formatClock(total)}</DrawerDescription>
           </DrawerHeader>
           <div className="space-y-2">
             <Button
@@ -365,9 +220,6 @@ export function SessionPage() {
             >
               Отменить без сохранения
             </Button>
-            <Button size="lg" variant="ghost" onClick={() => setConfirmEnd(false)} className="w-full">
-              Продолжить занятие
-            </Button>
           </div>
         </DrawerContent>
       </Drawer>
@@ -375,40 +227,120 @@ export function SessionPage() {
   );
 }
 
-interface StageProps {
-  block: string;
+/** The small clock: time spent, and the goal when there is one (it turns green once reached and keeps counting). */
+export function Clock({ seconds, planned, running }: { seconds: number; planned?: number; running: boolean }) {
+  const over = planned !== undefined && seconds >= planned;
+  return (
+    <span className={cn("shrink-0 text-2xl font-bold tabular-nums leading-none tracking-tight", over ? "text-good" : !running && "text-muted")}>
+      {formatClock(seconds)}
+      {planned !== undefined && <span className="text-sm font-medium text-muted"> / {formatClock(planned)}</span>}
+    </span>
+  );
+}
+
+/** The metronome: the icon turns it on and off, the gear opens its full panel under the header. */
+export function MetronomeButtons({ open, onOpen }: { open: boolean; onOpen: (v: boolean) => void }) {
+  const running = useMetronome((s) => s.running);
+  const bpm = useMetronome((s) => s.bpm);
+  return (
+    <div className="flex shrink-0 items-center gap-1.5">
+      <Button
+        variant={running ? "default" : "secondary"}
+        aria-pressed={running}
+        aria-label={running ? "Выключить метроном" : "Включить метроном"}
+        title={running ? "Выключить метроном" : "Включить метроном"}
+        onClick={() => {
+          haptic();
+          toggleMetronome();
+        }}
+        className="h-10 gap-1.5 px-3 tabular-nums"
+      >
+        <Metronome className="size-5" />
+        {running && <span className="text-sm font-semibold">{bpm}</span>}
+      </Button>
+      <IconButton label="Настройки метронома" onClick={() => onOpen(!open)} className={cn("size-10", open && "bg-accent/15 text-accent")}>
+        <Settings2 />
+      </IconButton>
+    </div>
+  );
+}
+
+/** "Нажми, чтобы включить звук" when the browser refused to start a player without a tap. */
+export function SoundBlocked({ show, onTap, control }: { show: boolean; onTap: () => void; control: RefObject<PlayerControl | null> }) {
+  return (
+    <AnimatePresence>
+      {show && (
+        <m.button
+          type="button"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
+          onClick={() => {
+            control.current?.resume();
+            onTap();
+          }}
+          className="fixed inset-x-4 bottom-24 z-20 flex h-16 items-center justify-center gap-2 rounded-2xl bg-guide text-base font-bold text-on-accent shadow-lg"
+        >
+          <Volume2 className="size-6" /> Нажми, чтобы включить звук
+        </m.button>
+      )}
+    </AnimatePresence>
+  );
+}
+
+interface PracticeProps {
+  kind: string;
   entry?: PlanEntry;
   item?: Item;
-  material?: Material;
-  playing: boolean;
   control: RefObject<PlayerControl | null>;
   onBlocked: (b: boolean) => void;
 }
 
-/** What plays for the current exercise: the chosen material (video, notes, neck), or the card with a metronome. */
-function Stage({ block, entry, item, material, playing, control, onBlocked }: StageProps) {
-  if (block === "improv") return <CompactMetronome />;
+/** One exercise: its materials (video, notes, neck — one at a time), the recorder. Keyed by the exercise. */
+export function Practice({ kind, entry, item, control, onBlocked }: PracticeProps) {
+  const materials = item ? materialsOf(item) : [];
+  const [picked, setPicked] = useState<Material | undefined>(undefined);
+  const material = picked && materials.includes(picked) ? picked : materials[0];
+  if (kind === "improv") return null;
+  return (
+    <>
+      {materials.length > 1 && (
+        <Segmented className="mb-3" value={material!} onChange={setPicked} options={materials.map((value) => ({ value, label: MATERIAL_LABEL[value] }))} />
+      )}
+      <Stage entry={entry} item={item} material={material} control={control} onBlocked={onBlocked} />
+      {item && hasBlock(item, "recorder") && (
+        <RecordButton itemId={item.id} bpm={withMetronome(item) ? useMetronome.getState().bpm : null} className="mt-3 w-full" />
+      )}
+    </>
+  );
+}
+
+interface StageProps {
+  entry?: PlanEntry;
+  item?: Item;
+  material?: Material;
+  control: RefObject<PlayerControl | null>;
+  onBlocked: (b: boolean) => void;
+}
+
+/** What plays for the current exercise: the chosen material (video, notes, neck), or the card. Nothing starts on its own. */
+function Stage({ entry, item, material, control, onBlocked }: StageProps) {
   if (!entry || !item) return null;
-  const songKey = `${item.id}#${entry.sectionId ?? ""}`;
   if (material === "video" && item.video)
     return (
       <div className="space-y-3">
-        <VideoPlayer key={item.id} itemId={item.id} video={item.video} playing={playing} onBlocked={onBlocked} control={control} />
+        <VideoPlayer key={item.id} itemId={item.id} video={item.video} playing={false} onBlocked={onBlocked} control={control} />
         <Description item={item} />
       </div>
     );
   if (material === "score") {
-    // A Guitar Pro file with its recording comes first: the notes follow the sound.
-    if (item.tabFile && item.audioFile) return <SongStage key={songKey} item={item} entry={entry} playing={playing} control={control} onBlocked={onBlocked} />;
-    if (item.tab) return <TabStage key={item.id} item={item} playing={playing} control={control} onBlocked={onBlocked} />;
-    if (item.tabFile) return <SongStage key={songKey} item={item} entry={entry} playing={playing} control={control} onBlocked={onBlocked} />;
-    if (item.audioFile) return <AudioStage key={item.id} item={item} entry={entry} playing={playing} control={control} onBlocked={onBlocked} />;
+    if (item.tabFile || item.tab) return <NotesStage item={item} entry={entry} control={control} onBlocked={onBlocked} />;
+    if (item.audioFile) return <AudioStage key={item.id} item={item} entry={entry} />;
   }
   return (
     <div className="space-y-3">
       {material === "board" && item.theory && <ItemBoard link={item.theory} />}
       <EntryCard entry={entry} />
-      {withMetronome(item) && <CompactMetronome />}
     </div>
   );
 }
@@ -420,20 +352,8 @@ function Description({ item }: { item: Item }) {
   return shown ? <p className="mt-2 whitespace-pre-wrap px-1 text-sm text-muted">{shown}</p> : null;
 }
 
-/** A recording without a tab: loops it at the chosen speed (pitch is kept). */
-function AudioStage({
-  item,
-  entry,
-  playing,
-  control,
-  onBlocked,
-}: {
-  item: Item;
-  entry: PlanEntry;
-  playing: boolean;
-  control: StageProps["control"];
-  onBlocked: (b: boolean) => void;
-}) {
+/** A recording without a tab: loops it at the chosen speed (pitch is kept), started from its own controls. */
+function AudioStage({ item, entry }: { item: Item; entry: PlanEntry }) {
   const el = useRef<HTMLAudioElement>(null);
   const [url, setUrl] = useState<string | null | undefined>(undefined);
   const [speed, setSpeed] = useState(1);
@@ -448,17 +368,6 @@ function AudioStage({
       if (u) URL.revokeObjectURL(u);
     };
   }, [item.id]);
-  useEffect(() => {
-    const a = el.current;
-    if (!a) return;
-    control.current = { resume: () => void a.play() };
-    if (!playing) return a.pause();
-    // Mobile browsers may refuse to start audio without a tap.
-    a.play().then(
-      () => onBlocked(false),
-      () => onBlocked(true),
-    );
-  }, [playing, url]);
   useEffect(() => {
     if (el.current) el.current.playbackRate = speed;
   }, [speed, url]);
@@ -478,7 +387,7 @@ function AudioStage({
   );
 }
 
-function TempoBar({ label, onMinus, onPlus, extra }: { label: string; onMinus: () => void; onPlus: () => void; extra?: ReactNode }) {
+function TempoBar({ label, onMinus, onPlus }: { label: string; onMinus: () => void; onPlus: () => void }) {
   return (
     <div className="mt-2 flex items-center gap-2">
       <IconButton label="Медленнее" onClick={onMinus}>
@@ -488,112 +397,145 @@ function TempoBar({ label, onMinus, onPlus, extra }: { label: string; onMinus: (
       <IconButton label="Быстрее" onClick={onPlus}>
         <Plus />
       </IconButton>
-      {extra}
     </div>
   );
 }
 
-function MetronomeToggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <Button variant={on ? "default" : "secondary"} onClick={() => onChange(!on)} aria-pressed={on} className={`h-11 px-3 ${on ? "" : "text-muted"}`}>
-      <Metronome /> клик
-    </Button>
-  );
-}
-
-function TabStage({ item, playing, control, onBlocked }: { item: Item; playing: boolean; control: StageProps["control"]; onBlocked: (b: boolean) => void }) {
-  const bpm = useMetronome((s) => s.bpm);
-  const [click, setClick] = useState(true);
-  return (
-    <div>
-      <Suspense fallback={<div className="animate-pulse rounded-3xl border border-line bg-surface" style={{ height: TAB_HEIGHT }} />}>
-        <TabPlayer tex={item.tab} height={TAB_HEIGHT} bpm={bpm} playing={playing} metronome={click} control={control} onBlocked={onBlocked} />
-      </Suspense>
-      <TempoBar
-        label={`${bpm} bpm`}
-        onMinus={() => useMetronome.getState().set({ bpm: clampBpm(bpm - 5) })}
-        onPlus={() => useMetronome.getState().set({ bpm: clampBpm(bpm + 5) })}
-        extra={<MetronomeToggle on={click} onChange={setClick} />}
-      />
-      <div className="mt-2">
-        <TabViewSwitch />
-      </div>
-      <Description item={item} />
-    </div>
-  );
-}
-
-function SongStage({
-  item,
-  entry,
-  playing,
-  control,
-  onBlocked,
-}: {
-  item: Item;
-  entry: PlanEntry;
-  playing: boolean;
-  control: StageProps["control"];
-  onBlocked: (b: boolean) => void;
-}) {
-  const [file, setFile] = useState<ArrayBuffer | null | undefined>(undefined);
-  const [audio, setAudio] = useState<ArrayBuffer | null>(null);
-  const [audioLoaded, setAudioLoaded] = useState(false);
+/**
+ * The notes with their buttons on top, as in the item's card: track, view (tab / notes / both), the recording or
+ * the synthesizer, play. A Guitar Pro file loops the section's bars; a text tab follows the metronome's tempo.
+ */
+function NotesStage({ item, entry, control, onBlocked }: { item: Item; entry: PlanEntry; control: StageProps["control"]; onBlocked: (b: boolean) => void }) {
+  const [file, setFile] = useState<ArrayBuffer | null | undefined>(item.tabFile ? undefined : null);
+  const [recording, setRecording] = useState<ArrayBuffer | null>(null);
+  const [recordingLoaded, setRecordingLoaded] = useState(!item.audioFile);
   const [useRecording, setUseRecording] = useState(true);
+  const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(0.75);
-  const [click, setClick] = useState(false);
-  const [tempo, setTempo] = useState(0);
+  const [score, setScore] = useState<ScoreInfo | null>(null);
+  const [track, setTrack] = useState(0);
+  const tabView = useSettings((s) => s.tabView);
+  const setTabView = useSettings((s) => s.setTabView);
+  const bpm = useMetronome((s) => s.bpm);
   const section = findSection(item, entry.sectionId);
   useEffect(() => {
-    void loadTabFile(item.id).then((f) => setFile(f ?? null));
+    if (item.tabFile) void loadTabFile(item.id).then((f) => setFile(f ?? null));
     if (item.audioFile)
       void loadAudioFile(item.id).then((f) => {
-        setAudio(f ?? null);
-        setAudioLoaded(true);
+        setRecording(f ?? null);
+        setRecordingLoaded(true);
       });
-  }, [item.id, item.audioFile]);
-  // Keep the "record result" tempo in sync with what's actually playing.
+  }, [item.id, item.tabFile, item.audioFile]);
+  // The metronome follows the file at the chosen speed, so turning it on clicks along.
+  const tempo = file ? (score?.tempo ?? 0) : 0;
   useEffect(() => {
     if (tempo) useMetronome.getState().set({ bpm: clampBpm(tempo * speed) });
   }, [tempo, speed]);
-  if (file === null) return <EntryCard entry={entry} />;
+
+  const fromFile = !!file;
+  if (file === null && !item.tab) return <EntryCard entry={entry} />;
   // Wait for the recording too, so the player is built once with everything (see MediaCard).
-  const ready = !!file && (!item.audioFile || audioLoaded);
+  const ready = fromFile ? recordingLoaded : file === null;
+  const View = VIEW_META[tabView];
+  const withRecording = fromFile && !!recording;
   return (
     <div>
-      {ready && (
-        <Suspense fallback={<div className="animate-pulse rounded-3xl border border-line bg-surface" style={{ height: TAB_HEIGHT }} />}>
-          <TabPlayer
-            file={file!}
-            audio={useRecording ? audio : null}
-            sync={item.audioSync}
-            unrepeat={item.audioUnrepeat}
-            skip={item.audioSkip}
-            height={TAB_HEIGHT}
-            speed={speed}
-            playing={playing}
-            loopBars={section?.bars ?? null}
-            metronome={click}
-            control={control}
-            onBlocked={onBlocked}
-            onScore={(s) => setTempo(s.tempo)}
-          />
-        </Suspense>
-      )}
-      <TempoBar
-        label={`${Math.round(speed * 100)}%${tempo ? ` · ${Math.round(tempo * speed)} bpm` : ""}`}
-        onMinus={() => setSpeed((s) => Math.max(0.25, +(s - 0.05).toFixed(2)))}
-        onPlus={() => setSpeed((s) => Math.min(1.5, +(s + 0.05).toFixed(2)))}
-        extra={<MetronomeToggle on={click} onChange={setClick} />}
-      />
-      <div className="mt-2 space-y-2">
-        <TabViewSwitch />
-        {audio && <SourceSwitch recording={useRecording} onChange={setUseRecording} />}
+      <div className="relative">
+        {ready ? (
+          <Suspense fallback={<div className="animate-pulse rounded-3xl border border-line bg-surface" style={{ height: TAB_HEIGHT }} />}>
+            <TabPlayer
+              tex={fromFile ? undefined : item.tab}
+              file={file ?? undefined}
+              audio={withRecording && useRecording ? recording : null}
+              sync={item.audioSync}
+              unrepeat={item.audioUnrepeat}
+              skip={item.audioSkip}
+              bpm={fromFile ? undefined : bpm}
+              speed={fromFile ? speed : undefined}
+              playing={playing}
+              track={track}
+              loopBars={fromFile ? (section?.bars ?? null) : null}
+              height={TAB_HEIGHT}
+              control={control}
+              onBlocked={onBlocked}
+              onScore={setScore}
+            />
+          </Suspense>
+        ) : (
+          <div className="animate-pulse rounded-3xl border border-line bg-surface" style={{ height: TAB_HEIGHT }} />
+        )}
+        {/* Clear of the tab's own scrollbar on the right; see-through (ON_TAB) so the notes show. */}
+        <div className="absolute right-6 top-2 z-10 flex gap-1.5">
+          {score && score.tracks.length > 1 && (
+            <Select value={String(track)} onValueChange={(v) => setTrack(Number(v))}>
+              <SelectTrigger aria-label="Дорожка" title="Дорожка" className={cn("h-10 w-auto max-w-36 rounded-xl border-0 bg-surface-2 px-3 text-xs font-semibold", ON_TAB)}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {score.tracks.map((t, i) => (
+                  <SelectItem key={i} value={String(i)}>
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Button
+            variant="secondary"
+            size="icon"
+            aria-label={`Вид: ${View.name}. Переключить`}
+            title={`${View.name} — нажми, чтобы переключить`}
+            onClick={() => setTabView(VIEW_NEXT[tabView])}
+            className={cn("h-10 w-[4.75rem] shrink-0 px-0", ON_TAB)}
+          >
+            {View.mark}
+          </Button>
+          {withRecording && (
+            <Button
+              variant="secondary"
+              size="icon"
+              aria-label={useRecording ? "Играет запись. Переключить на синтезатор" : "Играет синтезатор. Переключить на запись"}
+              title={useRecording ? "Запись — нажми для синтезатора" : "Синтезатор — нажми для записи"}
+              onClick={() => {
+                setPlaying(false);
+                setUseRecording(!useRecording);
+              }}
+              className={cn("size-10 shrink-0", ON_TAB)}
+            >
+              {useRecording ? <Headphones className="!size-4" /> : <Piano className="!size-4" />}
+            </Button>
+          )}
+          <Button
+            size="icon"
+            aria-label={playing ? "Пауза" : "Играть"}
+            title={playing ? "Пауза" : "Играть"}
+            onClick={() => {
+              audio();
+              setPlaying(!playing);
+            }}
+            className={cn("size-10 shrink-0 shadow-none", ON_TAB)}
+          >
+            {playing ? <Pause fill="currentColor" className="!size-4" /> : <Play fill="currentColor" className="!size-4" />}
+          </Button>
+        </div>
       </div>
-      {section && !section.bars && (
+      {fromFile ? (
+        <TempoBar
+          label={`${Math.round(speed * 100)}%${tempo ? ` · ${Math.round(tempo * speed)} bpm` : ""}`}
+          onMinus={() => setSpeed((s) => Math.max(0.25, +(s - 0.05).toFixed(2)))}
+          onPlus={() => setSpeed((s) => Math.min(1.5, +(s + 0.05).toFixed(2)))}
+        />
+      ) : (
+        <TempoBar
+          label={`${bpm} bpm`}
+          onMinus={() => useMetronome.getState().set({ bpm: clampBpm(bpm - 5) })}
+          onPlus={() => useMetronome.getState().set({ bpm: clampBpm(bpm + 5) })}
+        />
+      )}
+      {fromFile && section && !section.bars && (
         <p className="mt-2 px-1 text-xs text-muted">Раздел не привязан к тактам — играет весь файл. Привязать можно в карточке песни.</p>
       )}
-      {!section && <Description item={item} />}
+      {(!fromFile || !section) && <Description item={item} />}
     </div>
   );
 }

@@ -50,11 +50,14 @@ export function sectionOf(path: string) {
   return SECTIONS.filter((s) => (s.to === "/" ? path === "/" : path === s.to || path.startsWith(`${s.to}/`))).sort((a, b) => b.to.length - a.to.length)[0];
 }
 
+/** Full-screen practice: no section bar or back button, they have their own controls. */
+export const isPlayScreen = (path: string) => path === "/session" || path === "/free";
+
 /** Phones: fixed bar at the bottom. Hidden during a session, which has its own controls there. */
 export function BottomNav() {
   const { pathname } = useLocation();
   const [more, setMore] = useState(false);
-  if (pathname === "/session") return null;
+  if (isPlayScreen(pathname)) return null;
   const current = sectionOf(pathname);
   const inMore = !!current && MORE.includes(current);
   return (
