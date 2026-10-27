@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
 import { LoaderCircle, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui";
 import { formatClockMs } from "@/lib/clock";
@@ -7,6 +7,8 @@ import type { SyncPoint } from "@/shared/types";
 // The recording as a waveform with a vertical line where each marked bar starts. A line is dragged to move its
 // mark; dragging elsewhere scrolls, a tap there seeks the recording. Drawn on one canvas the width of the view,
 // so a long song at a close zoom doesn't need a canvas tens of thousands of pixels wide.
+// Also: a fling keeps scrolling and slows down; a trackpad swipes sideways and pinches to zoom; ←/→ move the
+// selected line (or the recording when none is), faster the longer the key is held.
 
 /** A mark's identity: the bar and which pass of it (repeats). */
 export const markKey = (p: Pick<SyncPoint, "bar" | "occurrence">) => `${p.bar}:${p.occurrence ?? 0}`;
@@ -20,6 +22,14 @@ const LABEL_H = 16;
 const GRAB = 16;
 // Marks keep their order: no closer than this to their neighbours, ms.
 const GAP = 30;
+// Arrow keys: a step, ms — for a line (Alt finer, Shift coarser) and for the recording — times the hold's speed-up.
+const LINE_STEP = { fine: 1, normal: 10, coarse: 50 };
+const SEEK_STEP = { fine: 50, normal: 500, coarse: 5000 };
+/** How much faster a held arrow goes after `t` seconds: steady at first, then quickly up to 25×. */
+const speedUp = (t: number) => Math.min(25, 1 + 6 * t * t);
+// A fling: px/ms it keeps per frame, and below which it stops.
+const FRICTION = 0.94;
+const MIN_SPEED = 0.02;
 
 /** Loudest sample per 5 ms of the recording, 0…1. */
 async function peaksOf(audio: ArrayBuffer) {
@@ -66,12 +76,19 @@ export function SyncTimeline({
   const [zoom, setZoom] = useState(2);
   const [start, setStart] = useState(0); // ms at the left edge
   const [drag, setDrag] = useState<{ key: string; ms: number } | null>(null);
-  const gesture = useRef<{ kind: "line"; point: SyncPoint } | { kind: "pan"; x: number; start: number; moved: boolean } | null>(null);
+  const gesture = useRef<
+    { kind: "line"; point: SyncPoint } | { kind: "pan"; x: number; start: number; moved: boolean; v: number; lastX: number; lastT: number } | null
+  >(null);
+  const fling = useRef(0);
+  const held = useRef({ key: "", since: 0 });
+  const pinch = useRef(0);
 
   const pxPerMs = ZOOMS[zoom] / 1000;
   const viewMs = width / pxPerMs;
   const duration = wave?.durationMs ?? 0;
   const clampStart = (s: number) => Math.max(0, Math.min(s, Math.max(0, duration - viewMs)));
+  // For listeners outside React's (wheel, the fling's frames): this render's values.
+  const live = useRef({ clampStart, pxPerMs, zoomTo: (_z: number) => {}, zoom });
 
   useEffect(() => {
     let alive = true;
@@ -200,10 +217,79 @@ export function SyncTimeline({
     if (p && (p.ms < start || p.ms > start + viewMs)) setStart(clampStart(p.ms - viewMs / 3));
   }, [selected]);
 
+  /** A mark's new time, between its neighbours, so marks never swap. */
+  const clampMark = (point: SyncPoint, ms: number) => {
+    const i = marks.findIndex((m) => m.p === point);
+    const lo = i > 0 ? marks[i - 1].ms + GAP : 0;
+    const hi = i + 1 < marks.length ? marks[i + 1].ms - GAP : duration;
+    return Math.round(Math.max(lo, Math.min(hi, ms)));
+  };
+
+  const keyDown = (e: KeyboardEvent) => {
+    if (e.key === "Escape") return onSelect(null);
+    if (e.key === "+" || e.key === "=") return zoomTo(zoom + 1);
+    if (e.key === "-" || e.key === "_") return zoomTo(zoom - 1);
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    if (!e.repeat || held.current.key !== e.key) held.current = { key: e.key, since: performance.now() };
+    const dir = e.key === "ArrowLeft" ? -1 : 1;
+    const size = e.altKey ? "fine" : e.shiftKey ? "coarse" : "normal";
+    const fast = speedUp((performance.now() - held.current.since) / 1000);
+    const point = points.find((x) => markKey(x) === selected);
+    if (point) {
+      const from = drag?.key === selected ? drag.ms : point.ms;
+      const ms = clampMark(point, from + dir * LINE_STEP[size] * fast);
+      setDrag({ key: markKey(point), ms });
+      if (ms < start || ms > start + viewMs) setStart(clampStart(ms - viewMs / 2));
+      onPreview?.(ms);
+    } else if (player.current) {
+      const el = player.current;
+      el.currentTime = Math.max(0, Math.min(duration, el.currentTime * 1000 + dir * SEEK_STEP[size] * fast)) / 1000;
+    }
+  };
+  // The line moved by keys is saved once the key is let go.
+  const saveKeyed = () => {
+    held.current = { key: "", since: 0 };
+    const point = points.find((x) => markKey(x) === drag?.key);
+    if (point && drag && !gesture.current) {
+      if (drag.ms !== point.ms) onMove(point, drag.ms);
+      setDrag(null);
+    }
+  };
+  const keyUp = (e: KeyboardEvent) => (e.key === "ArrowLeft" || e.key === "ArrowRight") && saveKeyed();
+
+  // Trackpad: a sideways swipe scrolls, a pinch (ctrl + wheel) zooms; an up-and-down wheel is left to the page.
+  useEffect(() => {
+    const c = canvas.current;
+    if (!c) return;
+    const wheel = (e: WheelEvent) => {
+      const { clampStart, pxPerMs, zoomTo, zoom } = live.current;
+      if (e.ctrlKey) {
+        e.preventDefault();
+        pinch.current += e.deltaY;
+        if (Math.abs(pinch.current) >= 40) {
+          zoomTo(zoom + (pinch.current < 0 ? 1 : -1));
+          pinch.current = 0;
+        }
+        return;
+      }
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      cancelAnimationFrame(fling.current);
+      const px = e.deltaMode === 1 ? e.deltaX * 16 : e.deltaX;
+      setStart((s) => clampStart(s + px / pxPerMs));
+    };
+    c.addEventListener("wheel", wheel, { passive: false });
+    return () => c.removeEventListener("wheel", wheel);
+  }, []);
+  useEffect(() => () => cancelAnimationFrame(fling.current), []);
+
   const msAt = (clientX: number) => start + (clientX - canvas.current!.getBoundingClientRect().left) / pxPerMs;
 
   const down = (e: PointerEvent) => {
     if (!wave) return;
+    cancelAnimationFrame(fling.current);
+    (e.currentTarget as HTMLCanvasElement).focus({ preventScroll: true });
     e.currentTarget.setPointerCapture(e.pointerId);
     const ms = msAt(e.clientX);
     const near = marks.map((m) => ({ ...m, d: Math.abs(m.ms - ms) * pxPerMs })).sort((a, b) => a.d - b.d)[0];
@@ -212,7 +298,7 @@ export function SyncTimeline({
       setDrag({ key: markKey(near.p), ms: near.ms });
       onSelect(markKey(near.p));
       onPreview?.(near.ms);
-    } else gesture.current = { kind: "pan", x: e.clientX, start, moved: false };
+    } else gesture.current = { kind: "pan", x: e.clientX, start, moved: false, v: 0, lastX: e.clientX, lastT: e.timeStamp };
   };
 
   const move = (e: PointerEvent) => {
@@ -222,13 +308,14 @@ export function SyncTimeline({
       const dx = e.clientX - gs.x;
       if (Math.abs(dx) > 4) gs.moved = true;
       if (gs.moved) setStart(clampStart(gs.start - dx / pxPerMs));
+      // The finger's speed, smoothed, for the fling.
+      const dt = e.timeStamp - gs.lastT;
+      if (dt > 0) gs.v = 0.7 * ((e.clientX - gs.lastX) / dt) + 0.3 * gs.v;
+      gs.lastX = e.clientX;
+      gs.lastT = e.timeStamp;
       return;
     }
-    // Between its neighbours in time, so marks never swap.
-    const i = marks.findIndex((m) => m.p === gs.point);
-    const lo = i > 0 ? marks[i - 1].ms + GAP : 0;
-    const hi = i + 1 < marks.length ? marks[i + 1].ms - GAP : duration;
-    const ms = Math.round(Math.max(lo, Math.min(hi, msAt(e.clientX))));
+    const ms = clampMark(gs.point, msAt(e.clientX));
     setDrag({ key: markKey(gs.point), ms });
     onPreview?.(ms);
   };
@@ -239,6 +326,19 @@ export function SyncTimeline({
     if (gs?.kind === "line" && drag) {
       if (drag.ms !== gs.point.ms) onMove(gs.point, drag.ms);
       setDrag(null);
+    } else if (gs?.kind === "pan" && gs.moved && Math.abs(gs.v) > MIN_SPEED && e.timeStamp - gs.lastT < 80) {
+      // Let go while moving: keep going and slow down.
+      let v = gs.v;
+      let last = performance.now();
+      const step = (t: number) => {
+        const { clampStart, pxPerMs } = live.current;
+        const dt = Math.min(50, t - last);
+        last = t;
+        setStart((s) => clampStart(s - (v * dt) / pxPerMs));
+        v *= Math.pow(FRICTION, dt / 16);
+        if (Math.abs(v) > MIN_SPEED) fling.current = requestAnimationFrame(step);
+      };
+      fling.current = requestAnimationFrame(step);
     } else if (gs?.kind === "pan" && !gs.moved && player.current) {
       // A tap: the recording goes there.
       player.current.currentTime = Math.max(0, msAt(e.clientX)) / 1000;
@@ -255,17 +355,24 @@ export function SyncTimeline({
     setStart(Math.max(0, Math.min(centre - nextView / 2, Math.max(0, duration - nextView))));
   };
 
+  live.current = { clampStart, pxPerMs, zoomTo, zoom };
+
   return (
     <div className="space-y-1.5">
       <div ref={box} className="relative overflow-hidden rounded-xl bg-surface" style={{ height: HEIGHT }}>
         <canvas
           ref={canvas}
           style={{ width, height: HEIGHT, touchAction: "none" }}
+          tabIndex={0}
+          aria-label="Запись с отметками тактов: стрелки двигают выбранную линию или запись"
+          onKeyDown={keyDown}
+          onKeyUp={keyUp}
+          onBlur={saveKeyed}
           onPointerDown={down}
           onPointerMove={move}
           onPointerUp={up}
           onPointerCancel={up}
-          className="block cursor-crosshair"
+          className="block cursor-crosshair rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
         />
         {!wave && (
           <div className="absolute inset-0 flex items-center justify-center gap-1.5 text-xs text-muted">
