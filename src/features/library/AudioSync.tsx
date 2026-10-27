@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { LoaderCircle, Minus, Play, Plus, Square, Timer, Trash2, TriangleAlert, WandSparkles } from "lucide-react";
+import { LoaderCircle, Minus, Pause, Play, Plus, Square, Timer, Trash2, TriangleAlert, WandSparkles } from "lucide-react";
 import { Button, IconButton, Input } from "@/components/ui";
 import { audioBlob } from "@/lib/audioType";
 import { misplacedMarks, shortBars, SKIPPED_MS } from "@/lib/backingTrack";
 import { formatClockMs, parseClock } from "@/lib/clock";
 import { useData } from "@/store/data";
 import type { Item, SyncPoint } from "@/shared/types";
+import type { Lane } from "@/lib/syncLane";
 import { markKey, SyncTimeline } from "./SyncTimeline";
 
 interface Props {
@@ -19,8 +20,12 @@ interface Props {
   bars: number;
   /** Each bar's length at the tab's tempo, ms: how long ▶ plays when the next bar isn't marked */
   barMs: number[];
-  /** A line is being dragged to this moment of the recording */
+  /** A line is being dragged (or a bar stepped) to this moment of the recording */
   onPreview?: (ms: number) => void;
+  /** The tab on the recording's time, drawn above the waveform */
+  lane?: (points: SyncPoint[]) => Lane;
+  /** While the recording plays: where it is, ms (every frame) */
+  onTime?: (ms: number) => void;
 }
 
 /** Automatic alignment of the recording with the tab: what to store on the item and what to tell the user. */
@@ -49,13 +54,16 @@ export async function detectSync(tab: ArrayBuffer, audio: ArrayBuffer) {
  * Where bars start in the recording: lines on its waveform, dragged into place (or put at the playing moment with ⏱).
  * While a line is dragged, `onPreview` gets its time so the notes can show what plays there.
  */
-export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview }: Props) {
+export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, lane, onTime }: Props) {
   const { updateItem } = useData();
   const player = useRef<HTMLAudioElement>(null);
   const [url, setUrl] = useState("");
   const [newBar, setNewBar] = useState("");
   const [auto, setAuto] = useState<{ busy: boolean; message: string }>({ busy: false, message: "" });
   const [selected, setSelected] = useState<string | null>(null);
+  // Own play button and clock instead of the browser's player: the timeline is the scrubber.
+  const [paused, setPaused] = useState(true);
+  const [clock, setClock] = useState(0);
 
   const detect = async () => {
     setAuto({ busy: true, message: "Слушаю запись и сравниваю с табом… (5–20 секунд)" });
@@ -163,7 +171,96 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview }
 
   return (
     <div className="space-y-2">
-      {url && <audio ref={player} src={url} controls preload="metadata" className="w-full" />}
+      {url && (
+        <audio
+          ref={player}
+          src={url}
+          preload="metadata"
+          onPlay={() => setPaused(false)}
+          onPause={() => setPaused(true)}
+          onSeeked={(e) => setClock(e.currentTarget.currentTime * 1000)}
+          hidden
+        />
+      )}
+      <div className="flex items-center gap-2">
+        <Button
+          size="icon"
+          aria-label={paused ? "Играть" : "Пауза"}
+          title={paused ? "Играть (пробел)" : "Пауза (пробел)"}
+          onClick={() => {
+            const el = player.current;
+            if (el) void (el.paused ? el.play() : el.pause());
+          }}
+          className="size-11 shrink-0"
+        >
+          {paused ? <Play /> : <Pause />}
+        </Button>
+        <div className="min-w-0 flex-1 text-sm tabular-nums">
+          {formatClockMs(clock)}
+          {current && <span className="text-muted"> · такт {current.bar}</span>}
+        </div>
+      </div>
+      <SyncTimeline
+        audio={audio}
+        player={player}
+        points={points}
+        selected={selected}
+        onSelect={setSelected}
+        onMove={(p, ms) => setMark(p, ms)}
+        onPreview={onPreview}
+        lane={lane}
+        globalKeys
+        onTime={(ms) => {
+          setClock((c) => (Math.abs(c - ms) >= 100 ? ms : c));
+          onTime?.(ms);
+        }}
+      />
+
+      {current ? (
+        <div className="flex items-center gap-1 rounded-xl bg-surface p-1.5 pl-3">
+          <div className="min-w-0 flex-1 text-sm">
+            <div className="truncate font-semibold">
+              Такт {current.bar}
+              {current.occurrence ? `, ${current.occurrence + 1}-й раз` : ""}
+            </div>
+            {titleOf(current.bar) && <div className="truncate text-xs text-muted">{titleOf(current.bar)}</div>}
+          </div>
+          <Button variant="secondary" size="icon-sm" className="size-8 rounded-lg" aria-label="−0,05 с" title="−0,05 с" onClick={() => setMark(current, Math.max(0, current.ms - 50))}>
+            <Minus className="size-3.5" />
+          </Button>
+          <input
+            key={current.ms}
+            defaultValue={formatClockMs(current.ms)}
+            inputMode="decimal"
+            onBlur={(e) => {
+              const ms = parseClock(e.target.value);
+              if (ms !== null) setMark(current, ms);
+            }}
+            className="h-9 w-[4.5rem] rounded-lg border border-line bg-surface-2/40 px-1 text-center text-sm tabular-nums outline-none focus:border-accent"
+          />
+          <Button variant="secondary" size="icon-sm" className="size-8 rounded-lg" aria-label="+0,05 с" title="+0,05 с" onClick={() => setMark(current, current.ms + 50)}>
+            <Plus className="size-3.5" />
+          </Button>
+          <IconButton label="Поставить сюда, где играет запись" onClick={() => setMark(current, now())} className="bg-accent/15 text-accent">
+            <Timer />
+          </IconButton>
+          <IconButton label={playingBar === markKey(current) ? "Остановить" : "Сыграть такт"} onClick={() => playBar(current)}>
+            {playingBar === markKey(current) ? <Square /> : <Play />}
+          </IconButton>
+          <IconButton
+            label="Убрать отметку"
+            onClick={() => {
+              setMark(current, null);
+              setSelected(null);
+            }}
+          >
+            <Trash2 />
+          </IconButton>
+        </div>
+      ) : (
+        points.length > 0 && <p className="px-1 text-xs text-muted">Нажми на линию, чтобы поправить её точно или прослушать такт.</p>
+      )}
+
       <Button disabled={auto.busy} onClick={() => void detect()} className="w-full">
         {auto.busy ? <LoaderCircle className="animate-spin" /> : <WandSparkles />}
         {auto.busy ? "Определяю…" : "Определить автоматически"}
@@ -229,63 +326,8 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview }
       <p className="text-xs text-muted">
         Линии — начала тактов в записи. Потяни линию, чтобы поставить её на сильную долю: на нотах видно, куда она попадает. Тап по записи —
         перемотка, по пустому месту можно листать (с разгона — по инерции), на тачпаде — свайп вбок, щипок — масштаб.
-        <br />С клавиатуры: ←/→ двигают выбранную линию, а без неё — запись; держи — быстрее, Shift — крупнее, Alt — точнее, Esc — снять выбор.
+        <br />С клавиатуры: ←/→ — от такта к такту, Shift+←/→ — сдвинуть выбранную линию (держи — быстрее, с Alt — точнее), пробел — играть.
       </p>
-
-      <SyncTimeline
-        audio={audio}
-        player={player}
-        points={points}
-        selected={selected}
-        onSelect={setSelected}
-        onMove={(p, ms) => setMark(p, ms)}
-        onPreview={onPreview}
-      />
-
-      {current ? (
-        <div className="flex items-center gap-1 rounded-xl bg-surface p-1.5 pl-3">
-          <div className="min-w-0 flex-1 text-sm">
-            <div className="truncate font-semibold">
-              Такт {current.bar}
-              {current.occurrence ? `, ${current.occurrence + 1}-й раз` : ""}
-            </div>
-            {titleOf(current.bar) && <div className="truncate text-xs text-muted">{titleOf(current.bar)}</div>}
-          </div>
-          <Button variant="secondary" size="icon-sm" className="size-8 rounded-lg" aria-label="−0,05 с" title="−0,05 с" onClick={() => setMark(current, Math.max(0, current.ms - 50))}>
-            <Minus className="size-3.5" />
-          </Button>
-          <input
-            key={current.ms}
-            defaultValue={formatClockMs(current.ms)}
-            inputMode="decimal"
-            onBlur={(e) => {
-              const ms = parseClock(e.target.value);
-              if (ms !== null) setMark(current, ms);
-            }}
-            className="h-9 w-[4.5rem] rounded-lg border border-line bg-surface-2/40 px-1 text-center text-sm tabular-nums outline-none focus:border-accent"
-          />
-          <Button variant="secondary" size="icon-sm" className="size-8 rounded-lg" aria-label="+0,05 с" title="+0,05 с" onClick={() => setMark(current, current.ms + 50)}>
-            <Plus className="size-3.5" />
-          </Button>
-          <IconButton label="Поставить сюда, где играет запись" onClick={() => setMark(current, now())} className="bg-accent/15 text-accent">
-            <Timer />
-          </IconButton>
-          <IconButton label={playingBar === markKey(current) ? "Остановить" : "Сыграть такт"} onClick={() => playBar(current)}>
-            {playingBar === markKey(current) ? <Square /> : <Play />}
-          </IconButton>
-          <IconButton
-            label="Убрать отметку"
-            onClick={() => {
-              setMark(current, null);
-              setSelected(null);
-            }}
-          >
-            <Trash2 />
-          </IconButton>
-        </div>
-      ) : (
-        points.length > 0 && <p className="px-1 text-xs text-muted">Нажми на линию, чтобы поправить её точно или прослушать такт.</p>
-      )}
 
       {unmarked.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">

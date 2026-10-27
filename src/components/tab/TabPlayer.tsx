@@ -199,8 +199,8 @@ export default function TabPlayer({
       const s = score.current!;
       const key = JSON.stringify(syncRef.current ?? []);
       if (cached?.key !== key) {
-        // Without the recording the marks aren't on the score yet (repeats stay as written then).
-        if (!audio) applyBackingTrack(s, null, syncRef.current ?? []);
+        // Without the recording the marks aren't on the score yet, nor the repeats it plays once.
+        if (!audio) applyBackingTrack(s, null, syncRef.current ?? [], unrepeatRef.current ?? []);
         cached = { key, pts: alphaTab.midi.MidiFileGenerator.generateSyncPoints(s).sort((x, y) => x.syncTime - y.syncTime) };
       }
       const pts = cached.pts;

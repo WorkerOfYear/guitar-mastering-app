@@ -33,12 +33,12 @@ import { Switch } from "@/components/ui/switch";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
 import { DEFAULT_BOARD, TheoryPicker } from "@/components/fretboard/TheoryPicker";
 import { choiceOf, theoryView } from "@/music/theoryView";
-import type { PlayerControl, ScoreInfo } from "@/components/tab/TabPlayer";
+import type { ScoreInfo } from "@/components/tab/TabPlayer";
 import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
 import { audio } from "@/audio/player";
 import { cacheAudioFile, deleteAudioFile, deleteInstagramVideo, deleteTabFile, loadAudioFile, loadTabFile, saveAudioFile, saveTabFile } from "@/lib/tabFiles";
 import { audioBlob, downloadAudio } from "@/lib/audioType";
-import { AudioSync, detectSync } from "./AudioSync";
+import { detectSync } from "./AudioSync";
 import { SectionStrip } from "./SectionStrip";
 import { TabSearch } from "./TabSearch";
 import { songQuery } from "@/lib/titles";
@@ -51,6 +51,7 @@ import { cn } from "@/lib/utils";
 import type { Item, Section } from "@/shared/types";
 
 const TabPlayer = lazy(() => import("@/components/tab/TabPlayer"));
+const SyncDialog = lazy(() => import("./SyncDialog"));
 
 /** Buttons lying on the tabs: 70% visible so the notes under them show, each solid on its own under the pointer,
  *  with keyboard focus or while open (the track list). */
@@ -229,8 +230,6 @@ function FileAction({ label, accept, onFile }: { label: string; accept: string; 
  */
 export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "score" }) {
   const scoreOnly = part !== "all";
-  // The tab above the sync panel: shows where a dragged mark falls in the notes.
-  const tabControl = useRef<PlayerControl | null>(null);
   const { updateItem } = useData();
   const [file, setFile] = useState<ArrayBuffer | null>(null);
   const fileRef = useRef<ArrayBuffer | null>(null);
@@ -427,6 +426,22 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
   const sectionCount = item.sections?.length ?? 0;
   const empty = !item.tabFile && !item.tab && !item.audioFile && (scoreOnly || (!item.video && !item.theory));
   const [showSync, setShowSync] = useState(false);
+  // Syncing opens a window of its own (the notes and the recording's timeline together).
+  const syncDialog = showSync && file && audioData && (
+    <Suspense fallback={null}>
+      <SyncDialog
+        open
+        onOpenChange={setShowSync}
+        item={item}
+        audio={audioData}
+        tab={file}
+        track={track}
+        sections={score?.sections ?? []}
+        bars={score?.bars ?? 1}
+        barMs={score?.barMs ?? []}
+      />
+    </Suspense>
+  );
   const audioInput = useRef<HTMLInputElement>(null);
   const tabView = useSettings((s) => s.tabView);
   const setTabView = useSettings((s) => s.setTabView);
@@ -683,7 +698,6 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
           countIn
           height="40vh"
           onScore={setScore}
-          control={tabControl}
         />
       </Suspense>
     );
@@ -744,19 +758,6 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
           }
         />
         <MatchWarnings warnings={item.audioWarnings} />
-        {showSync && file && audioData && (
-          <div className="rounded-2xl bg-surface-2/40 p-3">
-            <AudioSync
-              item={item}
-              audio={audioData}
-              tab={file}
-              sections={score?.sections ?? []}
-              bars={score?.bars ?? 1}
-              barMs={score?.barMs ?? []}
-              onPreview={(ms) => tabControl.current?.showTime?.(ms)}
-            />
-          </div>
-        )}
       </div>
     );
     // Two ways to bind the sound: from the item's video, or a file of one's own.
@@ -826,6 +827,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
         {audioFileInput}
         {audioRow || bindMenu}
         {museRow}
+        {syncDialog}
       </div>
     );
   }
@@ -901,18 +903,15 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
               <div>
                 <button
                   type="button"
-                  onClick={() => setShowSync(!showSync)}
+                  onClick={() => {
+                    setSheet(false);
+                    setShowSync(true);
+                  }}
                   className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-3 text-left text-sm font-semibold transition-colors active:bg-surface-2"
                 >
                   <Link2 className="size-[18px] text-muted" />
                   <span className="flex-1">Поправить синхронизацию</span>
-                  <ChevronDown className={cn("size-4 text-muted transition-transform", showSync && "rotate-180")} />
                 </button>
-                {showSync && (
-                  <div className="mt-1 rounded-2xl bg-surface-2/40 p-3">
-                    <AudioSync item={item} audio={audioData} tab={file} sections={score?.sections ?? []} bars={score?.bars ?? 1} barMs={score?.barMs ?? []} />
-                  </div>
-                )}
               </div>
             )}
 
@@ -955,6 +954,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
           </div>
         </DrawerContent>
       </Drawer>
+      {syncDialog}
     </>
   );
 }

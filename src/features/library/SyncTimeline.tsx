@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
+import { useEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
 import { LoaderCircle, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui";
 import { formatClockMs } from "@/lib/clock";
+import type { Lane } from "@/lib/syncLane";
 import type { SyncPoint } from "@/shared/types";
 
 // The recording as a waveform with a vertical line where each marked bar starts. A line is dragged to move its
 // mark; dragging elsewhere scrolls, a tap there seeks the recording. Drawn on one canvas the width of the view,
 // so a long song at a close zoom doesn't need a canvas tens of thousands of pixels wide.
-// Also: a fling keeps scrolling and slows down; a trackpad swipes sideways and pinches to zoom; ←/→ move the
-// selected line (or the recording when none is), faster the longer the key is held.
+// Also: a fling keeps scrolling and slows down; a trackpad swipes sideways and pinches to zoom; ←/→ go from bar to
+// bar, Shift+←/→ move the selected line (faster the longer the key is held), space plays.
+// With `lane`, the tab's notes and bars are drawn above the waveform where the marks put them in the recording.
 
 /** A mark's identity: the bar and which pass of it (repeats). */
 export const markKey = (p: Pick<SyncPoint, "bar" | "occurrence">) => `${p.bar}:${p.occurrence ?? 0}`;
@@ -16,15 +18,18 @@ export const markKey = (p: Pick<SyncPoint, "bar" | "occurrence">) => `${p.bar}:$
 const BUCKETS_PER_SEC = 200;
 // px per second, from the whole song on a phone to single strums.
 const ZOOMS = [10, 25, 50, 100, 200, 400];
-const HEIGHT = 96;
+const WAVE_H = 80;
 const LABEL_H = 16;
+// The tab's notes above the waveform.
+const LANE_H = 56;
 // How near a touch has to be to a line to grab it, px.
 const GRAB = 16;
 // Marks keep their order: no closer than this to their neighbours, ms.
 const GAP = 30;
-// Arrow keys: a step, ms — for a line (Alt finer, Shift coarser) and for the recording — times the hold's speed-up.
-const LINE_STEP = { fine: 1, normal: 10, coarse: 50 };
-const SEEK_STEP = { fine: 50, normal: 500, coarse: 5000 };
+// Shift+arrows: a line's step, ms (with Alt finer), times the hold's speed-up.
+const LINE_STEP = { fine: 1, normal: 10 };
+/** The keys the timeline reads (a React or a window event). */
+type KeyPress = Pick<KeyboardEvent, "key" | "repeat" | "shiftKey" | "altKey" | "target" | "preventDefault">;
 /** How much faster a held arrow goes after `t` seconds: steady at first, then quickly up to 25×. */
 const speedUp = (t: number) => Math.min(25, 1 + 6 * t * t);
 // A fling: px/ms it keeps per frame, and below which it stops.
@@ -58,6 +63,9 @@ export function SyncTimeline({
   onSelect,
   onMove,
   onPreview,
+  lane,
+  globalKeys,
+  onTime,
 }: {
   audio: ArrayBuffer;
   player: RefObject<HTMLAudioElement | null>;
@@ -65,8 +73,14 @@ export function SyncTimeline({
   selected: string | null;
   onSelect: (key: string | null) => void;
   onMove: (p: SyncPoint, ms: number) => void;
-  /** While a line is dragged: the time it's at, to show that place in the notes */
+  /** While a line is dragged (or a bar is stepped to): the time it's at, to show that place in the notes */
   onPreview?: (ms: number) => void;
+  /** The tab on the recording's time for these marks (the dragged one where it is now) */
+  lane?: (points: SyncPoint[]) => Lane;
+  /** Keys work anywhere on the page (a dialog of its own), not only with the timeline focused */
+  globalKeys?: boolean;
+  /** Every frame while the recording plays: where it is, ms */
+  onTime?: (ms: number) => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -83,6 +97,7 @@ export function SyncTimeline({
   const held = useRef({ key: "", since: 0 });
   const pinch = useRef(0);
 
+  const height = WAVE_H + (lane ? LANE_H : 0);
   const pxPerMs = ZOOMS[zoom] / 1000;
   const viewMs = width / pxPerMs;
   const duration = wave?.durationMs ?? 0;
@@ -115,26 +130,64 @@ export function SyncTimeline({
   const marks = points
     .map((p) => ({ p, ms: drag && markKey(p) === drag.key ? drag.ms : p.ms }))
     .sort((a, b) => a.ms - b.ms);
+  const draft = drag ? points.map((p) => (markKey(p) === drag.key ? { ...p, ms: drag.ms } : p)) : points;
+  const tabLane = lane?.(draft) ?? null;
+  // Where ←/→ go: every bar of the tab when it's laid on the recording, else the marks.
+  const stops = tabLane?.bars ?? marks.map((m) => ({ bar: m.p.bar, occurrence: m.p.occurrence ?? 0, ms: m.ms }));
 
   const draw = () => {
     const c = canvas.current;
     if (!c || !width) return;
     const dpr = window.devicePixelRatio || 1;
     if (c.width !== Math.round(width * dpr)) c.width = Math.round(width * dpr);
-    if (c.height !== HEIGHT * dpr) c.height = HEIGHT * dpr;
+    if (c.height !== height * dpr) c.height = height * dpr;
     const g = c.getContext("2d")!;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.clearRect(0, 0, width, HEIGHT);
+    g.clearRect(0, 0, width, height);
     const accent = cssVar("--accent", "#378add");
     const muted = cssVar("--muted", "#9aa3b2");
     const text = cssVar("--text", "#000");
     const guide = cssVar("--guide", "#e24b4a");
     const x = (ms: number) => (ms - start) * pxPerMs;
 
+    // The tab's bars (thin lines, numbers when there's room) and notes (by pitch), on the recording's time.
+    const waveTop = tabLane ? LABEL_H + LANE_H : LABEL_H;
+    if (tabLane) {
+      const top = LABEL_H;
+      g.fillStyle = cssVar("--surface-2", "#2a2f38");
+      g.globalAlpha = 0.5;
+      g.fillRect(0, top, width, LANE_H);
+      g.globalAlpha = 1;
+      g.font = "9px system-ui, sans-serif";
+      let lastLabel = -Infinity;
+      for (const b of tabLane.bars) {
+        const bx = x(b.ms);
+        if (bx < -20 || bx > width + 20) continue;
+        g.fillStyle = muted;
+        g.globalAlpha = 0.45;
+        g.fillRect(Math.round(bx), top, 1, LANE_H);
+        if (bx - lastLabel >= 22) {
+          g.globalAlpha = 0.9;
+          g.fillText(b.occurrence ? `${b.bar}·${b.occurrence + 1}` : String(b.bar), bx + 2, top + 9);
+          lastLabel = bx;
+        }
+      }
+      const [lo, hi] = tabLane.keys;
+      g.fillStyle = cssVar("--chord", "#1d9e75");
+      g.globalAlpha = 0.9;
+      for (const n of tabLane.notes) {
+        const nx = x(n.ms);
+        if (nx < -2 || nx > width + 2) continue;
+        const y = top + 12 + (1 - (n.key - lo) / Math.max(1, hi - lo)) * (LANE_H - 16);
+        g.fillRect(nx, y, 3, 2);
+      }
+      g.globalAlpha = 1;
+    }
+
     // Waveform: the loudest bucket under each pixel.
     if (wave) {
-      const mid = LABEL_H + (HEIGHT - LABEL_H) / 2;
-      const half = (HEIGHT - LABEL_H) / 2 - 2;
+      const mid = waveTop + (height - waveTop) / 2;
+      const half = (height - waveTop) / 2 - 2;
       g.fillStyle = muted;
       g.globalAlpha = 0.55;
       const perPx = BUCKETS_PER_SEC / 1000 / pxPerMs;
@@ -164,7 +217,7 @@ export function SyncTimeline({
       const on = markKey(p) === (drag?.key ?? selected);
       g.fillStyle = accent;
       g.globalAlpha = on ? 1 : 0.6;
-      g.fillRect(Math.round(lx) - (on ? 1 : 0.5), LABEL_H, on ? 2 : 1, HEIGHT - LABEL_H);
+      g.fillRect(Math.round(lx) - (on ? 1 : 0.5), LABEL_H, on ? 2 : 1, height - LABEL_H);
       const label = p.occurrence ? `${p.bar}·${p.occurrence + 1}` : String(p.bar);
       const w = g.measureText(label).width + 8;
       g.globalAlpha = 1;
@@ -181,7 +234,7 @@ export function SyncTimeline({
     // Where the recording is.
     const now = (player.current?.currentTime ?? 0) * 1000;
     g.fillStyle = guide;
-    g.fillRect(Math.round(x(now)), 0, 2, HEIGHT);
+    g.fillRect(Math.round(x(now)), 0, 2, height);
   };
 
   // Redraw on every change; while the recording plays, every frame (and keep its position in view).
@@ -194,6 +247,7 @@ export function SyncTimeline({
       const now = el.currentTime * 1000;
       setStart((s) => (now < s || now > s + viewMs * 0.85 ? clampStart(now - viewMs * 0.15) : s));
       draw();
+      if (!el.paused) onTime?.(now);
       if (!el.paused) frame = requestAnimationFrame(loop);
     };
     const onPlay = () => {
@@ -225,27 +279,44 @@ export function SyncTimeline({
     return Math.round(Math.max(lo, Math.min(hi, ms)));
   };
 
-  const keyDown = (e: KeyboardEvent) => {
-    if (e.key === "Escape") return onSelect(null);
+  const keyDown = (e: KeyPress) => {
+    const el = player.current;
+    const target = e.target as HTMLElement | null;
+    if (e.key === " " && !target?.closest?.("button")) {
+      e.preventDefault();
+      if (el) void (el.paused ? el.play() : el.pause());
+      return;
+    }
     if (e.key === "+" || e.key === "=") return zoomTo(zoom + 1);
     if (e.key === "-" || e.key === "_") return zoomTo(zoom - 1);
+    if (!globalKeys && e.key === "Escape") return onSelect(null);
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     e.preventDefault();
-    if (!e.repeat || held.current.key !== e.key) held.current = { key: e.key, since: performance.now() };
     const dir = e.key === "ArrowLeft" ? -1 : 1;
-    const size = e.altKey ? "fine" : e.shiftKey ? "coarse" : "normal";
-    const fast = speedUp((performance.now() - held.current.since) / 1000);
     const point = points.find((x) => markKey(x) === selected);
-    if (point) {
+    if (e.shiftKey) {
+      // Shift: the selected line moves, faster the longer the key is held.
+      if (!point) return;
+      if (!e.repeat || held.current.key !== e.key) held.current = { key: e.key, since: performance.now() };
+      const fast = speedUp((performance.now() - held.current.since) / 1000);
       const from = drag?.key === selected ? drag.ms : point.ms;
-      const ms = clampMark(point, from + dir * LINE_STEP[size] * fast);
+      const ms = clampMark(point, from + dir * LINE_STEP[e.altKey ? "fine" : "normal"] * fast);
       setDrag({ key: markKey(point), ms });
       if (ms < start || ms > start + viewMs) setStart(clampStart(ms - viewMs / 2));
       onPreview?.(ms);
-    } else if (player.current) {
-      const el = player.current;
-      el.currentTime = Math.max(0, Math.min(duration, el.currentTime * 1000 + dir * SEEK_STEP[size] * fast)) / 1000;
+      return;
     }
+    // From bar to bar: the recording goes to the next (previous) bar's start, its mark gets selected if it has one.
+    if (!el) return;
+    const now = el.currentTime * 1000;
+    const back = el.paused ? 30 : 400; // while playing, ← first goes back to the start of the bar being played
+    const stop = dir > 0 ? stops.find((x) => x.ms > now + 30) : [...stops].reverse().find((x) => x.ms < now - back);
+    if (!stop) return;
+    el.currentTime = Math.max(0, stop.ms) / 1000;
+    const mark = points.find((p) => p.bar === stop.bar && (p.occurrence ?? 0) === stop.occurrence);
+    onSelect(mark ? markKey(mark) : null);
+    if (stop.ms < start || stop.ms > start + viewMs * 0.85) setStart(clampStart(stop.ms - viewMs / 3));
+    onPreview?.(stop.ms);
   };
   // The line moved by keys is saved once the key is let go.
   const saveKeyed = () => {
@@ -256,7 +327,22 @@ export function SyncTimeline({
       setDrag(null);
     }
   };
-  const keyUp = (e: KeyboardEvent) => (e.key === "ArrowLeft" || e.key === "ArrowRight") && saveKeyed();
+  const keyUp = (e: KeyPress) => (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "Shift") && saveKeyed();
+  // In a dialog of its own the keys work without focusing the timeline (but not while typing in a field).
+  const keys = useRef({ keyDown, keyUp });
+  keys.current = { keyDown, keyUp };
+  useEffect(() => {
+    if (!globalKeys) return;
+    const typing = (e: KeyboardEvent) => !!(e.target as HTMLElement | null)?.closest?.("input, textarea, select, [contenteditable]");
+    const down = (e: KeyboardEvent) => !typing(e) && e.target !== canvas.current && keys.current.keyDown(e);
+    const up = (e: KeyboardEvent) => !typing(e) && e.target !== canvas.current && keys.current.keyUp(e);
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, [globalKeys]);
 
   // Trackpad: a sideways swipe scrolls, a pinch (ctrl + wheel) zooms; an up-and-down wheel is left to the page.
   useEffect(() => {
@@ -359,12 +445,12 @@ export function SyncTimeline({
 
   return (
     <div className="space-y-1.5">
-      <div ref={box} className="relative overflow-hidden rounded-xl bg-surface" style={{ height: HEIGHT }}>
+      <div ref={box} className="relative overflow-hidden rounded-xl bg-surface" style={{ height }}>
         <canvas
           ref={canvas}
-          style={{ width, height: HEIGHT, touchAction: "none" }}
+          style={{ width, height, touchAction: "none" }}
           tabIndex={0}
-          aria-label="Запись с отметками тактов: стрелки двигают выбранную линию или запись"
+          aria-label="Запись с отметками тактов: ←/→ — от такта к такту, Shift+←/→ двигают выбранную линию, пробел — играть"
           onKeyDown={keyDown}
           onKeyUp={keyUp}
           onBlur={saveKeyed}
