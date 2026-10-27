@@ -1,5 +1,6 @@
 import { STARTER_VERSION } from "@/data/library";
 import type { DataState } from "./data";
+import { withPlans } from "./plans";
 import type { Item, SessionLog, TempoEntry } from "@/shared/types";
 
 // Two devices (phone browser and the Telegram Mini App) edit the same data offline.
@@ -14,6 +15,9 @@ const logKey = (t: TempoEntry) => `${t.at}:${t.itemId}:${t.sectionId ?? ""}`;
 
 export function mergeData(local: DataState, remote: DataState | null | undefined): DataState {
   if (!remote) return local;
+  // Either side may still be from before several plans.
+  local = withPlans(local);
+  remote = withPlans(remote);
   const deleted: Record<string, number> = { ...(remote.deleted ?? {}) };
   for (const [id, at] of Object.entries(local.deleted ?? {})) deleted[id] = Math.max(at, deleted[id] ?? 0);
 
@@ -42,7 +46,7 @@ export function mergeData(local: DataState, remote: DataState | null | undefined
 
   const remoteNewer = (remote.practiceUpdatedAt ?? 0) > (local.practiceUpdatedAt ?? 0);
   const remoteTemplate = (remote.templateUpdatedAt ?? 0) > (local.templateUpdatedAt ?? 0);
-  const template = remoteTemplate ? remote.template : local.template;
+  const plans = remoteTemplate ? remote : local;
   return {
     items: mergedItems,
     log: [...log.values()].sort((a, b) => a.at - b.at),
@@ -52,7 +56,7 @@ export function mergeData(local: DataState, remote: DataState | null | undefined
     practice: remoteNewer ? remote.practice : local.practice,
     practiceUpdatedAt: Math.max(local.practiceUpdatedAt ?? 0, remote.practiceUpdatedAt ?? 0) || undefined,
     deleted,
-    ...(template ? { template, templateUpdatedAt: Math.max(local.templateUpdatedAt ?? 0, remote.templateUpdatedAt ?? 0) } : {}),
+    ...(plans.plans ? { plans: plans.plans, planId: plans.planId ?? null, templateUpdatedAt: Math.max(local.templateUpdatedAt ?? 0, remote.templateUpdatedAt ?? 0) } : {}),
   };
 }
 

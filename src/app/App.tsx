@@ -22,6 +22,7 @@ const TheoryPage = page(() => import("@/features/theory/TheoryPage"), "TheoryPag
 const ProgressPage = page(() => import("@/features/progress/ProgressPage"), "ProgressPage");
 const SettingsPage = page(() => import("@/features/settings/SettingsPage"), "SettingsPage");
 const PlanBuilderPage = page(() => import("@/features/settings/PlanBuilderPage"), "PlanBuilderPage");
+const PlanEditorPage = page(() => import("@/features/settings/PlanBuilderPage"), "PlanEditorPage");
 const MetronomePage = page(() => import("@/features/metronome/MetronomePage"), "MetronomePage");
 const ImprovPage = page(() => import("@/features/improv/ImprovPage"), "ImprovPage");
 const SessionPage = page(() => import("@/features/session/SessionPage"), "SessionPage");
@@ -99,6 +100,7 @@ function Shell() {
                 <Route path="/progress" element={<ProgressPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/settings/plan" element={<PlanBuilderPage />} />
+                <Route path="/settings/plan/:id" element={<PlanEditorPage />} />
                 <Route path="/metronome" element={<MetronomePage />} />
                 <Route path="/improv" element={<ImprovPage />} />
                 <Route path="/session" element={<SessionPage />} />

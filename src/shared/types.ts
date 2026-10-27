@@ -113,6 +113,12 @@ export interface PlanTemplate {
 }
 export type TemplateBlock = keyof PlanTemplate;
 
+/** One of the user's hand-made plans, picked on "Сегодня". */
+export interface SavedPlan extends PlanTemplate {
+  id: string;
+  name: string;
+}
+
 export interface ImprovTask {
   key: string;
   progressionId: string;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mergeData } from "./merge";
+import { LEGACY_PLAN_ID } from "./plans";
 import { DEFAULT_PRACTICE, type DataState } from "./data";
 import { STARTER_LIBRARY } from "@/data/library";
 import type { Item } from "@/shared/types";
@@ -54,15 +55,26 @@ describe("mergeData", () => {
   });
 });
 
-describe("plan template", () => {
-  it("keeps the newer hand-made plan from either side", () => {
-    const t1 = { warmup: [{ itemId: "a" }], new: [], review: [] };
-    const t2 = { warmup: [], new: [{ itemId: "b" }], review: [] };
-    const a = { ...base(), template: t1, templateUpdatedAt: 10 };
-    const b = { ...base(), template: t2, templateUpdatedAt: 20 };
-    expect(mergeData(a, b).template).toEqual(t2);
-    expect(mergeData(b, a).template).toEqual(t2);
-    expect(mergeData(base(), a).template).toEqual(t1);
+describe("plans", () => {
+  const p1 = { id: "p1", name: "Утро", warmup: [{ itemId: "a" }], new: [], review: [] };
+  const p2 = { id: "p2", name: "Вечер", warmup: [], new: [{ itemId: "b" }], review: [] };
+
+  it("keeps the newer plans and choice from either side", () => {
+    const a = { ...base(), plans: [p1], planId: "p1", templateUpdatedAt: 10 };
+    const b = { ...base(), plans: [p1, p2], planId: "p2", templateUpdatedAt: 20 };
+    for (const m of [mergeData(a, b), mergeData(b, a)]) {
+      expect(m.plans).toEqual([p1, p2]);
+      expect(m.planId).toBe("p2");
+    }
+    expect(mergeData(base(), a).plans).toEqual([p1]);
+  });
+
+  it("turns the single plan of an older device into a chosen plan", () => {
+    const old = { ...base(), template: { warmup: [], new: [{ itemId: "b" }], review: [] }, templateUpdatedAt: 20 };
+    const m = mergeData({ ...base(), plans: [p1], planId: "p1", templateUpdatedAt: 10 }, old);
+    expect(m.plans).toEqual([{ id: LEGACY_PLAN_ID, name: "Мой план", warmup: [], new: [{ itemId: "b" }], review: [] }]);
+    expect(m.planId).toBe(LEGACY_PLAN_ID);
+    expect(m.template).toBeUndefined();
   });
 });
 

@@ -2,7 +2,8 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { STARTER_LIBRARY } from "@/data/library";
 import { entryKey } from "@/lib/progress";
-import type { BlockKind, Item, ItemStatus, PlanEntry, PlanTemplate, Section, SessionLog, TempoEntry } from "@/shared/types";
+import { withPlans } from "./plans";
+import type { BlockKind, Item, ItemStatus, PlanEntry, PlanTemplate, SavedPlan, Section, SessionLog, TempoEntry } from "@/shared/types";
 
 export interface PracticeSettings {
   blocks: Record<BlockKind, number>; // minutes
@@ -29,9 +30,14 @@ export interface DataState {
   practiceUpdatedAt?: number;
   /** Deleted item ids → when, so a sync doesn't bring them back */
   deleted?: Record<string, number>;
-  /** The hand-made plan; when it has any entries, sessions follow it instead of the automatic planner */
-  template?: PlanTemplate;
+  /** Hand-made plans; the chosen one (with any entries) is played instead of the automatic planner */
+  plans?: SavedPlan[];
+  /** The plan "Сегодня" plays; none means the automatic one */
+  planId?: string | null;
+  /** When plans or the choice last changed (named after the single plan there used to be) */
   templateUpdatedAt?: number;
+  /** The single plan of older versions and backups; turned into `plans` by withPlans */
+  template?: PlanTemplate;
 }
 
 interface DataActions {
@@ -47,7 +53,11 @@ interface DataActions {
   addSession: (session: SessionLog) => void;
   pushRecentKey: (key: string) => void;
   setPractice: (patch: Partial<PracticeSettings>) => void;
-  setTemplate: (template: PlanTemplate) => void;
+  /** Adds an empty plan and returns its id. */
+  addPlan: (name: string) => string;
+  updatePlan: (id: string, patch: Partial<Omit<SavedPlan, "id">>) => void;
+  removePlan: (id: string) => void;
+  choosePlan: (id: string | null) => void;
   replaceAll: (data: DataState) => void;
 }
 
@@ -104,15 +114,25 @@ export const useData = create<DataState & DataActions>()(
       addSession: (session) => set((s) => ({ sessions: [...s.sessions.filter((x) => x.id !== session.id), session] })),
       pushRecentKey: (key) => set((s) => ({ recentKeys: [...s.recentKeys, key].slice(-6) })),
       setPractice: (patch) => set((s) => ({ practice: { ...s.practice, ...patch }, practiceUpdatedAt: Date.now() })),
-      setTemplate: (template) => set(() => ({ template, templateUpdatedAt: Date.now() })),
-      replaceAll: (data) => set(() => ({ ...initial(), ...data })),
+      addPlan: (name) => {
+        const id = uid("plan");
+        set((s) => ({ plans: [...(s.plans ?? []), { id, name, warmup: [], new: [], review: [] }], templateUpdatedAt: Date.now() }));
+        return id;
+      },
+      updatePlan: (id, patch) =>
+        set((s) => ({ plans: (s.plans ?? []).map((p) => (p.id === id ? { ...p, ...patch } : p)), templateUpdatedAt: Date.now() })),
+      removePlan: (id) =>
+        set((s) => ({ plans: (s.plans ?? []).filter((p) => p.id !== id), planId: s.planId === id ? null : s.planId, templateUpdatedAt: Date.now() })),
+      choosePlan: (id) => set(() => ({ planId: id, templateUpdatedAt: Date.now() })),
+      replaceAll: (data) => set(() => ({ ...initial(), template: undefined, ...withPlans(data) })),
     }),
     {
       name: "guitar:data",
-      version: 3,
+      version: 4,
       migrate: (persisted, version) => {
-        const state = persisted as DataState;
+        let state = persisted as DataState;
         if (version < 3) Object.assign(state, dropStarter(state.items ?? [], state.deleted ?? {}));
+        if (version < 4) state = withPlans(state);
         return state;
       },
     },
@@ -132,6 +152,6 @@ export function dropStarter(items: Item[], deleted: Record<string, number>, now 
 
 /** Plain data for backups and (later) sync. */
 export const exportData = (): DataState => {
-  const { items, log, sessions, lastPlayed, recentKeys, practice, practiceUpdatedAt, deleted, template, templateUpdatedAt } = useData.getState();
-  return { items, log, sessions, lastPlayed, recentKeys, practice, practiceUpdatedAt, deleted, template, templateUpdatedAt };
+  const { items, log, sessions, lastPlayed, recentKeys, practice, practiceUpdatedAt, deleted, plans, planId, templateUpdatedAt } = useData.getState();
+  return { items, log, sessions, lastPlayed, recentKeys, practice, practiceUpdatedAt, deleted, plans, planId, templateUpdatedAt };
 };

@@ -2,14 +2,15 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { m } from "motion/react";
 import { ChevronRight, Dices, Library, ListChecks, Music, Play, PlayCircle, Plus, Video } from "lucide-react";
-import { Badge, Button, Card } from "@/components/ui";
+import { Badge, Button, Card, Chip, ScrollRow } from "@/components/ui";
 import { BLOCK_ICON, IconTile } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/Placeholder";
 import { audio } from "@/audio/player";
-import { buildPlan, templateSize } from "@/features/session/plan";
+import { buildPlan } from "@/features/session/plan";
 import { resolveProgression } from "@/music/improv";
 import { unitTitle } from "@/lib/progress";
 import { useData } from "@/store/data";
+import { currentPlan } from "@/store/plans";
 import { useSession } from "@/store/session";
 import { BLOCK_META, type Item } from "@/shared/types";
 
@@ -35,7 +36,8 @@ export function TodayPage() {
   const { active, start } = useSession();
   const navigate = useNavigate();
   const [seed, setSeed] = useState(0);
-  const plan = useMemo(() => buildPlan(data), [data.items, data.lastPlayed, data.practice, data.template, seed]);
+  const chosen = currentPlan(data);
+  const plan = useMemo(() => buildPlan({ ...data, template: chosen }), [data.items, data.lastPlayed, data.practice, chosen, seed]);
 
   const begin = () => {
     audio(); // unlock sound inside the tap
@@ -73,6 +75,20 @@ export function TodayPage() {
                 </Link>
               </Button>
             </Card>
+          )}
+          {!!data.plans?.length && (
+            <div className="mb-2.5">
+              <ScrollRow>
+                <Chip active={!chosen} onClick={() => data.choosePlan(null)}>
+                  Автоплан
+                </Chip>
+                {data.plans.map((p) => (
+                  <Chip key={p.id} active={chosen?.id === p.id} onClick={() => data.choosePlan(p.id)}>
+                    {p.name}
+                  </Chip>
+                ))}
+              </ScrollRow>
+            </div>
           )}
           <div className="space-y-2.5">
             {plan.map((b, i) => (
@@ -116,8 +132,8 @@ export function TodayPage() {
             ))}
           </div>
           <Button asChild variant="ghost" size="sm" className="mt-2 w-full">
-            <Link to="/settings/plan">
-              <ListChecks className="size-4" /> {templateSize(data.template) ? "Изменить план" : "Составить план вручную"}
+            <Link to={chosen ? `/settings/plan/${chosen.id}` : "/settings/plan"}>
+              <ListChecks className="size-4" /> {chosen ? "Изменить план" : data.plans?.length ? "Мои планы" : "Составить план вручную"}
             </Link>
           </Button>
           <Button size="xl" onClick={begin} className="mt-3 w-full text-lg">

@@ -5,7 +5,8 @@ import type { Item, PlanBlock, PlanEntry, PlanTemplate } from "@/shared/types";
 
 export const WARMUP_CATEGORY = "Разминка";
 
-type PlanInput = Pick<DataState, "items" | "lastPlayed" | "recentKeys" | "practice" | "template">;
+/** `template` is the plan chosen for today (see currentPlan); without one the planner picks by itself. */
+type PlanInput = Pick<DataState, "items" | "lastPlayed" | "recentKeys" | "practice"> & { template?: PlanTemplate };
 
 /** Never-played first, then the longest ago. */
 const byLastPlayed = (lastPlayed: Record<string, string>) => (a: PlanEntry, b: PlanEntry) =>
