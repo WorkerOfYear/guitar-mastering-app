@@ -191,9 +191,18 @@ function AddRow({
   );
 }
 
-function IconAction({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+/** `active`: a toggle that is on (its panel is open) — shown pressed. */
+function IconAction({ label, onClick, active, children }: { label: string; onClick: () => void; active?: boolean; children: ReactNode }) {
   return (
-    <Button variant="ghost" size="icon-sm" aria-label={label} title={label} onClick={onClick}>
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label={label}
+      title={label}
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(active && "bg-accent/15 text-accent hover:bg-accent/20")}
+    >
       {children}
     </Button>
   );
@@ -721,7 +730,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
                 />
               )}
               {file && audioData && (
-                <IconAction label="Поправить синхронизацию" onClick={() => setShowSync(!showSync)}>
+                <IconAction label="Поправить синхронизацию" active={showSync} onClick={() => setShowSync(!showSync)}>
                   <Link2 className="size-4" />
                 </IconAction>
               )}
