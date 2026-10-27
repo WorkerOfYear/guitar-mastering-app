@@ -33,7 +33,7 @@ import { Switch } from "@/components/ui/switch";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
 import { DEFAULT_BOARD, TheoryPicker } from "@/components/fretboard/TheoryPicker";
 import { choiceOf, theoryView } from "@/music/theoryView";
-import type { ScoreInfo } from "@/components/tab/TabPlayer";
+import type { PlayerControl, ScoreInfo } from "@/components/tab/TabPlayer";
 import { TabViewSwitch } from "@/components/tab/TabViewSwitch";
 import { audio } from "@/audio/player";
 import { cacheAudioFile, deleteAudioFile, deleteInstagramVideo, deleteTabFile, loadAudioFile, loadTabFile, saveAudioFile, saveTabFile } from "@/lib/tabFiles";
@@ -229,6 +229,8 @@ function FileAction({ label, accept, onFile }: { label: string; accept: string; 
  */
 export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "score" }) {
   const scoreOnly = part !== "all";
+  // The tab above the sync panel: shows where a dragged mark falls in the notes.
+  const tabControl = useRef<PlayerControl | null>(null);
   const { updateItem } = useData();
   const [file, setFile] = useState<ArrayBuffer | null>(null);
   const fileRef = useRef<ArrayBuffer | null>(null);
@@ -681,6 +683,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
           countIn
           height="40vh"
           onScore={setScore}
+          control={tabControl}
         />
       </Suspense>
     );
@@ -743,7 +746,15 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
         <MatchWarnings warnings={item.audioWarnings} />
         {showSync && file && audioData && (
           <div className="rounded-2xl bg-surface-2/40 p-3">
-            <AudioSync item={item} audio={audioData} tab={file} sections={score?.sections ?? []} bars={score?.bars ?? 1} barMs={score?.barMs ?? []} />
+            <AudioSync
+              item={item}
+              audio={audioData}
+              tab={file}
+              sections={score?.sections ?? []}
+              bars={score?.bars ?? 1}
+              barMs={score?.barMs ?? []}
+              onPreview={(ms) => tabControl.current?.showTime?.(ms)}
+            />
           </div>
         )}
       </div>

@@ -27,6 +27,8 @@ function applyView(score: alphaTab.model.Score, view: TabView) {
 /** Lets a tap start playback directly (inside the user gesture, which browsers require for audio). */
 export interface PlayerControl {
   resume: () => void;
+  /** Puts the cursor where the notes are at this moment of the recording (while paused) and scrolls to it. */
+  showTime?: (ms: number) => void;
 }
 
 export interface ScoreInfo {
@@ -47,6 +49,9 @@ function barLengths(s: alphaTab.model.Score) {
     return ((m.timeSignatureNumerator * 4) / m.timeSignatureDenominator) * (60_000 / tempo);
   });
 }
+
+// alphaTab's ticks per quarter note (MidiUtils.QuarterTime, not exported).
+const QUARTER_TICKS = 960;
 
 interface Props {
   tex?: string;
@@ -185,7 +190,29 @@ export default function TabPlayer({
       cb.current.onProgress?.(bar + 1);
     });
     a.isLooping = true;
-    if (control) control.current = { resume: () => a.play() };
+    // A moment of the recording → a tick: through the bar marks (first passes), past the last one at the tab's tempo.
+    const tickAt = (ms: number) => {
+      const s = score.current!;
+      const marks = (syncRef.current ?? []).filter((p) => !p.occurrence && s.masterBars[p.bar - 1]).sort((x, y) => x.ms - y.ms);
+      const pts = marks.length ? marks : [{ bar: 1, ms: 0 }];
+      let i = 0;
+      while (i + 1 < pts.length && pts[i + 1].ms <= ms) i++;
+      const [p, q] = [pts[i], pts[i + 1]];
+      const t = s.masterBars[p.bar - 1].start;
+      if (q && q.ms > p.ms) return Math.max(0, t + ((ms - p.ms) / (q.ms - p.ms)) * (s.masterBars[q.bar - 1].start - t));
+      return Math.max(0, t + ((ms - p.ms) * QUARTER_TICKS * s.tempo) / 60_000);
+    };
+    if (control)
+      control.current = {
+        resume: () => a.play(),
+        showTime: (ms) => {
+          if (!score.current || a.playerState === alphaTab.synth.PlayerState.Playing) return;
+          // With the recording attached alphaTab maps its time itself, repeats included.
+          if (audio) a.timePosition = ms;
+          else a.tickPosition = tickAt(ms);
+          a.scrollToCursor();
+        },
+      };
     if (tex) a.tex(tex);
     else if (file) {
       try {
