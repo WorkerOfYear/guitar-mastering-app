@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as alphaTab from "@coderline/alphatab";
-import { applyBackingTrack, misplacedMarks, shortBars } from "./backingTrack";
+import { applyBackingTrack, misplacedMarks, shortBars, withSkipped } from "./backingTrack";
 import { formatClockMs, parseClock } from "./clock";
 
 const tex = `\\tempo 120 . \\track "G" \\staff {tabs} \\ts 4 4 :4 1.1 1.1 1.1 1.1 | 1.1 1.1 1.1 1.1 | 1.1 1.1 1.1 1.1 |`;
@@ -62,6 +62,31 @@ describe("backing track", () => {
     const barMs = Array(20).fill(2000);
     expect(shortBars(points, barMs)).toEqual([{ from: 9, to: 10, ms: 1040, expectedMs: 4120 }]);
     expect(shortBars(points.slice(0, 9), barMs)).toEqual([]);
+  });
+  it("takes skipped bars out of the recording's time", () => {
+    const barMs = Array(6).fill(2000);
+    // Every bar marked: bars 3–4 get a few ms before bar 5, their own marks are dropped.
+    const all = [0, 2000, 4000, 6000, 8000].map((ms, i) => ({ bar: i + 1, ms }));
+    expect(withSkipped(all, [3, 4], barMs).sort((a, b) => a.bar - b.bar)).toEqual([
+      { bar: 1, ms: 0 },
+      { bar: 2, ms: 2000 },
+      { bar: 3, ms: 7996 },
+      { bar: 4, ms: 7998 },
+      { bar: 5, ms: 8000 },
+    ]);
+    // Bar 5 unmarked: it falls between bars 1 and 6 with the skipped bars taking no time (2 of 3 played bars in).
+    const sparse = [
+      { bar: 1, ms: 0 },
+      { bar: 6, ms: 6000 },
+    ];
+    expect(withSkipped(sparse, [3, 4], barMs).sort((a, b) => a.bar - b.bar)).toEqual([
+      { bar: 1, ms: 0 },
+      { bar: 3, ms: 3996 },
+      { bar: 4, ms: 3998 },
+      { bar: 5, ms: 4000 },
+      { bar: 6, ms: 6000 },
+    ]);
+    expect(withSkipped(all, [], barMs)).toBe(all);
   });
   it("parses and formats times", () => {
     expect(parseClock("1:23.4")).toBe(83400);

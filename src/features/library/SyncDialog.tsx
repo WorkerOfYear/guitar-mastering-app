@@ -72,7 +72,7 @@ export default function SyncDialog({
           </div>
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pb-[max(env(safe-area-inset-bottom),1rem)]">
             {/* Only a cursor here: the recording below plays, the tab follows it. */}
-            <TabPlayer file={tab} audio={null} sync={item.audioSync} unrepeat={item.audioUnrepeat} playing={false} track={track} height="32dvh" control={control} />
+            <TabPlayer file={tab} audio={null} sync={item.audioSync} unrepeat={item.audioUnrepeat} skip={item.audioSkip} playing={false} track={track} height="32dvh" control={control} />
             <AudioSync
               item={item}
               audio={audio}

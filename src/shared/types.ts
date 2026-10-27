@@ -73,6 +73,8 @@ export interface Item {
   audioSync?: SyncPoint[];
   /** Repeats (by closing bar) the recording plays only once — switched off when playing along with it */
   audioUnrepeat?: number[];
+  /** Bars of the tab the recording doesn't play (a riff repeated once too often): they take no time with it */
+  audioSkip?: number[];
   /** What the check found when the recording was bound to the tab: another tuning, another song, only a part… */
   audioWarnings?: string[];
   /** An exercise's blocks; when missing they follow from the fields that are filled in */

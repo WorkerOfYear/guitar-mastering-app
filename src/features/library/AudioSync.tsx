@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { LoaderCircle, Minus, Pause, Play, Plus, Square, Timer, Trash2, TriangleAlert, WandSparkles } from "lucide-react";
+import { EyeOff, LoaderCircle, Minus, Pause, Play, Plus, Square, Timer, Trash2, TriangleAlert, Undo2, WandSparkles } from "lucide-react";
 import { Button, IconButton, Input } from "@/components/ui";
 import { audioBlob } from "@/lib/audioType";
-import { misplacedMarks, shortBars, SKIPPED_MS } from "@/lib/backingTrack";
+import { misplacedMarks, shortBars, SKIPPED_MS, withSkipped } from "@/lib/backingTrack";
 import { formatClockMs, parseClock } from "@/lib/clock";
 import { useData } from "@/store/data";
 import type { Item, SyncPoint } from "@/shared/types";
@@ -23,7 +23,7 @@ interface Props {
   /** A line is being dragged (or a bar stepped) to this moment of the recording */
   onPreview?: (ms: number) => void;
   /** The tab on the recording's time, drawn above the waveform */
-  lane?: (points: SyncPoint[]) => Lane;
+  lane?: (points: SyncPoint[], skip: number[]) => Lane;
   /** While the recording plays: where it is, ms (every frame) */
   onTime?: (ms: number) => void;
 }
@@ -107,19 +107,42 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, 
   // Marks put at the wrong moment earlier: not used for playback, offered for removal.
   const misplaced = misplacedMarks(points);
   // Bars the recording rushes through: most likely not in it (the tab repeats a riff once more, say).
-  const missing = shortBars(points, barMs).filter((r) => r.ms >= SKIPPED_MS);
+  // (Bars already taken out of the recording don't count: they take a few ms on purpose.)
+  const skip = item.audioSkip ?? [];
+  const missing = shortBars(withSkipped(points, skip, barMs), barMs).filter((r) => r.ms >= SKIPPED_MS);
   const markOf = (bar: number) => points.find((p) => p.bar === bar && !p.occurrence);
-  /** The notes jump over bars from…to: they get a few ms right before the next bar's mark. */
-  const skip = (from: number, to: number) => {
-    const next = markOf(to + 1);
-    if (!next) return;
-    const marks = [...Array(to - from + 1)].map((_, i) => ({ bar: from + i, ms: next.ms - (to - from + 1 - i) * 10 }));
-    save([...points.filter((p) => p.occurrence || p.bar < from || p.bar > to), ...marks]);
+  /**
+   * Bars from…to aren't in the recording: they stay in the notes (faded) but take no time with it. Their marks go;
+   * the bar after them keeps where it is now (a mark is put there if it had none).
+   */
+  const removeBars = (from: number, to: number) => {
+    const next = to + 1;
+    const at = lane?.(points, skip).bars.find((b) => b.bar === next && b.occurrence === 0)?.ms;
+    const kept = points.filter((p) => p.occurrence || p.bar < from || p.bar > to);
+    const marks = markOf(next) || at === undefined || next > bars ? kept : [...kept, { bar: next, ms: Math.round(at) }];
+    const nextSkip = [...new Set([...skip, ...[...Array(to - from + 1)].map((_, i) => from + i)])].sort((a, b) => a - b);
+    updateItem(item.id, {
+      audioSkip: nextSkip,
+      audioSync: marks.sort((a, b) => a.bar - b.bar || (a.occurrence ?? 0) - (b.occurrence ?? 0)),
+    });
+    setSelected(null);
   };
+  /** Bars back in the recording: they get their time again between the marks around them. */
+  const restoreBars = (from: number, to: number) => {
+    const left = skip.filter((b) => b < from || b > to);
+    updateItem(item.id, { audioSkip: left.length ? left : undefined });
+  };
+  // Runs of skipped bars, for the list under the timeline.
+  const skippedRuns = skip.reduce<[number, number][]>((runs, b) => {
+    const last = runs.at(-1);
+    if (last && last[1] + 1 === b) last[1] = b;
+    else runs.push([b, b]);
+    return runs;
+  }, []);
   const now = () => Math.round((player.current?.currentTime ?? 0) * 1000);
   const current = points.find((p) => markKey(p) === selected) ?? null;
   // Bar 1 and section starts that have no mark yet: one tap marks them at the playing moment.
-  const unmarked = [...new Set([1, ...sections.map((s) => s.bar)])].filter((b) => !points.some((p) => p.bar === b && !p.occurrence));
+  const unmarked = [...new Set([1, ...sections.map((s) => s.bar)])].filter((b) => !skip.includes(b) && !points.some((p) => p.bar === b && !p.occurrence));
 
   const mark = (bar: number) => {
     setMark({ bar }, now());
@@ -208,7 +231,7 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, 
         onSelect={setSelected}
         onMove={(p, ms) => setMark(p, ms)}
         onPreview={onPreview}
-        lane={lane}
+        lane={lane && ((pts) => lane(pts, skip))}
         globalKeys
         onTime={(ms) => {
           setClock((c) => (Math.abs(c - ms) >= 100 ? ms : c));
@@ -256,6 +279,11 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, 
           >
             <Trash2 />
           </IconButton>
+          {!current.occurrence && (
+            <IconButton label="Такта нет в записи — убрать с таймлайна (в нотах останется)" onClick={() => removeBars(current.bar, current.bar)}>
+              <EyeOff />
+            </IconButton>
+          )}
         </div>
       ) : (
         points.length > 0 && <p className="px-1 text-xs text-muted">Нажми на линию, чтобы поправить её точно или прослушать такт.</p>
@@ -307,22 +335,30 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, 
               <span>
                 {bars} в записи — {(r.ms / 1000).toFixed(1).replace(".", ",")} с, а в её темпе {r.from === r.to ? "должен" : "должны"} занимать ~
                 {(r.expectedMs / 1000).toFixed(1).replace(".", ",")} с. Похоже, в табе здесь лишние такты (например, рифф повторён лишний раз), которых
-                нет в записи, — или отметки тут сбились. Послушай: если в записи их нет, пропусти их в нотах.
+                нет в записи, — или отметки тут сбились. Послушай: если в записи их нет, убери их с таймлайна (в нотах они останутся).
               </span>
             </p>
             <div className="flex flex-wrap gap-1.5">
               <Button variant="secondary" size="sm" onClick={() => playSpan(key, from, to)} className="h-8 rounded-lg px-2.5 text-xs">
                 {playingBar === key ? <Square className="size-3.5" /> : <Play className="size-3.5" />} Послушать это место
               </Button>
-              {after && (
-                <Button variant="secondary" size="sm" onClick={() => skip(r.from, r.to)} className="h-8 rounded-lg px-2.5 text-xs">
-                  Пропустить в нотах: с {r.from - 1} сразу на {r.to + 1}
-                </Button>
-              )}
+              <Button variant="secondary" size="sm" onClick={() => removeBars(r.from, r.to)} className="h-8 rounded-lg px-2.5 text-xs">
+                <EyeOff className="size-3.5" /> Нет в записи: убрать {r.from === r.to ? `такт ${r.from}` : `такты ${r.from}–${r.to}`}
+              </Button>
             </div>
           </div>
         );
       })}
+      {skippedRuns.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-muted">Нет в записи (в нотах бледные):</span>
+          {skippedRuns.map(([from, to]) => (
+            <Button key={from} variant="secondary" size="sm" onClick={() => restoreBars(from, to)} className="h-8 rounded-lg px-2.5 text-xs">
+              <Undo2 className="size-3.5" /> {from === to ? `Такт ${from}` : `Такты ${from}–${to}`} — вернуть
+            </Button>
+          ))}
+        </div>
+      )}
       <p className="text-xs text-muted">
         Линии — начала тактов в записи. Потяни линию, чтобы поставить её на сильную долю: на нотах видно, куда она попадает. Тап по записи —
         перемотка, по пустому месту можно листать (с разгона — по инерции), на тачпаде — свайп вбок, щипок — масштаб.

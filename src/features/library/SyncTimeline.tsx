@@ -133,7 +133,7 @@ export function SyncTimeline({
   const draft = drag ? points.map((p) => (markKey(p) === drag.key ? { ...p, ms: drag.ms } : p)) : points;
   const tabLane = lane?.(draft) ?? null;
   // Where ←/→ go: every bar of the tab when it's laid on the recording, else the marks.
-  const stops = tabLane?.bars ?? marks.map((m) => ({ bar: m.p.bar, occurrence: m.p.occurrence ?? 0, ms: m.ms }));
+  const stops = tabLane?.bars.filter((b) => !b.skipped) ?? marks.map((m) => ({ bar: m.p.bar, occurrence: m.p.occurrence ?? 0, ms: m.ms }));
 
   const draw = () => {
     const c = canvas.current;
@@ -160,9 +160,22 @@ export function SyncTimeline({
       g.globalAlpha = 1;
       g.font = "9px system-ui, sans-serif";
       let lastLabel = -Infinity;
-      for (const b of tabLane.bars) {
+      const guideColor = cssVar("--guide", "#e24b4a");
+      tabLane.bars.forEach((b, k) => {
         const bx = x(b.ms);
-        if (bx < -20 || bx > width + 20) continue;
+        if (bx < -40 || bx > width + 40) return;
+        // Bars not in the recording: one red mark where they were, "✕69–70".
+        if (b.skipped) {
+          if (tabLane.bars[k - 1]?.skipped) return;
+          let end = k;
+          while (tabLane.bars[end + 1]?.skipped) end++;
+          const label = `✕${b.bar}${end > k ? `–${tabLane.bars[end].bar}` : ""}`;
+          g.fillStyle = guideColor;
+          g.globalAlpha = 1;
+          g.fillRect(Math.round(bx), top, 2, LANE_H);
+          g.fillText(label, bx + 3, top + LANE_H - 4);
+          return;
+        }
         g.fillStyle = muted;
         g.globalAlpha = 0.45;
         g.fillRect(Math.round(bx), top, 1, LANE_H);
@@ -171,7 +184,7 @@ export function SyncTimeline({
           g.fillText(b.occurrence ? `${b.bar}·${b.occurrence + 1}` : String(b.bar), bx + 2, top + 9);
           lastLabel = bx;
         }
-      }
+      });
       const [lo, hi] = tabLane.keys;
       g.fillStyle = cssVar("--chord", "#1d9e75");
       g.globalAlpha = 0.9;

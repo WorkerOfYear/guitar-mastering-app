@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import * as alphaTab from "@coderline/alphatab";
 import { CircleAlert, LoaderCircle } from "lucide-react";
 import { useSettings, type TabView } from "@/store/settings";
-import { applyBackingTrack } from "@/lib/backingTrack";
+import { applyBackingTrack, barLengths } from "@/lib/backingTrack";
 import type { SyncPoint } from "@/shared/types";
 
 /**
@@ -42,12 +42,43 @@ export interface ScoreInfo {
   barMs: number[];
 }
 
-function barLengths(s: alphaTab.model.Score) {
-  let tempo = s.tempo;
-  return s.masterBars.map((m) => {
-    tempo = m.tempoAutomations[0]?.value ?? tempo;
-    return ((m.timeSignatureNumerator * 4) / m.timeSignatureDenominator) * (60_000 / tempo);
-  });
+const cssColor = (name: string, fallback: string) =>
+  alphaTab.model.Color.fromJson(getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback)!;
+const numbers = (e: object) => Object.values(e).filter((v): v is number => typeof v === "number");
+
+/**
+ * Bars the recording doesn't play stay in the notes, faded, with a red bar number. Styles are set on every staff of
+ * those bars and taken off the bars that are played again (the files themselves carry no styles).
+ */
+function markSkipped(score: alphaTab.model.Score, skip: number[]) {
+  const { BarStyle, BeatStyle, NoteStyle, BarSubElement, BeatSubElement, NoteSubElement } = alphaTab.model;
+  const m = cssColor("--muted", "#888");
+  const faded = new alphaTab.model.Color(m.r, m.g, m.b, 90);
+  const red = cssColor("--guide", "#e24b4a");
+  const skipped = new Set(skip);
+  for (const track of score.tracks)
+    for (const staff of track.staves)
+      for (const bar of staff.bars) {
+        const on = skipped.has(bar.index + 1);
+        if (!on && !bar.style) continue;
+        if (on) {
+          bar.style = new BarStyle();
+          for (const el of numbers(BarSubElement)) bar.style.colors.set(el, /BarNumber/.test(BarSubElement[el]) ? red : faded);
+        } else bar.style = undefined;
+        for (const voice of bar.voices)
+          for (const beat of voice.beats) {
+            if (on) {
+              beat.style = new BeatStyle();
+              for (const el of numbers(BeatSubElement)) beat.style.colors.set(el, faded);
+            } else beat.style = undefined;
+            for (const note of beat.notes) {
+              if (on) {
+                note.style = new NoteStyle();
+                for (const el of numbers(NoteSubElement)) note.style.colors.set(el, faded);
+              } else note.style = undefined;
+            }
+          }
+      }
 }
 
 // alphaTab's ticks per quarter note (MidiUtils.QuarterTime, not exported).
@@ -62,6 +93,8 @@ interface Props {
   sync?: SyncPoint[];
   /** Repeats the recording plays once (closing bars) */
   unrepeat?: number[];
+  /** Bars the recording doesn't play: no time with it, faded in the notes */
+  skip?: number[];
   /** Desired tempo in bpm; playback speed = bpm / tempo written in the tab */
   bpm?: number;
   /** Or a speed factor directly (1 = original) */
@@ -87,6 +120,7 @@ export default function TabPlayer({
   audio,
   sync,
   unrepeat,
+  skip,
   bpm,
   speed,
   playing,
@@ -116,6 +150,9 @@ export default function TabPlayer({
   syncRef.current = sync;
   const unrepeatRef = useRef(unrepeat);
   unrepeatRef.current = unrepeat;
+  const skipRef = useRef(skip);
+  skipRef.current = skip;
+  const shownSkip = useRef("");
   const cb = useRef({ onScore, onBlocked, onProgress });
   cb.current = { onScore, onBlocked, onProgress };
 
@@ -197,10 +234,10 @@ export default function TabPlayer({
     let cached: { key: string; pts: ReturnType<typeof alphaTab.midi.MidiFileGenerator.generateSyncPoints> } | null = null;
     const tickAt = (ms: number) => {
       const s = score.current!;
-      const key = JSON.stringify(syncRef.current ?? []);
+      const key = JSON.stringify([syncRef.current ?? [], skipRef.current ?? []]);
       if (cached?.key !== key) {
         // Without the recording the marks aren't on the score yet, nor the repeats it plays once.
-        if (!audio) applyBackingTrack(s, null, syncRef.current ?? [], unrepeatRef.current ?? []);
+        if (!audio) applyBackingTrack(s, null, syncRef.current ?? [], unrepeatRef.current ?? [], skipRef.current ?? []);
         cached = { key, pts: alphaTab.midi.MidiFileGenerator.generateSyncPoints(s).sort((x, y) => x.syncTime - y.syncTime) };
       }
       const pts = cached.pts;
@@ -225,7 +262,9 @@ export default function TabPlayer({
       try {
         // Parse here so the recording and its sync points can be attached before alphaTab loads the score.
         const parsed = alphaTab.importer.ScoreLoader.loadScoreFromBytes(new Uint8Array(file), settings);
-        if (audio) applyBackingTrack(parsed, new Uint8Array(audio), syncRef.current ?? [], unrepeatRef.current ?? []);
+        if (audio) applyBackingTrack(parsed, new Uint8Array(audio), syncRef.current ?? [], unrepeatRef.current ?? [], skipRef.current ?? []);
+        markSkipped(parsed, skipRef.current ?? []);
+        shownSkip.current = (skipRef.current ?? []).join(",");
         a.renderScore(parsed, [Math.min(trackRef.current, parsed.tracks.length - 1)]);
       } catch (e) {
         setError((e as Error).message);
@@ -240,14 +279,24 @@ export default function TabPlayer({
     };
   }, [tex, file, audio, (unrepeat ?? []).join(",")]);
 
-  // Moving a sync point doesn't need a reload.
-  const syncKey = JSON.stringify(sync ?? []);
+  // Moving a sync point (or skipping a bar) doesn't need a reload.
+  const syncKey = JSON.stringify([sync ?? [], skip ?? []]);
   useEffect(() => {
     const a = api.current;
     if (!a || !score.current || !audio) return;
-    applyBackingTrack(score.current, null, sync ?? [], unrepeat ?? []);
+    applyBackingTrack(score.current, null, sync ?? [], unrepeat ?? [], skip ?? []);
     a.updateSyncPoints();
   }, [syncKey, ready]);
+
+  // Skipped bars faded in the notes: drawn again when the list changes.
+  const skipKey = (skip ?? []).join(",");
+  useEffect(() => {
+    const a = api.current;
+    if (!a || !score.current || shownSkip.current === skipKey) return;
+    shownSkip.current = skipKey;
+    markSkipped(score.current, skip ?? []);
+    a.renderScore(score.current, [Math.min(trackRef.current, score.current.tracks.length - 1)]);
+  }, [skipKey, loading]);
 
   // Switch between tab and notation without reloading.
   const shownView = useRef(view);

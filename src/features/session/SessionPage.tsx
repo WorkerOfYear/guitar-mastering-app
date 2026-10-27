@@ -568,6 +568,7 @@ function SongStage({
             audio={useRecording ? audio : null}
             sync={item.audioSync}
             unrepeat={item.audioUnrepeat}
+            skip={item.audioSkip}
             height={TAB_HEIGHT}
             speed={speed}
             playing={playing}
