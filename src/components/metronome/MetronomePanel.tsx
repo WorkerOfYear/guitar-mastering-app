@@ -256,7 +256,8 @@ function KeyHint() {
   );
 }
 
-function TempoSlider() {
+/** `compact`: the slider with its −/+ only — no key hint, no ruler (the session screen). */
+function TempoSlider({ compact }: { compact?: boolean }) {
   const bpm = useMetronome((s) => s.bpm);
   const running = useMetronome((s) => s.running);
   // the colours of the start-button ring, toned down towards the surface so the slider stays calm
@@ -266,8 +267,8 @@ function TempoSlider() {
   const up = useHoldRepeat(1);
   const down = useHoldRepeat(-1);
   return (
-    <div className="mt-12">
-      <KeyHint />
+    <div className={compact ? "mt-3" : "mt-12"}>
+      {!compact && <KeyHint />}
       <div className="flex items-center gap-4">
         <button type="button" aria-label="Темп −1" className={cn(CIRCLE, "size-10 touch-none")} {...down}>
           <Minus className="size-5" />
@@ -295,7 +296,7 @@ function TempoSlider() {
         </button>
       </div>
       {/* the ruler: same width and inset as the slider, so every mark sits under its own spot on the track */}
-      <div className="mx-[56px] mt-2 text-xs font-medium text-muted" aria-hidden>
+      <div className={cn("mx-[56px] mt-2 text-xs font-medium text-muted", compact && "hidden")} aria-hidden>
         <div className="relative h-9">
           {TICKS.map((v) => (
             <span key={v} className={cn("absolute top-0 w-px -translate-x-1/2 bg-line", HINT_BPMS.includes(v) ? "h-3" : "h-1.5")} style={{ left: thumbLeft(v) }} />
@@ -517,6 +518,40 @@ export function MetronomePanel() {
       <MeterSheet open={sheet === "meter"} onClose={() => setSheet(null)} />
       <RhythmSheet open={sheet === "rhythm"} onClose={() => setSheet(null)} />
     </div>
+  );
+}
+
+/**
+ * The same metronome for the session screen, in a few rows: size and pattern beside the tempo, the beats
+ * (tap to accent), the tempo slider. It is started from the screen's own metronome button.
+ */
+export function SessionMetronome() {
+  const m = useMetronome();
+  const rhythm = rhythmById(m.rhythm);
+  const [sheet, setSheet] = useState<"meter" | "rhythm" | null>(null);
+  const picked = PICKABLE.includes(rhythm);
+  return (
+    <section className="select-none rounded-3xl border border-line bg-surface px-4 pb-3 pt-3">
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={() => setSheet("meter")} aria-label={`Размер ${m.beats}/${m.beatUnit}`} className={cn(CIRCLE, SERIF, "size-11 flex-col text-sm font-bold leading-none shadow-none")}>
+          <span>{m.beats}</span>
+          <span className="-mt-0.5">{m.beatUnit}</span>
+        </button>
+        <button type="button" onClick={() => setSheet("rhythm")} aria-label={`Рисунок: ${rhythm.name}`} className={cn(CIRCLE, "size-11 shadow-none")}>
+          {picked ? <RhythmImage rhythm={rhythm} unit={m.beatUnit} className="size-full p-2 opacity-50" /> : <span className="text-sm">{SUB_SHORT[6]}</span>}
+        </button>
+        <div className="ml-auto text-right">
+          <BpmNumber bpm={m.bpm} className="text-3xl" />
+          <div className="text-[11px] text-muted">ударов в мин.</div>
+        </div>
+      </div>
+      <div className="mt-2">
+        <Beats />
+      </div>
+      <TempoSlider compact />
+      <MeterSheet open={sheet === "meter"} onClose={() => setSheet(null)} />
+      <RhythmSheet open={sheet === "rhythm"} onClose={() => setSheet(null)} />
+    </section>
   );
 }
 

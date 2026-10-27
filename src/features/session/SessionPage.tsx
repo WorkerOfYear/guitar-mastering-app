@@ -2,8 +2,8 @@ import { Suspense, lazy, useEffect, useRef, useState, type RefObject } from "rea
 import { Navigate } from "react-router-dom";
 import { AnimatePresence, m } from "motion/react";
 import { Check, ChevronRight, Headphones, Metronome, Minus, Pause, Piano, Play, Plus, Settings2, Volume2, X } from "lucide-react";
-import { MetronomePanel } from "@/components/metronome/MetronomePanel";
-import { Button, Chip, IconButton, ScrollRow, Segmented } from "@/components/ui";
+import { SessionMetronome } from "@/components/metronome/MetronomePanel";
+import { Button, Chip, IconButton, Progress, ScrollRow, Segmented } from "@/components/ui";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BLOCK_ICON } from "@/components/ui/icons";
@@ -38,7 +38,7 @@ const TAB_HEIGHT = "max(16rem, calc(100dvh - 18rem))";
 
 /**
  * A planned session: starts at once, one exercise after another as you tap "Дальше", or any block picked on top.
- * The block's clock beeps when its time is up and keeps counting until you move on.
+ * Time is counted per block in the background (a bar shows how far); a signal when it is up, and it keeps counting.
  * Videos and notes start only when you press their play.
  */
 export function SessionPage() {
@@ -163,11 +163,17 @@ export function SessionPage() {
           <MetronomeButtons open={metronome} onOpen={setMetronome} />
         </div>
         <div className="mt-2.5 flex items-center gap-2">
-          <Clock seconds={spent} planned={planned} running={running} />
+          {/* Time is counted in the background, per block: only how far the block is, no clock. */}
+          <Progress
+            aria-label={`${BLOCK_META[block.kind].title}: время блока`}
+            className="h-2 min-w-0 flex-1"
+            indicatorClassName={over ? "bg-good" : running ? "bg-accent" : "bg-muted"}
+            value={Math.min(1, spent / (planned || 1)) * 100}
+          />
           <IconButton label={running ? "Остановить время" : "Продолжить время"} onClick={togglePause} className="size-10 shrink-0">
             {running ? <Pause fill="currentColor" /> : <Play fill="currentColor" />}
           </IconButton>
-          <Button onClick={next} title={`Дальше: ${nextTitle}`} className="ml-auto h-10 min-w-0 max-w-[60%] gap-1 px-3">
+          <Button onClick={next} title={`Дальше: ${nextTitle}`} className="h-10 min-w-0 max-w-[50%] shrink-0 gap-1 px-3">
             <span className="truncate">{lastEntry && isLast ? "Закончить" : "Дальше"}</span>
             {lastEntry && isLast ? <Check className="size-4" /> : <ChevronRight className="size-4" />}
           </Button>
@@ -177,7 +183,7 @@ export function SessionPage() {
 
       {metronome && (
         <div className="mb-3">
-          <MetronomePanel />
+          <SessionMetronome />
         </div>
       )}
 
@@ -224,17 +230,6 @@ export function SessionPage() {
         </DrawerContent>
       </Drawer>
     </div>
-  );
-}
-
-/** The small clock: time spent, and the goal when there is one (it turns green once reached and keeps counting). */
-export function Clock({ seconds, planned, running }: { seconds: number; planned?: number; running: boolean }) {
-  const over = planned !== undefined && seconds >= planned;
-  return (
-    <span className={cn("shrink-0 text-2xl font-bold tabular-nums leading-none tracking-tight", over ? "text-good" : !running && "text-muted")}>
-      {formatClock(seconds)}
-      {planned !== undefined && <span className="text-sm font-medium text-muted"> / {formatClock(planned)}</span>}
-    </span>
   );
 }
 

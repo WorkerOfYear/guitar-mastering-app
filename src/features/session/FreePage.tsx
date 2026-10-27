@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button, Chip, IconButton, Input, ScrollRow, Segmented } from "@/components/ui";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { TYPE_ICON } from "@/components/ui/icons";
-import { MetronomePanel } from "@/components/metronome/MetronomePanel";
+import { SessionMetronome } from "@/components/metronome/MetronomePanel";
 import type { PlayerControl } from "@/components/tab/TabPlayer";
 import { stopMetronome } from "@/audio/metronome";
 import { audio } from "@/audio/player";
@@ -15,10 +15,10 @@ import { localDate } from "@/lib/date";
 import { entryKey, findSection, startingBpm } from "@/lib/progress";
 import { tabOf, type LibraryTab } from "@/lib/library";
 import { useData } from "@/store/data";
-import { totalSeconds, unitSeconds, useFree } from "@/store/free";
+import { totalSeconds, useFree } from "@/store/free";
 import { useMetronome } from "@/store/metronome";
 import type { Item, PlanEntry } from "@/shared/types";
-import { Clock, MetronomeButtons, Practice, SoundBlocked } from "./SessionPage";
+import { MetronomeButtons, Practice, SoundBlocked } from "./SessionPage";
 
 /** Free practice: pick anything from the library, play it as long as you like; the clock only counts up. */
 export function FreePage() {
@@ -87,7 +87,7 @@ export function FreePage() {
       <div className="sticky top-0 z-10 -mx-4 bg-bg/95 px-4 pb-3 pt-2 backdrop-blur">
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            <div className="text-xs text-muted">Свободный режим{entry && ` · это — ${formatClock(unitSeconds(active, entry, now))}`}</div>
+            <div className="text-xs text-muted">Свободный режим</div>
             <div className="truncate text-lg font-bold leading-tight">{item ? (section ? `${section.title} — ${item.title}` : item.title) : "Выбери, что играть"}</div>
           </div>
           <IconButton
@@ -103,7 +103,6 @@ export function FreePage() {
           </IconButton>
         </div>
         <div className="mt-2.5 flex items-center gap-2">
-          <Clock seconds={total} running={running} />
           <IconButton label={running ? "Остановить время" : "Продолжить время"} onClick={togglePause} disabled={!entry} className="size-10 shrink-0">
             {running ? <Pause fill="currentColor" /> : <Play fill="currentColor" />}
           </IconButton>
@@ -120,7 +119,7 @@ export function FreePage() {
 
       {metronome && (
         <div className="mb-3">
-          <MetronomePanel />
+          <SessionMetronome />
         </div>
       )}
 
