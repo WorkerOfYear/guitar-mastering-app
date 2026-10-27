@@ -1,5 +1,6 @@
 import * as alphaTab from "@coderline/alphatab";
-import { FPS, type AutoSyncResult, type ScoreTimeline } from "./align";
+import { cutBars, FPS, type AutoSyncResult, type ScoreTimeline } from "./align";
+import type { SyncPoint } from "@/shared/types";
 import type { ScoreNote } from "./chroma";
 
 // Automatic alignment of a recording with its tab.
@@ -102,9 +103,15 @@ export function scoreTimeline(score: alphaTab.model.Score): ScoreTimeline {
  * Everything in one go, in the browser: decode the recording and build the tab's timeline here,
  * then let a worker do the heavy part (onset detection and matching) so the page stays responsive.
  */
-export async function autoSync(gpFile: ArrayBuffer, audio: ArrayBuffer, anchors?: number[]): Promise<AutoSyncResult> {
+export async function autoSync(
+  gpFile: ArrayBuffer,
+  audio: ArrayBuffer,
+  anchors?: number[],
+  /** Bars the recording doesn't play (cut out of the tab first) and marks set by hand (kept, fitted around) */
+  known: { skip?: number[]; pins?: SyncPoint[] } = {},
+): Promise<AutoSyncResult> {
   const score = alphaTab.importer.ScoreLoader.loadScoreFromBytes(new Uint8Array(gpFile), new alphaTab.Settings());
-  const timeline = scoreTimeline(score);
+  const timeline = cutBars(scoreTimeline(score), known.skip ?? []);
   const buffer = await new OfflineAudioContext(1, 1, 44100).decodeAudioData(audio.slice(0));
   const channels = Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c).slice());
   const worker = new Worker(new URL("./align.worker.ts", import.meta.url), { type: "module" });
@@ -113,7 +120,7 @@ export async function autoSync(gpFile: ArrayBuffer, audio: ArrayBuffer, anchors?
       worker.onmessage = (e: MessageEvent<{ result?: AutoSyncResult; error?: string }>) =>
         e.data.result ? resolve(e.data.result) : reject(new Error(e.data.error ?? "Ошибка анализа"));
       worker.onerror = (e) => reject(new Error(e.message || "Ошибка анализа"));
-      worker.postMessage({ channels, sampleRate: buffer.sampleRate, timeline, anchors }, channels.map((c) => c.buffer));
+      worker.postMessage({ channels, sampleRate: buffer.sampleRate, timeline, anchors, pins: known.pins }, channels.map((c) => c.buffer));
     });
   } finally {
     worker.terminate();

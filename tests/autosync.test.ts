@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import * as alphaTab from "@coderline/alphatab";
 import { readFileSync } from "node:fs";
-import { FPS, align } from "@/lib/align";
+import { FPS, align, cutBars } from "@/lib/align";
 import { scoreTimeline } from "@/lib/autoSync";
 import { scoreChroma } from "@/lib/chroma";
 
@@ -189,5 +189,29 @@ describe("a repeat the recording plays once", () => {
     expect(Math.abs(at(4) - inRecording(6))).toBeLessThan(80); // bar 5
     const bar3 = synced.find((p) => p.masterBarIndex === 2)!;
     expect(Math.abs(bar3.syncBpm - 130)).toBeLessThan(5);
+  });
+
+  it("cuts out bars the recording doesn't play and keeps marks set by hand", () => {
+    const timeline = scoreTimeline(loadScore());
+    // The band leaves out bars 21–22: the recording is the tab without them.
+    const cut = cutBars(timeline, [21, 22]);
+    const b21 = timeline.bars.find((b) => b.bar === 21 && b.occurrence === 0)!.ms;
+    const b23 = timeline.bars.find((b) => b.bar === 23 && b.occurrence === 0)!.ms;
+    expect(cut.bars.some((b) => b.bar === 21 || b.bar === 22)).toBe(false);
+    expect(cut.bars.find((b) => b.bar === 23)!.ms).toBeCloseTo(b21, 3);
+    expect(cut.durationMs).toBeCloseTo(timeline.durationMs - (b23 - b21), 3);
+    expect(cut.onsets.length).toBeLessThan(timeline.onsets.length);
+
+    const env = fakeRecording(cut, 2000, 1, Infinity, 0);
+    const truth = (bar: number) => 2000 + cut.bars.find((b) => b.bar === bar && b.occurrence === 0)!.ms;
+    const r = align(cut, env);
+    expect(r.points.some((p) => p.bar === 21 || p.bar === 22)).toBe(false);
+    for (const p of r.points.filter((x) => !x.occurrence)) expect(Math.abs(p.ms - truth(p.bar)), `bar ${p.bar}`).toBeLessThan(60);
+
+    // A mark set by hand stays exactly where it was put (and says so); the rest still lands on the recording.
+    const pin = { bar: 40, ms: Math.round(truth(40)) + 25, fixed: true };
+    const pinned = align(cut, env, undefined, undefined, [pin]);
+    expect(pinned.points.find((p) => p.bar === 40 && !p.occurrence)).toEqual(pin);
+    for (const p of pinned.points.filter((x) => !x.occurrence && x.bar !== 40)) expect(Math.abs(p.ms - truth(p.bar)), `bar ${p.bar}`).toBeLessThan(60);
   });
 });

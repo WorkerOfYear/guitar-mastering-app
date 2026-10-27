@@ -118,8 +118,10 @@ export function alignGrid(opts: {
   /** Mean chroma (12 values, unit length) over the beat starting at each grid point */
   tabChroma?: Float32Array;
   recChroma?: Float32Array;
+  /** Marks set by hand (tab ms → recording ms): the path must go through the recording point nearest each */
+  pins?: { tab: number; at: number }[];
 }): Float64Array {
-  const { tabGrid, tabOnsets, recGrid, env, fps, guide, tabChroma, recChroma } = opts;
+  const { tabGrid, tabOnsets, recGrid, env, fps, guide, tabChroma, recChroma, pins = [] } = opts;
   const N = tabGrid.length;
   const M = recGrid.length;
   const out = new Float64Array(N).fill(NaN);
@@ -179,6 +181,18 @@ export function alignGrid(opts: {
     while (j > 0 && Math.abs(recGrid[j - 1] - t) < Math.abs(recGrid[j] - t)) j--;
     centre[i] = j;
   }
+  // Pinned rows: only the recording point nearest the pin.
+  const fixed = new Uint8Array(N);
+  for (const p of pins) {
+    let i = 0;
+    while (i + 1 < N && Math.abs(tabGrid[i + 1] - p.tab) <= Math.abs(tabGrid[i] - p.tab)) i++;
+    if (Math.abs(tabGrid[i] - p.tab) > 30) continue;
+    const t = (p.at / 1000) * fps;
+    let j = 0;
+    while (j + 1 < M && Math.abs(recGrid[j + 1] - t) <= Math.abs(recGrid[j] - t)) j++;
+    centre[i] = j;
+    fixed[i] = 1;
+  }
   const idx = (i: number, j: number) => {
     const k = j - centre[i] + R;
     return k >= 0 && k < W ? i * W + k : -1;
@@ -191,7 +205,7 @@ export function alignGrid(opts: {
   for (let i = 0; i < N; i++) {
     for (let k = 0; k < W; k++) {
       const j = centre[i] - R + k;
-      if (j < 0 || j >= M) continue;
+      if (j < 0 || j >= M || (fixed[i] && k !== R)) continue;
       const c = cost(i, j);
       let best = i < OPEN ? 0.15 * i : INF; // open start: leading tab points may be skipped cheaply
       let dir = 0;
@@ -240,7 +254,14 @@ function unit(v: Float32Array, o: number, n: number) {
  * harmony), and give each played bar of `timeline.bars` its time in the recording (NaN where unknown).
  * `guide` is the rough mapping (tab ms → recording ms) it searches around; `chroma` the recording's chroma.
  */
-export function refineBars(timeline: ScoreTimeline, rawEnv: Float32Array, fps: number, guide: (tabMs: number) => number, chroma?: Float32Array) {
+export function refineBars(
+  timeline: ScoreTimeline,
+  rawEnv: Float32Array,
+  fps: number,
+  guide: (tabMs: number) => number,
+  chroma?: Float32Array,
+  pins: { tab: number; at: number }[] = [],
+) {
   const tabBeats = timeline.beats ?? [];
   const times = new Float64Array(timeline.bars.length).fill(NaN);
   if (tabBeats.length < 8) return times;
@@ -281,7 +302,7 @@ export function refineBars(timeline: ScoreTimeline, rawEnv: Float32Array, fps: n
     tabChroma = spanChroma(scoreChroma(timeline.notes, timeline.durationMs), beatSpans(tabGrid));
     recChroma = spanChroma(chroma, beatSpans(recGrid.map((f) => (f / fps) * 1000)));
   }
-  const grid = alignGrid({ tabGrid, tabOnsets: timeline.onsets, recGrid, env, fps, guide, tabChroma, recChroma });
+  const grid = alignGrid({ tabGrid, tabOnsets: timeline.onsets, recGrid, env, fps, guide, tabChroma, recChroma, pins });
   const at = tabBeats.map((_, i) => grid[2 * i]);
 
   // Beats the pairing skipped: between placed neighbours proportionally, at the ends along the guide.

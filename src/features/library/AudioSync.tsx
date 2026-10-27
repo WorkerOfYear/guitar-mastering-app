@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { EyeOff, LoaderCircle, Minus, Pause, Play, Plus, Square, Timer, Trash2, TriangleAlert, Undo2, WandSparkles } from "lucide-react";
+import { EyeOff, LoaderCircle, Pin, PinOff, Minus, Pause, Play, Plus, Square, Timer, Trash2, TriangleAlert, Undo2, WandSparkles } from "lucide-react";
 import { Button, IconButton, Input } from "@/components/ui";
+import { Switch } from "@/components/ui/switch";
 import { audioBlob } from "@/lib/audioType";
 import { misplacedMarks, shortBars, SKIPPED_MS, withSkipped } from "@/lib/backingTrack";
 import { formatClockMs, parseClock } from "@/lib/clock";
@@ -31,9 +32,9 @@ interface Props {
 }
 
 /** Automatic alignment of the recording with the tab: what to store on the item and what to tell the user. */
-export async function detectSync(tab: ArrayBuffer, audio: ArrayBuffer) {
+export async function detectSync(tab: ArrayBuffer, audio: ArrayBuffer, known: { skip?: number[]; pins?: SyncPoint[] } = {}) {
   const { autoSync } = await import("@/lib/autoSync");
-  const r = await autoSync(tab, audio);
+  const r = await autoSync(tab, audio, undefined, known);
   const shift = r.scale === 1 ? "" : `, запись ${r.scale > 1 ? "медленнее" : "быстрее"} таба на ${Math.abs(Math.round((r.scale - 1) * 1000) / 10)}%`;
   const repeat = r.skippedRepeat ? " В записи повтор в начале звучит один раз — с записью он тоже играется один раз." : "";
   const start = r.bar1Ms === null ? "" : `такт 1 на ${formatClockMs(r.bar1Ms)}`;
@@ -63,6 +64,7 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, 
   const [newBar, setNewBar] = useState("");
   const [auto, setAuto] = useState<{ busy: boolean; message: string }>({ busy: false, message: "" });
   const [selected, setSelected] = useState<string | null>(null);
+  const [ripple, setRipple] = useState(false);
   // Own play button and clock instead of the browser's player: the timeline is the scrubber.
   const [paused, setPaused] = useState(true);
   const [clock, setClock] = useState(0);
@@ -70,7 +72,8 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, 
   const detect = async () => {
     setAuto({ busy: true, message: "Слушаю запись и сравниваю с табом… (5–20 секунд)" });
     try {
-      const r = await detectSync(tab, audio);
+      // Bars taken out of the recording and lines put by hand go in as known: the rest is fitted around them.
+      const r = await detectSync(tab, audio, { skip, pins });
       updateItem(item.id, r.patch);
       setAuto({ busy: false, message: `${r.ok ? "✅" : "⚠️"} ${r.message}` });
     } catch (e) {
@@ -92,7 +95,13 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, 
   const same = (p: SyncPoint, q: Pick<SyncPoint, "bar" | "occurrence">) => p.bar === q.bar && (p.occurrence ?? 0) === (q.occurrence ?? 0);
   /** Sets (or with null removes) one mark: a bar's first pass, or a later one with `occurrence`. */
   const setMark = (mark: Pick<SyncPoint, "bar" | "occurrence">, ms: number | null) => {
-    const next = [...points.filter((p) => !same(p, mark)), ...(ms === null ? [] : [{ bar: mark.bar, ...(mark.occurrence ? { occurrence: mark.occurrence } : {}), ms }])];
+    // «Двигать и следующие»: every mark later in the recording moves by as much as this one.
+    const old = points.find((p) => same(p, mark));
+    const delta = ripple && old && ms !== null ? ms - old.ms : 0;
+    const moved = delta ? points.map((p) => (old && !same(p, mark) && p.ms > old.ms ? { ...p, ms: Math.max(0, p.ms + delta) } : p)) : points;
+    // A line put by hand is pinned: automatic detection keeps it and fits the rest around it.
+    const set: SyncPoint[] = ms === null ? [] : [{ bar: mark.bar, ...(mark.occurrence ? { occurrence: mark.occurrence } : {}), ms, fixed: true }];
+    const next = [...moved.filter((p) => !same(p, mark)), ...set];
     // A bar can't start before the bars ahead of it or after the ones behind it.
     if (ms !== null && misplacedMarks(next).some((p) => same(p, mark))) {
       const firsts = points.filter((p) => !p.occurrence && p.bar !== mark.bar);
@@ -111,6 +120,9 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, 
   // Bars the recording rushes through: most likely not in it (the tab repeats a riff once more, say).
   // (Bars already taken out of the recording don't count: they take a few ms on purpose.)
   const skip = item.audioSkip ?? [];
+  const pins = points.filter((p) => p.fixed && !(skip.includes(p.bar) && !p.occurrence));
+  /** Pins a line (automatic detection keeps it) or lets it go. */
+  const togglePin = (p: SyncPoint) => save(points.map((x) => (x === p ? (x.fixed ? { bar: x.bar, ...(x.occurrence ? { occurrence: x.occurrence } : {}), ms: x.ms } : { ...x, fixed: true }) : x)));
   const missing = shortBars(withSkipped(points, skip, barMs), barMs).filter((r) => r.ms >= SKIPPED_MS);
   const markOf = (bar: number) => points.find((p) => p.bar === bar && !p.occurrence);
   /**
@@ -226,6 +238,7 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, 
           onTime?.(ms);
         }}
         onTogglePlay={togglePlay}
+        ripple={ripple}
       />
       <div className="flex items-center gap-2">
         <Button
@@ -241,6 +254,11 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, 
           {formatClockMs(clock)}
           {current && <span className="text-muted"> · {paused ? "играть с такта" : "такт"} {current.bar}</span>}
         </div>
+        {/* A late (or early) stretch of marks: move the first one, the rest follow. */}
+        <label className="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-muted" title="Сдвигаешь линию — все линии после неё едут на столько же">
+          Двигать и следующие
+          <Switch checked={ripple} onCheckedChange={setRipple} />
+        </label>
       </div>
 
       {current ? (
@@ -280,6 +298,13 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, 
           >
             <Trash2 />
           </IconButton>
+          <IconButton
+            label={current.fixed ? "Закреплена: автоопределение её не тронет. Открепить" : "Закрепить: автоопределение её не тронет"}
+            onClick={() => togglePin(current)}
+            className={current.fixed ? "bg-accent/15 text-accent" : undefined}
+          >
+            {current.fixed ? <Pin /> : <PinOff />}
+          </IconButton>
           {!current.occurrence && (
             <IconButton label="Такта нет в записи — убрать с таймлайна (в нотах останется)" onClick={() => removeBars(current.bar, current.bar)}>
               <EyeOff />
@@ -292,8 +317,16 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, 
 
       <Button disabled={auto.busy} onClick={() => void detect()} className="w-full">
         {auto.busy ? <LoaderCircle className="animate-spin" /> : <WandSparkles />}
-        {auto.busy ? "Определяю…" : "Определить автоматически"}
+        {auto.busy ? "Определяю…" : pins.length || skip.length ? "Определить заново, с моими отметками" : "Определить автоматически"}
       </Button>
+      {!auto.busy && (pins.length > 0 || skip.length > 0) && (
+        <p className="px-1 text-xs text-muted">
+          {[pins.length && `закреплённые линии (${pins.length}) останутся на месте`, skip.length && `убранные такты (${skip.length}) не будут мешать`]
+            .filter(Boolean)
+            .join(", ")}{" "}
+          — остальное подгонится вокруг. Закрепляется любая линия, которую ты двигал руками.
+        </p>
+      )}
       {auto.message && <p className="text-sm">{auto.message}</p>}
       {outdated && !auto.message && (
         <p className="flex gap-2 rounded-xl bg-guide/15 p-2.5 text-sm">
@@ -363,7 +396,8 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, 
       <p className="text-xs text-muted">
         Линии — начала тактов в записи. Потяни линию, чтобы поставить её на сильную долю: на нотах видно, куда она попадает. Тап по записи —
         перемотка, по пустому месту можно листать (с разгона — по инерции), на тачпаде — свайп вбок, щипок — масштаб.
-        Клик по такту в нотах — перейти к нему. ▶ и пробел играют с выбранного такта.
+        Клик по такту в нотах — перейти к нему. ▶ и пробел играют с выбранного такта. Если с какого-то места все такты съехали — включи
+        «Двигать и следующие» и сдвинь первую линию: остальные поедут за ней.
         <br />С клавиатуры: ←/→ — от такта к такту, Shift+←/→ — сдвинуть выбранную линию (держи — быстрее, с Alt — точнее), +/− — масштаб.
       </p>
 

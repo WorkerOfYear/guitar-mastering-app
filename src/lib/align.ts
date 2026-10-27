@@ -148,10 +148,34 @@ export interface AutoSyncResult {
 }
 
 /**
- * Align the tab with the recording. `anchors` are bars to place sync points at (e.g. section starts);
- * by default every 4 bars.
+ * The timeline without the bars the recording doesn't play (first passes of `skip`): their notes, beats and
+ * time are cut out, so the alignment doesn't have to guess which of a repeated riff's bars the band left out.
  */
-export function align(timeline: ScoreTimeline, env: Float32Array, anchors?: number[], chroma?: Float32Array): AutoSyncResult {
+export function cutBars(t: ScoreTimeline, skip: number[]): ScoreTimeline {
+  const skipped = new Set(skip);
+  const isCut = (b: ScoreTimeline["bars"][number]) => b.occurrence === 0 && skipped.has(b.bar);
+  const cuts = t.bars.flatMap((b, k): [number, number][] => (isCut(b) ? [[b.ms, t.bars[k + 1]?.ms ?? t.durationMs]] : []));
+  if (!cuts.length) return t;
+  const inCut = (ms: number) => cuts.some(([a, b]) => ms >= a - 0.5 && ms < b - 0.5);
+  const shift = (ms: number) => ms - cuts.reduce((d, [a, b]) => d + (ms >= b ? b - a : ms > a ? ms - a : 0), 0);
+  return {
+    ...t,
+    onsets: t.onsets.filter((o) => !inCut(o.ms)).map((o) => ({ ...o, ms: shift(o.ms) })),
+    bars: t.bars.filter((b) => !isCut(b)).map((b) => ({ ...b, ms: shift(b.ms) })),
+    beats: t.beats?.filter((x) => !inCut(x)).map(shift),
+    notes: t.notes?.filter((n) => !inCut(n.ms)).map((n) => ({ ...n, ms: shift(n.ms), end: shift(n.end) })),
+    tempoBars: t.tempoBars?.filter((b) => !skipped.has(b)),
+    durationMs: shift(t.durationMs),
+  };
+}
+
+/**
+ * Align the tab with the recording. `anchors` are bars to place sync points at (e.g. section starts);
+ * by default every 4 bars. `pins`: marks set by hand — the result goes through them exactly and is fitted
+ * around them (a repeated riff or a steady groove can't tell the alignment which pass or which beat it is;
+ * a pin does).
+ */
+export function align(timeline: ScoreTimeline, env: Float32Array, anchors?: number[], chroma?: Float32Array, pins: SyncPoint[] = []): AutoSyncResult {
   const { onsets, bars } = timeline;
   const audioMs = (env.length / FPS) * 1000;
 
@@ -315,13 +339,30 @@ export function align(timeline: ScoreTimeline, env: Float32Array, anchors?: numb
     const b = knots[i];
     return a.at + ((b.at - a.at) * (t - a.tab)) / (b.tab - a.tab || 1);
   };
+  // Pins: the mapping is corrected by each pin's offset from it — linearly between pins, as is before the first
+  // and after the last — so it passes through them, and the beat pairing below has to meet them.
+  const pinned = pins
+    .flatMap((p) => {
+      const k = bars.findIndex((b) => b.bar === p.bar && b.occurrence === (p.occurrence ?? 0));
+      return k < 0 ? [] : [{ k, tab: bars[k].ms, at: p.ms }];
+    })
+    .sort((a, b) => a.tab - b.tab);
+  const fix = pinned.map((p) => ({ tab: p.tab, d: p.at - mapAt(p.tab) }));
+  const guide = (t: number) => {
+    if (!fix.length) return mapAt(t);
+    let i = 0;
+    while (i + 1 < fix.length && fix[i + 1].tab <= t) i++;
+    const [a, b] = [fix[i], fix[i + 1]];
+    const d = t <= fix[0].tab ? fix[0].d : b ? a.d + ((b.d - a.d) * (t - a.tab)) / (b.tab - a.tab || 1) : a.d;
+    return mapAt(t) + d;
+  };
   // Where every played bar (repeats included) lands in the recording.
-  const mapped = bars.map((b) => ({ ...b, at: mapAt(b.ms) }));
+  const mapped = bars.map((b) => ({ ...b, at: guide(b.ms) }));
 
   // 3. Beat by beat (beats.ts): the recording's beats are found and paired with the tab's, by rhythm and
   //    harmony, around the mapping above. A tempo model can't follow a band that plays a solo a couple of
   //    bars shorter than the tab; this does, and gives every bar its own mark.
-  const byBeat = refineBars(timeline, env, FPS, mapAt, chroma);
+  const byBeat = refineBars(timeline, env, FPS, guide, chroma, pinned);
   // Kept only when the notes then meet the recording clearly better (by 5 %, attacks and harmony together)
   // than with the mapping above: a recording with no steady pulse can throw the beat tracking off, and a
   // near tie isn't worth it. Harmony matters: on a steady beat a section two bars off looks just as good by
@@ -371,6 +412,7 @@ export function align(timeline: ScoreTimeline, env: Float32Array, anchors?: numb
   const hAfter = after >= 0 ? harmony((k) => byBeat[k]) : 0;
   const beatByBeat = after > 0 && (after / before) * (hAfter / hBefore) > 1.05;
   if (beatByBeat) mapped.forEach((b, k) => (b.at = byBeat[k]));
+  for (const p of pinned) mapped[p.k].at = p.at;
 
   // A repeat the recording doesn't play (the intro once instead of twice) shows up as bars before 0:00.
   // Then the first pass gets the recording's times, the pass it lacks is dropped, and the repeat is
@@ -390,13 +432,15 @@ export function align(timeline: ScoreTimeline, env: Float32Array, anchors?: numb
     }
   }
 
-  const isAnchor = new Set(anchorBars);
+  const isAnchor = new Set([...anchorBars, ...pinned.map((p) => bars[p.k].bar)]);
+  const isPin = new Set(pinned.map((p) => `${bars[p.k].bar}:${bars[p.k].occurrence}`));
   const points: SyncPoint[] = [];
   played.forEach((b, i) => {
     if (i >= keep && !beatByBeat && !isAnchor.has(b.bar)) return;
     const ms = Math.round(b.at);
     if (ms < 0 || ms >= audioMs || (points.length && ms <= points[points.length - 1].ms)) return;
-    points.push(b.occurrence ? { bar: b.bar, occurrence: b.occurrence, ms } : { bar: b.bar, ms });
+    const pin = isPin.has(`${b.bar}:${b.occurrence}`) ? { fixed: true } : {};
+    points.push(b.occurrence ? { bar: b.bar, occurrence: b.occurrence, ms, ...pin } : { bar: b.bar, ms, ...pin });
   });
   const bar1 = points.find((p) => p.bar === 1 && !p.occurrence);
   return {

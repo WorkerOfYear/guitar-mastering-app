@@ -66,6 +66,7 @@ export function SyncTimeline({
   globalKeys,
   onTime,
   onTogglePlay,
+  ripple,
 }: {
   audio: ArrayBuffer;
   player: RefObject<HTMLAudioElement | null>;
@@ -83,6 +84,8 @@ export function SyncTimeline({
   onTime?: (ms: number) => void;
   /** Space: play / pause the way the page's play button does (else just the recording, from where it is) */
   onTogglePlay?: () => void;
+  /** A moved line takes every later line along by as much */
+  ripple?: boolean;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -128,11 +131,12 @@ export function SyncTimeline({
     return () => ro.disconnect();
   }, []);
 
-  // Marks sorted by time, the dragged one where the finger is.
-  const marks = points
-    .map((p) => ({ p, ms: drag && markKey(p) === drag.key ? drag.ms : p.ms }))
-    .sort((a, b) => a.ms - b.ms);
-  const draft = drag ? points.map((p) => (markKey(p) === drag.key ? { ...p, ms: drag.ms } : p)) : points;
+  // Marks sorted by time, the dragged one where the finger is (and with `ripple` the later ones along with it).
+  const dragged = drag && points.find((p) => markKey(p) === drag.key);
+  const msNow = (p: SyncPoint) =>
+    !drag || !dragged ? p.ms : p === dragged ? drag.ms : ripple && p.ms > dragged.ms ? Math.max(0, p.ms + drag.ms - dragged.ms) : p.ms;
+  const marks = points.map((p) => ({ p, ms: msNow(p) })).sort((a, b) => a.ms - b.ms);
+  const draft = drag ? points.map((p) => (msNow(p) === p.ms ? p : { ...p, ms: msNow(p) })) : points;
   const tabLane = lane?.(draft) ?? null;
   // Where ←/→ go: every bar of the tab when it's laid on the recording, else the marks.
   const stops = tabLane?.bars.filter((b) => !b.skipped) ?? marks.map((m) => ({ bar: m.p.bar, occurrence: m.p.occurrence ?? 0, ms: m.ms }));
@@ -244,6 +248,13 @@ export function SyncTimeline({
       g.textAlign = "center";
       g.fillText(label, lx, LABEL_H - 4);
       g.textAlign = "left";
+      // Pinned (put by hand): a dot on the label's corner.
+      if (p.fixed) {
+        g.fillStyle = on ? "#fff" : accent;
+        g.beginPath();
+        g.arc(lx + w / 2 - 1, 3, 2.5, 0, Math.PI * 2);
+        g.fill();
+      }
     }
 
     // Where the recording is.
@@ -290,7 +301,8 @@ export function SyncTimeline({
   const clampMark = (point: SyncPoint, ms: number) => {
     const i = marks.findIndex((m) => m.p === point);
     const lo = i > 0 ? marks[i - 1].ms + GAP : 0;
-    const hi = i + 1 < marks.length ? marks[i + 1].ms - GAP : duration;
+    // With `ripple` the later lines move along, so only the earlier one is in the way.
+    const hi = ripple || i + 1 >= marks.length ? duration : marks[i + 1].ms - GAP;
     return Math.round(Math.max(lo, Math.min(hi, ms)));
   };
 

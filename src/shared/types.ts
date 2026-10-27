@@ -20,6 +20,8 @@ export interface SyncPoint {
   /** Which pass through a repeated bar (0 = first, omitted for 0) */
   occurrence?: number;
   ms: number;
+  /** Put by hand: automatic detection keeps it where it is and fits the rest around it */
+  fixed?: boolean;
 }
 
 /** Play-along video: a YouTube video, or an Instagram post/reel by its shortcode (instagram.com/reel/<id>). */
