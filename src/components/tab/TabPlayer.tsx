@@ -111,6 +111,8 @@ interface Props {
   /** Playback did not start (blocked autoplay or still loading) */
   onBlocked?: (blocked: boolean) => void;
   onProgress?: (bar: number) => void;
+  /** A note or rest was clicked: its bar (1-based) */
+  onBarClick?: (bar: number) => void;
   control?: RefObject<PlayerControl | null>;
 }
 
@@ -132,6 +134,7 @@ export default function TabPlayer({
   onScore,
   onBlocked,
   onProgress,
+  onBarClick,
   control,
 }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
@@ -153,8 +156,8 @@ export default function TabPlayer({
   const skipRef = useRef(skip);
   skipRef.current = skip;
   const shownSkip = useRef("");
-  const cb = useRef({ onScore, onBlocked, onProgress });
-  cb.current = { onScore, onBlocked, onProgress };
+  const cb = useRef({ onScore, onBlocked, onProgress, onBarClick });
+  cb.current = { onScore, onBlocked, onProgress, onBarClick };
 
   // Create the player for this source.
   useEffect(() => {
@@ -213,6 +216,7 @@ export default function TabPlayer({
       });
     });
     a.playerReady.on(() => setReady(true));
+    a.beatMouseDown.on((beat) => cb.current.onBarClick?.(beat.voice.bar.masterBar.index + 1));
     a.error.on((e) => setError(e.message));
     a.playerPositionChanged.on(() => {
       const t = a.tickPosition;

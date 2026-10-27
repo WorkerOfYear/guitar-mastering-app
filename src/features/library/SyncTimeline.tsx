@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
-import { LoaderCircle, ZoomIn, ZoomOut } from "lucide-react";
-import { Button } from "@/components/ui";
+import { LoaderCircle } from "lucide-react";
 import { formatClockMs } from "@/lib/clock";
 import type { Lane } from "@/lib/syncLane";
 import type { SyncPoint } from "@/shared/types";
@@ -66,6 +65,7 @@ export function SyncTimeline({
   lane,
   globalKeys,
   onTime,
+  onTogglePlay,
 }: {
   audio: ArrayBuffer;
   player: RefObject<HTMLAudioElement | null>;
@@ -81,6 +81,8 @@ export function SyncTimeline({
   globalKeys?: boolean;
   /** Every frame while the recording plays: where it is, ms */
   onTime?: (ms: number) => void;
+  /** Space: play / pause the way the page's play button does (else just the recording, from where it is) */
+  onTogglePlay?: () => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -297,7 +299,8 @@ export function SyncTimeline({
     const target = e.target as HTMLElement | null;
     if (e.key === " " && !target?.closest?.("button")) {
       e.preventDefault();
-      if (el) void (el.paused ? el.play() : el.pause());
+      if (onTogglePlay) onTogglePlay();
+      else if (el) void (el.paused ? el.play() : el.pause());
       return;
     }
     if (e.key === "+" || e.key === "=") return zoomTo(zoom + 1);
@@ -424,6 +427,8 @@ export function SyncTimeline({
     gesture.current = null;
     if (gs?.kind === "line" && drag) {
       if (drag.ms !== gs.point.ms) onMove(gs.point, drag.ms);
+      // The recording goes to the line: what's selected is where it plays from.
+      if (player.current) player.current.currentTime = drag.ms / 1000;
       setDrag(null);
     } else if (gs?.kind === "pan" && gs.moved && Math.abs(gs.v) > MIN_SPEED && e.timeStamp - gs.lastT < 80) {
       // Let go while moving: keep going and slow down.
@@ -489,12 +494,6 @@ export function SyncTimeline({
         <div className="flex-1 text-xs tabular-nums text-muted">
           {drag ? `Такт ${drag.key.split(":")[0]} → ${formatClockMs(drag.ms)}` : wave ? `${formatClockMs(start)} – ${formatClockMs(Math.min(duration, start + viewMs))}` : ""}
         </div>
-        <Button variant="ghost" size="icon-sm" aria-label="Отдалить" title="Отдалить" disabled={zoom === 0} onClick={() => zoomTo(zoom - 1)}>
-          <ZoomOut className="size-4" />
-        </Button>
-        <Button variant="ghost" size="icon-sm" aria-label="Приблизить" title="Приблизить" disabled={zoom === ZOOMS.length - 1} onClick={() => zoomTo(zoom + 1)}>
-          <ZoomIn className="size-4" />
-        </Button>
       </div>
     </div>
   );

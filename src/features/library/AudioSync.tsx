@@ -18,7 +18,7 @@ interface Props {
   /** Section markers of the tab, offered as sync candidates */
   sections: { title: string; bar: number }[];
   bars: number;
-  /** Each bar's length at the tab's tempo, ms: how long ▶ plays when the next bar isn't marked */
+  /** Each bar's length at the tab's tempo, ms: to tell bars the recording rushes through */
   barMs: number[];
   /** A line is being dragged (or a bar stepped) to this moment of the recording */
   onPreview?: (ms: number) => void;
@@ -26,6 +26,8 @@ interface Props {
   lane?: (points: SyncPoint[], skip: number[]) => Lane;
   /** While the recording plays: where it is, ms (every frame) */
   onTime?: (ms: number) => void;
+  /** A bar clicked in the notes (`n` counts clicks, so the same bar can be clicked again) */
+  jump?: { bar: number; n: number };
 }
 
 /** Automatic alignment of the recording with the tab: what to store on the item and what to tell the user. */
@@ -54,7 +56,7 @@ export async function detectSync(tab: ArrayBuffer, audio: ArrayBuffer) {
  * Where bars start in the recording: lines on its waveform, dragged into place (or put at the playing moment with ⏱).
  * While a line is dragged, `onPreview` gets its time so the notes can show what plays there.
  */
-export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, lane, onTime }: Props) {
+export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, lane, onTime, jump }: Props) {
   const { updateItem } = useData();
   const player = useRef<HTMLAudioElement>(null);
   const [url, setUrl] = useState("");
@@ -149,22 +151,7 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, 
     setSelected(markKey({ bar }));
   };
 
-  // Where the next bar starts in the recording: its mark, or the bar's length in the tab, stretched like the
-  // recording between the marks around it (a live take is rarely at the tab's tempo).
-  const nextMs = (p: SyncPoint) => {
-    const later = [...points].sort((a, b) => a.ms - b.ms).find((x) => x.ms > p.ms);
-    if (later && later.bar === p.bar + 1) return later.ms;
-    const firsts = points.filter((x) => !x.occurrence);
-    const tabAt = (b: number) => barMs.slice(0, b - 1).reduce((a, x) => a + x, 0);
-    const before = [...firsts].reverse().find((x) => x.bar <= p.bar);
-    const after = firsts.find((x) => x.bar > p.bar);
-    const [a, b] = before && after ? [before, after] : firsts.length > 1 ? [firsts.at(-2)!, firsts.at(-1)!] : [null, null];
-    const tabSpan = a && b ? tabAt(b.bar) - tabAt(a.bar) : 0;
-    const scale = a && b && tabSpan > 0 && b.ms > a.ms ? (b.ms - a.ms) / tabSpan : 1;
-    return p.ms + (barMs[p.bar - 1] ?? 2000) * scale;
-  };
-
-  // ▶ for the selected mark: plays from it to the next bar, to hear whether it falls on the downbeat.
+  // «Послушать это место»: a stretch of the recording, stopping by itself.
   const [playingBar, setPlayingBar] = useState<string | null>(null);
   const stopAt = useRef(0);
   const frame = useRef(0);
@@ -173,7 +160,6 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, 
     player.current?.pause();
     setPlayingBar(null);
   };
-  const playBar = (p: SyncPoint) => playSpan(markKey(p), p.ms, nextMs(p));
   /** Plays the recording from…to (ms); `key` marks which button plays, pressing it again stops. */
   const playSpan = (key: string, from: number, to: number) => {
     const el = player.current;
@@ -192,6 +178,26 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, 
   };
   useEffect(() => () => cancelAnimationFrame(frame.current), []);
 
+  /** ▶ and space: from the selected bar when one is selected, else from where the recording is. */
+  const togglePlay = () => {
+    const el = player.current;
+    if (!el) return;
+    if (!el.paused) return el.pause();
+    if (current) el.currentTime = current.ms / 1000;
+    void el.play();
+  };
+
+  // A bar clicked in the notes: the recording goes there and its mark (if it has one) gets selected.
+  useEffect(() => {
+    if (!jump) return;
+    const mark = markOf(jump.bar);
+    const ms = mark?.ms ?? lane?.(points, skip).bars.find((b) => b.bar === jump.bar && b.occurrence === 0)?.ms;
+    if (ms === undefined || !player.current) return;
+    player.current.currentTime = Math.max(0, ms) / 1000;
+    setClock(ms);
+    setSelected(mark ? markKey(mark) : null);
+  }, [jump?.n]);
+
   return (
     <div className="space-y-2">
       {url && (
@@ -205,24 +211,6 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, 
           hidden
         />
       )}
-      <div className="flex items-center gap-2">
-        <Button
-          size="icon"
-          aria-label={paused ? "Играть" : "Пауза"}
-          title={paused ? "Играть (пробел)" : "Пауза (пробел)"}
-          onClick={() => {
-            const el = player.current;
-            if (el) void (el.paused ? el.play() : el.pause());
-          }}
-          className="size-11 shrink-0"
-        >
-          {paused ? <Play /> : <Pause />}
-        </Button>
-        <div className="min-w-0 flex-1 text-sm tabular-nums">
-          {formatClockMs(clock)}
-          {current && <span className="text-muted"> · такт {current.bar}</span>}
-        </div>
-      </div>
       <SyncTimeline
         audio={audio}
         player={player}
@@ -237,7 +225,23 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, 
           setClock((c) => (Math.abs(c - ms) >= 100 ? ms : c));
           onTime?.(ms);
         }}
+        onTogglePlay={togglePlay}
       />
+      <div className="flex items-center gap-2">
+        <Button
+          size="icon"
+          aria-label={paused ? "Играть" : "Пауза"}
+          title={paused ? (current ? `Играть с такта ${current.bar} (пробел)` : "Играть (пробел)") : "Пауза (пробел)"}
+          onClick={togglePlay}
+          className="size-11 shrink-0"
+        >
+          {paused ? <Play /> : <Pause />}
+        </Button>
+        <div className="min-w-0 flex-1 text-sm tabular-nums">
+          {formatClockMs(clock)}
+          {current && <span className="text-muted"> · {paused ? "играть с такта" : "такт"} {current.bar}</span>}
+        </div>
+      </div>
 
       {current ? (
         <div className="flex items-center gap-1 rounded-xl bg-surface p-1.5 pl-3">
@@ -266,9 +270,6 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, 
           </Button>
           <IconButton label="Поставить сюда, где играет запись" onClick={() => setMark(current, now())} className="bg-accent/15 text-accent">
             <Timer />
-          </IconButton>
-          <IconButton label={playingBar === markKey(current) ? "Остановить" : "Сыграть такт"} onClick={() => playBar(current)}>
-            {playingBar === markKey(current) ? <Square /> : <Play />}
           </IconButton>
           <IconButton
             label="Убрать отметку"
@@ -362,7 +363,8 @@ export function AudioSync({ item, audio, tab, sections, bars, barMs, onPreview, 
       <p className="text-xs text-muted">
         Линии — начала тактов в записи. Потяни линию, чтобы поставить её на сильную долю: на нотах видно, куда она попадает. Тап по записи —
         перемотка, по пустому месту можно листать (с разгона — по инерции), на тачпаде — свайп вбок, щипок — масштаб.
-        <br />С клавиатуры: ←/→ — от такта к такту, Shift+←/→ — сдвинуть выбранную линию (держи — быстрее, с Alt — точнее), пробел — играть.
+        Клик по такту в нотах — перейти к нему. ▶ и пробел играют с выбранного такта.
+        <br />С клавиатуры: ←/→ — от такта к такту, Shift+←/→ — сдвинуть выбранную линию (держи — быстрее, с Alt — точнее), +/− — масштаб.
       </p>
 
       {unmarked.length > 0 && (

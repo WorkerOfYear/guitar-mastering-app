@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Dialog } from "radix-ui";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui";
@@ -9,7 +9,8 @@ import { AudioSync } from "./AudioSync";
 
 // Syncing the recording with the tab, in a window of its own: the notes on top, the recording's timeline under
 // them with the tab's notes laid on it. Playing moves the cursor in the notes along with the recording; the
-// arrow keys work at once (bar to bar). Loaded only when opened: it parses the tab a second time.
+// arrow keys work at once (bar to bar); a bar clicked in the notes is where the timeline goes.
+// Loaded only when opened: it parses the tab a second time.
 
 // The notes follow the recording this often while it plays, ms (scrolling them every frame is heavy).
 const FOLLOW_MS = 120;
@@ -40,6 +41,8 @@ export default function SyncDialog({
   const unrepeat = item.audioUnrepeat ?? [];
   const lane = useMemo(() => laneMaker(tab, unrepeat), [tab, unrepeat.join(",")]);
   const shown = useRef(0);
+  // A bar clicked in the notes: the timeline goes there.
+  const [jump, setJump] = useState<{ bar: number; n: number }>();
   const show = (ms: number, now = false) => {
     const t = performance.now();
     if (!now && t - shown.current < FOLLOW_MS) return;
@@ -72,7 +75,18 @@ export default function SyncDialog({
           </div>
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pb-[max(env(safe-area-inset-bottom),1rem)]">
             {/* Only a cursor here: the recording below plays, the tab follows it. */}
-            <TabPlayer file={tab} audio={null} sync={item.audioSync} unrepeat={item.audioUnrepeat} skip={item.audioSkip} playing={false} track={track} height="32dvh" control={control} />
+            <TabPlayer
+              file={tab}
+              audio={null}
+              sync={item.audioSync}
+              unrepeat={item.audioUnrepeat}
+              skip={item.audioSkip}
+              playing={false}
+              track={track}
+              height="32dvh"
+              control={control}
+              onBarClick={(bar) => setJump((j) => ({ bar, n: (j?.n ?? 0) + 1 }))}
+            />
             <AudioSync
               item={item}
               audio={audio}
@@ -83,6 +97,7 @@ export default function SyncDialog({
               lane={lane}
               onPreview={(ms) => show(ms, true)}
               onTime={(ms) => show(ms)}
+              jump={jump}
             />
           </div>
         </Dialog.Content>
