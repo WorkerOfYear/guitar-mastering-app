@@ -1,6 +1,6 @@
 // Reminders: once a day (REMIND_HOUR in TIMEZONE, 19:00 by default) on practice days, if there was no session yet,
 // the bot sends a reminder — main.ts checks every few minutes. POST /api/remind?test=1 (password or Mini App) sends a test message.
-import { appButton, checkAuth, handle, HttpError, json, loadState, ownerId, reminderState, reminderText, telegram, today } from "./lib.js";
+import { appButton, checkAuth, handle, HttpError, json, KEY_URL, loadState, ownerId, reminderState, reminderText, telegram, today } from "./lib.js";
 import { kvGet, kvSet } from "./store.js";
 
 const KEY_SENT = "guitar:reminded"; // the day the reminder went out
@@ -16,7 +16,7 @@ export async function remindIfDue(): Promise<{ sent: boolean }> {
   kvSet(KEY_SENT, today());
   const state = reminderState(await loadState());
   if (!state.isDay || state.done) return { sent: false };
-  const site = new Request(process.env.SITE_URL || process.env.PUBLIC_URL || "http://localhost");
+  const site = new Request(process.env.SITE_URL || process.env.PUBLIC_URL || kvGet(KEY_URL) || "http://localhost");
   await telegram("sendMessage", { chat_id: chat, text: reminderText(state.next, state.minutes), reply_markup: { inline_keyboard: [[appButton(site, "▶ Начать занятие")]] } });
   return { sent: true };
 }

@@ -6,6 +6,7 @@ import { kvGet, kvSet } from "./store.js";
 const KEY_STATE = "guitar:state";
 const KEY_OWNER = "guitar:tg_owner"; // chat id of the owner (private chat id == Telegram user id)
 export const KEY_LINK = "guitar:tg_link"; // one-time code for t.me/<bot>?start=<code>
+export const KEY_URL = "guitar:public_url"; // the stand's current tunnel address (tunnel.ts)
 
 export class HttpError extends Error {
   constructor(
@@ -154,16 +155,16 @@ export async function telegram<T = unknown>(method: string, payload: Record<stri
   return data.result as T;
 }
 
-/** Where the app itself opens (the site on Vercel); on the test stand the app and the API share one address. */
+/** Where the app itself opens (the site on Vercel); on the test stand the app and the API share the tunnel's address. */
 export function siteUrl(req: Request) {
   if (process.env.SITE_URL) return process.env.SITE_URL.replace(/\/$/, "");
-  return new URL(req.url).origin;
+  return kvGet(KEY_URL) || new URL(req.url).origin;
 }
 
 /** The API's own public address, for the bot's webhook. */
 export function publicUrl(req: Request) {
   if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/$/, "");
-  return new URL(req.url).origin;
+  return kvGet(KEY_URL) || new URL(req.url).origin;
 }
 
 /** Button that opens the site inside Telegram as a Mini App. */

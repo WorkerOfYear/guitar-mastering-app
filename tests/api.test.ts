@@ -9,6 +9,7 @@ import * as bot from "../server/api/telegram";
 import * as files from "../server/api/files";
 import * as session from "../server/api/session";
 import * as media from "../server/api/media";
+import { followTunnel } from "../server/api/tunnel";
 import { issueToken, webhookSecret } from "../server/api/lib";
 import { closeStore, kvGet, kvSet } from "../server/api/store";
 
@@ -170,6 +171,41 @@ describe("/api/video", () => {
     expect(stored.headers.get("x-updated")).toBe(r.headers.get("x-updated"));
     expect((await media.video(req("/api/video?ig=../x&save=song-1"))).status).toBe(400);
     expect((await media.video(req("/api/video?ig=DejleJDxYHu&save=song-1", { token: null }))).status).toBe(401);
+  });
+});
+
+describe("following the stand's quick tunnel", () => {
+  let hostname = "one-two.trycloudflare.com";
+  beforeEach(() => {
+    vi.stubEnv("SITE_URL", "");
+    vi.stubEnv("TUNNEL_METRICS", "http://tunnel:2000");
+    vi.stubGlobal("fetch", async (url: string, init?: { body: string }) => {
+      if (url === "http://tunnel:2000/quicktunnel") return Response.json({ hostname });
+      sent.push({ method: url.split("/").pop()!, payload: JSON.parse(init!.body) });
+      return Response.json({ ok: true, result: true });
+    });
+  });
+
+  it("points the bot at a new address once, and the reminder button follows", async () => {
+    expect(await followTunnel()).toBe("https://one-two.trycloudflare.com");
+    expect(sent.map((s) => s.method)).toEqual(["setWebhook", "setChatMenuButton"]);
+    expect(sent[0].payload.url).toBe("https://one-two.trycloudflare.com/api/telegram");
+    await followTunnel();
+    expect(sent).toHaveLength(2); // same address: nothing to do
+
+    hostname = "three-four.trycloudflare.com";
+    await followTunnel();
+    expect(sent.map((s) => s.method)).toEqual(["setWebhook", "setChatMenuButton", "setWebhook", "setChatMenuButton"]);
+    expect(sent.at(-1)!.payload.menu_button).toMatchObject({ web_app: { url: "https://three-four.trycloudflare.com/" } });
+
+    kvSet("guitar:tg_owner", "42");
+    expect((await (await remind.POST(new Request("http://127.0.0.1:8789/api/remind?test=1", { method: "POST", headers: { authorization: `Bearer ${auth}` } }))).json()).sent).toBe(true);
+    expect(sent.at(-1)!.payload.reply_markup).toMatchObject({ inline_keyboard: [[{ web_app: { url: "https://three-four.trycloudflare.com/" } }]] });
+  });
+  it("does nothing without a tunnel to follow", async () => {
+    vi.stubEnv("TUNNEL_METRICS", "");
+    expect(await followTunnel()).toBeNull();
+    expect(sent).toHaveLength(0);
   });
 });
 

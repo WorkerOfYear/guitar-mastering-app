@@ -1,5 +1,6 @@
 # Test stand: the same services as production (server/production), with their own data, plus Caddy serving the built app
-# and a Cloudflare quick tunnel giving it an https address. Caddy is published on 127.0.0.1:8788 (the tunnel's target);
+# and a Cloudflare quick tunnel giving it an https address. Caddy is published on 127.0.0.1:8788 and is the tunnel's target;
+# the API asks the tunnel's metrics (tunnel:2000) for its current address and points the Telegram bot there (server/api/tunnel.ts);
 # /api goes to the stand's API, which reaches its own audio and score services as audio:8080 / score:8080.
 # Nothing here depends on which checkout runs it: the Caddyfile, the built app and API, data and secrets live in $STAND_DIR
 # (default /srv/guitar-dev), put there by up.sh. Secrets as in production: .env (API), audio.env, score.env.
@@ -29,6 +30,7 @@ services:
       DATA_DIR: /data
       AUDIO_URL: http://audio:8080
       SCORE_URL: http://score:8080
+      TUNNEL_METRICS: http://tunnel:2000
       NODE_NO_WARNINGS: "1"
     command: ["sh", "-c", "until [ -f api.js ]; do sleep 5; done; exec node api.js"]
     volumes:
@@ -53,5 +55,4 @@ services:
   tunnel:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    network_mode: host
-    command: tunnel --no-autoupdate --url http://127.0.0.1:8788
+    command: tunnel --no-autoupdate --metrics 0.0.0.0:2000 --url http://web:80

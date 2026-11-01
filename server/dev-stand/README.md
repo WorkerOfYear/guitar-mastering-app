@@ -31,8 +31,10 @@ cd ~/guitar-mastering-app && git pull
 bash server/dev-stand/up.sh          # соберёт, поднимет контейнеры (docker compose up -d) и напечатает адрес
 ```
 
-Если адрес туннеля сменился (перезапуск сервера):
-`cd server/dev-stand && docker compose logs tunnel | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1`
+Адрес туннеля меняется при каждом его перезапуске (перезагрузка сервера, пересоздание контейнера `tunnel`).
+Бот это отслеживает сам: API раз в минуту спрашивает у туннеля текущий адрес (`TUNNEL_METRICS`, `server/api/tunnel.ts`)
+и переставляет на него webhook и кнопку «Гитара» — открывай стенд из бота (нужен `TELEGRAM_BOT_TOKEN` в `.env`).
+Узнать адрес вручную: `cd server/dev-stand && docker compose logs tunnel | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1`
 
 Раньше стенд обновлялся из GitHub Actions по пушу в `dev`; это убрано. Секреты `STAND_*` в настройках репозитория
 и ключ `~/.ssh/github-dev-stand` на сервере больше не нужны — их можно удалить.

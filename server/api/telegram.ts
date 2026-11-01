@@ -9,11 +9,16 @@ import {
 } from "./lib.js";
 import { kvDel, kvGet, kvSet } from "./store.js";
 
+/** Telegram sends updates to `api`, the menu button opens the app at `site`. Also used when the stand's tunnel moves (tunnel.ts). */
+export async function pointBot(site: string, api: string) {
+  await telegram("setWebhook", { url: `${api}/api/telegram`, secret_token: webhookSecret(), allowed_updates: ["message"] });
+  await telegram("setChatMenuButton", { menu_button: { type: "web_app", text: "Гитара", web_app: { url: `${site}/` } } });
+}
+
 async function setup(req: Request) {
   checkToken(req);
   const me = await telegram<{ username: string }>("getMe");
-  await telegram("setWebhook", { url: `${publicUrl(req)}/api/telegram`, secret_token: webhookSecret(), allowed_updates: ["message"] });
-  await telegram("setChatMenuButton", { menu_button: { type: "web_app", text: "Гитара", web_app: { url: `${siteUrl(req)}/` } } });
+  await pointBot(siteUrl(req), publicUrl(req));
   await telegram("setMyCommands", { commands: [{ command: "start", description: "Открыть приложение" }] });
   const code = crypto.randomBytes(12).toString("hex");
   kvSet(KEY_LINK, code, 3600);

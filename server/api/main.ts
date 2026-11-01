@@ -1,6 +1,6 @@
 // The app's API on the owner's server: the library (sync), its files, the helper servers, tab search and the Telegram bot.
 // Built into one file by `npm run build:api` (dist-api/api.js), run with plain `node api.js` — server/production and server/dev-stand run it.
-// Env: PORT (8789), HOST (127.0.0.1), DATA_DIR, APP_PASSWORD, AUDIO_KEY, SCORE_KEY, TELEGRAM_BOT_TOKEN, SITE_URL, PUBLIC_URL…
+// Env: PORT (8789), HOST (127.0.0.1), DATA_DIR, APP_PASSWORD, AUDIO_KEY, SCORE_KEY, TELEGRAM_BOT_TOKEN, SITE_URL, PUBLIC_URL, TUNNEL_METRICS…
 import http from "node:http";
 import * as files from "./files";
 import * as remind from "./remind";
@@ -9,6 +9,7 @@ import * as session from "./session";
 import * as state from "./state";
 import * as tabs from "./tabs";
 import * as bot from "./telegram";
+import { followTunnel } from "./tunnel";
 
 type Handler = (req: Request) => Promise<Response>;
 const ROUTES: Record<string, Partial<Record<string, Handler>>> = {
@@ -86,3 +87,8 @@ http
 const tick = () => remind.remindIfDue().catch((e: Error) => console.error("reminder:", e.message));
 setInterval(tick, 5 * 60_000);
 void tick();
+
+// The stand's quick tunnel: follow its changing address with the bot.
+const follow = () => followTunnel().catch((e: Error) => console.error("tunnel:", e.message));
+setInterval(follow, 60_000);
+void follow();
