@@ -113,7 +113,7 @@ export interface PlanTemplate {
 }
 export type TemplateBlock = keyof PlanTemplate;
 
-/** One of the user's hand-made plans, picked on "Сегодня". */
+/** One of the user's hand-made plans, started from "Мой план" on "Сегодня". */
 export interface SavedPlan extends PlanTemplate {
   id: string;
   name: string;

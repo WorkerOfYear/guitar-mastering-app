@@ -3,7 +3,7 @@ import type { DataState } from "./data";
 /** The id the old single plan gets, the same on every device so their syncs agree. */
 export const LEGACY_PLAN_ID = "plan-legacy";
 
-/** Data from before several plans: its single plan becomes "Мой план", chosen for "Сегодня" as it was. */
+/** Data from before several plans: its single plan becomes "Мой план" and stays the remembered choice. */
 export function withPlans<T extends Partial<DataState>>(state: T): T {
   if (state.plans || !state.template) return state;
   const { template, ...rest } = state;
@@ -12,5 +12,5 @@ export function withPlans<T extends Partial<DataState>>(state: T): T {
   return { ...rest, ...plans } as unknown as T;
 }
 
-/** The plan "Сегодня" plays, if one is chosen and still exists. */
+/** The plan last started from "Сегодня", if it still exists: the page then opens on "Мой план". */
 export const currentPlan = (s: Pick<DataState, "plans" | "planId">) => (s.planId ? s.plans?.find((p) => p.id === s.planId) : undefined);

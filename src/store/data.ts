@@ -30,9 +30,9 @@ export interface DataState {
   practiceUpdatedAt?: number;
   /** Deleted item ids → when, so a sync doesn't bring them back */
   deleted?: Record<string, number>;
-  /** Hand-made plans; the chosen one (with any entries) is played instead of the automatic planner */
+  /** Hand-made plans, started from "Мой план" on "Сегодня" */
   plans?: SavedPlan[];
-  /** The plan "Сегодня" plays; none means the automatic one */
+  /** The plan last started from "Сегодня"; none means the automatic one was */
   planId?: string | null;
   /** When plans or the choice last changed (named after the single plan there used to be) */
   templateUpdatedAt?: number;

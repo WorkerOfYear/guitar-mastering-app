@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { ArrowDown, ArrowUp, Check, ChevronRight, ListChecks, Plus, Sparkles, Trash2, X } from "lucide-react";
-import { Badge, Button, Card, Input } from "@/components/ui";
+import { ArrowDown, ArrowUp, Check, ChevronRight, ListChecks, Plus, Trash2, X } from "lucide-react";
+import { Button, Card, Input } from "@/components/ui";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { BLOCK_ICON, IconTile, TYPE_ICON } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/Placeholder";
@@ -19,37 +19,28 @@ const blockMinutes = (template: PlanTemplate, block: TemplateBlock, items: Item[
     ? template.warmup.reduce((sum, e) => sum + (items.find((i) => i.id === e.itemId)?.minutes ?? 3), 0)
     : practice.blocks[block];
 
-/** The user's plans; the one chosen for "Сегодня" is marked. A new plan opens right away. */
+/** The user's plans. A new plan opens right away. */
 export function PlanBuilderPage() {
-  const { items, practice, plans = [], planId, addPlan } = useData();
+  const { items, practice, plans = [], addPlan } = useData();
   const navigate = useNavigate();
   const create = () => navigate(`/settings/plan/${addPlan(`План ${plans.length + 1}`)}`);
   return (
     <div className="space-y-3">
       <PageHeader title="Конструктор плана" />
       <p className="px-1 text-sm text-muted">
-        Составь несколько планов и выбирай нужный на «Сегодня». Пока план не выбран, занятие подбирается автоматически.
+        Составь несколько планов — они появятся на главной во вкладке «Мой план», там любой можно начать.
       </p>
-      <Card className={cn("flex items-center gap-3", !planId && "border-accent")}>
-        <IconTile icon={Sparkles} />
-        <div className="min-w-0 flex-1">
-          <div className="font-semibold leading-tight">Автоплан</div>
-          <div className="truncate text-xs text-muted">Новое и то, что дольше всего не играл</div>
-        </div>
-        {!planId && <Badge variant="soft">на сегодня</Badge>}
-      </Card>
       {plans.map((p) => {
         const count = templateSize(p);
         const total = BLOCKS.reduce((sum, b) => sum + blockMinutes(p, b, items, practice), 0) + practice.blocks.improv;
         return (
           <Link key={p.id} to={`/settings/plan/${p.id}`} className="block">
-            <Card className={cn("flex items-center gap-3 transition-colors active:bg-surface-2", planId === p.id && "border-accent")}>
+            <Card className="flex items-center gap-3 transition-colors active:bg-surface-2">
               <IconTile icon={ListChecks} />
               <div className="min-w-0 flex-1">
                 <div className="truncate font-semibold leading-tight">{p.name}</div>
-                <div className="truncate text-xs text-muted">{count ? `${count} упр. · ${total} мин` : "Пусто — пока играет автоплан"}</div>
+                <div className="truncate text-xs text-muted">{count ? `${count} упр. · ${total} мин` : "Пусто — добавь упражнения"}</div>
               </div>
-              {planId === p.id && <Badge variant="soft">на сегодня</Badge>}
               <ChevronRight className="size-4 shrink-0 text-muted" />
             </Card>
           </Link>
@@ -65,7 +56,7 @@ export function PlanBuilderPage() {
 /** One hand-made plan: which library items each block plays, in order. */
 export function PlanEditorPage() {
   const { id = "" } = useParams();
-  const { items, practice, plans = [], planId, updatePlan, removePlan, choosePlan } = useData();
+  const { items, practice, plans = [], updatePlan, removePlan } = useData();
   const navigate = useNavigate();
   const [picking, setPicking] = useState<TemplateBlock | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -92,17 +83,8 @@ export function PlanEditorPage() {
       />
       <p className="px-1 text-sm text-muted">
         Выбери, что играть в каждом блоке. Занятие пойдёт ровно по этому списку.
-        {!templateSize(template) && " Пока список пуст, вместо него играет автоплан."}
+        {!templateSize(template) && " Пока список пуст, начать занятие по нему нельзя."}
       </p>
-      {planId === id ? (
-        <div className="flex items-center gap-2 px-1 text-sm text-good">
-          <Check className="size-4" /> Этот план стоит на «Сегодня»
-        </div>
-      ) : (
-        <Button variant="secondary" onClick={() => choosePlan(id)} className="w-full">
-          <Check className="size-4" /> Играть по нему на «Сегодня»
-        </Button>
-      )}
 
       {BLOCKS.map((block) => {
         const entries = template[block];
@@ -161,7 +143,6 @@ export function PlanEditorPage() {
         <DrawerContent>
           <DrawerHeader>
             <DrawerTitle>Удалить «{template.name}»?</DrawerTitle>
-            {planId === id && <DrawerDescription>На «Сегодня» снова будет автоплан</DrawerDescription>}
           </DrawerHeader>
           <div className="space-y-2">
             <Button
