@@ -1,19 +1,20 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { m } from "motion/react";
-import { ChevronRight, Dices, Library, ListChecks, Music, Play, PlayCircle, Plus, Shuffle, Video } from "lucide-react";
+import { ChevronDown, ChevronRight, Dices, Library, ListChecks, Music, Pencil, Play, PlayCircle, Plus, Shuffle, Sparkles, Video } from "lucide-react";
 import { Badge, Button, Card, Chip, ScrollRow } from "@/components/ui";
 import { BLOCK_ICON, IconTile } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/Placeholder";
 import { audio } from "@/audio/player";
-import { buildPlan } from "@/features/session/plan";
+import { buildPlan, templateSize } from "@/features/session/plan";
 import { resolveProgression } from "@/music/improv";
 import { unitTitle } from "@/lib/progress";
+import { cn } from "@/lib/utils";
 import { useData } from "@/store/data";
 import { useFree } from "@/store/free";
 import { currentPlan } from "@/store/plans";
 import { useSession } from "@/store/session";
-import { BLOCK_META, type Item } from "@/shared/types";
+import { BLOCK_META, type Item, type PlanBlock, type SavedPlan } from "@/shared/types";
 
 /** What plays for an entry, shown next to it in the plan. */
 function MediaBadge({ item }: { item?: Item }) {
@@ -32,19 +33,22 @@ function MediaBadge({ item }: { item?: Item }) {
   return null;
 }
 
+type Tab = "auto" | "mine";
+
 export function TodayPage() {
   const data = useData();
   const { active, start } = useSession();
   const freeActive = useFree((s) => !!s.active);
   const navigate = useNavigate();
-  const [seed, setSeed] = useState(0);
-  const chosen = currentPlan(data);
-  const plan = useMemo(() => buildPlan({ ...data, template: chosen }), [data.items, data.lastPlayed, data.practice, chosen, seed]);
+  const plans = data.plans ?? [];
+  const [tab, setTab] = useState<Tab>(currentPlan(data) ? "mine" : "auto");
 
-  const begin = () => {
+  /** Starts a session; `planId` is remembered so the page opens on the same tab next time. */
+  const begin = (plan: PlanBlock[], planId: string | null) => {
     audio(); // unlock sound inside the tap
     const task = plan.find((b) => b.improv)?.improv;
     if (task) data.pushRecentKey(task.key);
+    if (data.planId !== planId) data.choosePlan(planId);
     start(plan);
     navigate("/session");
   };
@@ -78,77 +82,154 @@ export function TodayPage() {
               </Button>
             </Card>
           )}
-          {!!data.plans?.length && (
-            <div className="mb-2.5">
-              <ScrollRow>
-                <Chip active={!chosen} onClick={() => data.choosePlan(null)}>
-                  Автоплан
-                </Chip>
-                {data.plans.map((p) => (
-                  <Chip key={p.id} active={chosen?.id === p.id} onClick={() => data.choosePlan(p.id)}>
-                    {p.name}
-                  </Chip>
-                ))}
-              </ScrollRow>
-            </div>
-          )}
-          <div className="space-y-2.5">
-            {plan.map((b, i) => (
-              <m.div key={b.kind} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05, duration: 0.25 }}>
-                <Card>
-                  <div className="flex items-center gap-3">
-                    <IconTile icon={BLOCK_ICON[b.kind]} />
-                    <div className="min-w-0 flex-1">
-                      <div className="font-semibold leading-tight">{BLOCK_META[b.kind].title}</div>
-                      <div className="truncate text-xs text-muted">{BLOCK_META[b.kind].hint}</div>
-                    </div>
-                    <span className="shrink-0 text-sm font-semibold tabular-nums text-muted">{b.minutes} мин</span>
-                  </div>
-                  <div className="mt-3 text-sm">
-                    {b.improv ? (
-                      <ImprovLine improv={b.improv} onReroll={() => setSeed(seed + 1)} />
-                    ) : b.entries.length ? (
-                      <ul className="-mx-2">
-                        {b.entries.map((e) => {
-                          const item = data.items.find((i) => i.id === e.itemId);
-                          return (
-                            <li key={`${e.itemId}#${e.sectionId ?? ""}`}>
-                              <Link
-                                to={`/library/${e.itemId}`}
-                                className="flex min-h-10 items-center gap-2 rounded-xl px-2 py-1.5 transition-colors active:bg-surface-2"
-                              >
-                                <span className="min-w-0 flex-1 truncate">{unitTitle(item, e.sectionId)}</span>
-                                <MediaBadge item={item} />
-                                <ChevronRight className="size-4 shrink-0 text-muted" />
-                              </Link>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    ) : (
-                      <span className="text-muted">Пусто</span>
-                    )}
-                  </div>
-                </Card>
-              </m.div>
-            ))}
+          <div className="mb-2.5">
+            <ScrollRow>
+              <Chip active={tab === "auto"} onClick={() => setTab("auto")}>
+                <Sparkles /> Автоплан
+              </Chip>
+              <Chip active={tab === "mine"} onClick={() => setTab("mine")}>
+                <ListChecks /> Мой план
+              </Chip>
+              <Chip onClick={() => navigate("/free")} sub={freeActive ? "идёт — вернуться" : undefined}>
+                <Shuffle /> Свободный режим
+              </Chip>
+            </ScrollRow>
           </div>
-          <Button asChild variant="ghost" size="sm" className="mt-2 w-full">
-            <Link to={chosen ? `/settings/plan/${chosen.id}` : "/settings/plan"}>
-              <ListChecks className="size-4" /> {chosen ? "Изменить план" : data.plans?.length ? "Мои планы" : "Составить план вручную"}
-            </Link>
-          </Button>
-          <Button size="xl" onClick={begin} className="mt-3 w-full text-lg">
-            <Play className="size-6" fill="currentColor" />
-            Старт
-          </Button>
-          <Button asChild variant="secondary" size="lg" className="mt-2 w-full">
-            <Link to="/free">
-              <Shuffle className="size-5" /> {freeActive ? "Вернуться в свободный режим" : "Свободный режим"}
-            </Link>
-          </Button>
+          {tab === "auto" ? <AutoPlan onStart={(plan) => begin(plan, null)} /> : <MyPlans plans={plans} onStart={begin} />}
         </>
       )}
+    </div>
+  );
+}
+
+/** The plan the app picks by itself: new items and what hasn't been played longest. */
+function AutoPlan({ onStart }: { onStart: (plan: PlanBlock[]) => void }) {
+  const data = useData();
+  const [seed, setSeed] = useState(0);
+  const plan = useMemo(() => buildPlan(data), [data.items, data.lastPlayed, data.practice, seed]);
+  return (
+    <>
+      <PlanBlocks plan={plan} onReroll={() => setSeed(seed + 1)} />
+      <Button size="xl" onClick={() => onStart(plan)} className="mt-3 w-full text-lg">
+        <Play className="size-6" fill="currentColor" />
+        Старт
+      </Button>
+    </>
+  );
+}
+
+/** Every hand-made plan; a card opens to show what's inside, "Начать" plays it. */
+function MyPlans({ plans, onStart }: { plans: SavedPlan[]; onStart: (plan: PlanBlock[], planId: string) => void }) {
+  const { addPlan } = useData();
+  const navigate = useNavigate();
+  const [open, setOpen] = useState<string | null>(null);
+  const create = () => navigate(`/settings/plan/${addPlan(`План ${plans.length + 1}`)}`);
+  return (
+    <div className="space-y-2.5">
+      {!plans.length && (
+        <Card className="flex flex-col items-center gap-3 border-dashed py-6 text-center">
+          <IconTile icon={ListChecks} />
+          <div>
+            <div className="font-semibold">Своих планов пока нет</div>
+            <div className="mt-0.5 text-sm text-muted">Собери план из упражнений библиотеки — и занимайся ровно по нему</div>
+          </div>
+        </Card>
+      )}
+      {plans.map((p) => (
+        <PlanCard key={p.id} saved={p} open={open === p.id} onToggle={() => setOpen(open === p.id ? null : p.id)} onStart={(plan) => onStart(plan, p.id)} />
+      ))}
+      <Button variant="dashed" onClick={create} className="w-full">
+        <Plus className="size-4" /> Новый план
+      </Button>
+    </div>
+  );
+}
+
+function PlanCard({ saved, open, onToggle, onStart }: { saved: SavedPlan; open: boolean; onToggle: () => void; onStart: (plan: PlanBlock[]) => void }) {
+  const data = useData();
+  const [seed, setSeed] = useState(0);
+  const plan = useMemo(() => buildPlan({ ...data, template: saved }), [data.items, data.lastPlayed, data.practice, saved, seed]);
+  const count = templateSize(saved);
+  const total = plan.reduce((sum, b) => sum + b.minutes, 0);
+  return (
+    <Card className="p-0">
+      <div className="flex items-center gap-2 p-2 pl-4">
+        <button type="button" onClick={onToggle} aria-expanded={open} className="flex min-w-0 flex-1 items-center gap-3 py-2 text-left outline-none">
+          <IconTile icon={ListChecks} />
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-semibold leading-tight">{saved.name || "План"}</div>
+            <div className="truncate text-xs text-muted">{count ? `${count} упр. · ${total} мин` : "Пусто — добавь упражнения"}</div>
+          </div>
+          <ChevronDown className={cn("size-4 shrink-0 text-muted transition-transform", open && "rotate-180")} />
+        </button>
+        <Button size="sm" onClick={() => onStart(plan)} disabled={!count}>
+          <Play className="size-4" fill="currentColor" /> Начать
+        </Button>
+      </div>
+      {open && (
+        <div className="space-y-2.5 border-t border-line/70 p-3">
+          {count ? <PlanBlocks plan={plan} onReroll={() => setSeed(seed + 1)} flat /> : <div className="px-1 text-sm text-muted">В плане пока ничего нет.</div>}
+          <Button asChild variant="ghost" size="sm" className="w-full">
+            <Link to={`/settings/plan/${saved.id}`}>
+              <Pencil className="size-4" /> Изменить план
+            </Link>
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** A plan's blocks with what each one plays. `flat` drops the card frames for use inside another card. */
+function PlanBlocks({ plan, onReroll, flat }: { plan: PlanBlock[]; onReroll: () => void; flat?: boolean }) {
+  const { items } = useData();
+  return (
+    <div className="space-y-2.5">
+      {plan.map((b, i) => {
+        const body = (
+          <>
+            <div className="flex items-center gap-3">
+              <IconTile icon={BLOCK_ICON[b.kind]} />
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold leading-tight">{BLOCK_META[b.kind].title}</div>
+                <div className="truncate text-xs text-muted">{BLOCK_META[b.kind].hint}</div>
+              </div>
+              <span className="shrink-0 text-sm font-semibold tabular-nums text-muted">{b.minutes} мин</span>
+            </div>
+            <div className="mt-3 text-sm">
+              {b.improv ? (
+                <ImprovLine improv={b.improv} onReroll={onReroll} />
+              ) : b.entries.length ? (
+                <ul className="-mx-2">
+                  {b.entries.map((e) => {
+                    const item = items.find((i) => i.id === e.itemId);
+                    return (
+                      <li key={`${e.itemId}#${e.sectionId ?? ""}`}>
+                        <Link
+                          to={`/library/${e.itemId}`}
+                          className="flex min-h-10 items-center gap-2 rounded-xl px-2 py-1.5 transition-colors active:bg-surface-2"
+                        >
+                          <span className="min-w-0 flex-1 truncate">{unitTitle(item, e.sectionId)}</span>
+                          <MediaBadge item={item} />
+                          <ChevronRight className="size-4 shrink-0 text-muted" />
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <span className="text-muted">Пусто</span>
+              )}
+            </div>
+          </>
+        );
+        if (flat) return <div key={b.kind}>{body}</div>;
+        return (
+          <m.div key={b.kind} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05, duration: 0.25 }}>
+            <Card>{body}</Card>
+          </m.div>
+        );
+      })}
     </div>
   );
 }
