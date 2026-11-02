@@ -21,10 +21,19 @@ describe("buildPlan", () => {
     };
     const plan = buildPlan({ ...base, items, template }, () => 0);
     expect(plan[0].entries).toEqual([{ itemId: "wu-spider" }]);
-    expect(plan[0].minutes).toBe(3);
+    expect(plan[0].minutes).toBe(DEFAULT_PRACTICE.blocks.warmup);
     expect(plan[1].entries).toEqual([{ itemId: "song-ascend", sectionId: "part2" }]);
     expect(plan[2].entries).toEqual([{ itemId: "th-modes" }]);
     expect(plan[3].improv?.key).toBeTruthy();
+  });
+  it("times every block as set for it, not by its exercises' own minutes", () => {
+    // "15min workout" says 3 minutes, the warm-up block is set to 15: the session counts 15.
+    const items = STARTER_LIBRARY.map((i) => (i.id === "wu-video" ? { ...i, title: "15min workout", minutes: 3 } : i));
+    const practice = { ...DEFAULT_PRACTICE, blocks: { warmup: 15, new: 25, review: 10, improv: 5 } };
+    const minutes = (p: ReturnType<typeof buildPlan>) => p.map((b) => b.minutes);
+    expect(minutes(buildPlan({ ...base, items, practice }))).toEqual([15, 25, 10, 5]);
+    const template = { warmup: [{ itemId: "wu-video" }, { itemId: "wu-spider" }], new: [{ itemId: "tech-3nps" }], review: [] };
+    expect(minutes(buildPlan({ ...base, items, practice, template }))).toEqual([15, 25, 10, 5]);
   });
   it("plans automatically while the hand-made plan is empty", () => {
     const empty = { warmup: [], new: [], review: [] };
@@ -43,7 +52,6 @@ describe("buildPlan", () => {
     const items = STARTER_LIBRARY.map((i) => (i.id === "wu-video" ? { ...i, warmup: false } : i.id === "wu-spider" ? { ...i, warmup: true } : i));
     const plan = buildPlan({ ...base, items });
     expect(plan[0].entries).toEqual([{ itemId: "wu-spider" }]);
-    expect(plan[0].minutes).toBe(3);
     expect(plan.flatMap((b) => b.entries).some((e) => e.itemId === "wu-video")).toBe(false);
   });
   it("takes the least recently played active units first", () => {
