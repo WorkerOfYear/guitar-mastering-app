@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useRef, useState, type RefObject } from "react";
 import { Navigate } from "react-router-dom";
 import { AnimatePresence, m } from "motion/react";
-import { Check, ChevronRight, Headphones, Metronome, Minus, Pause, Piano, Play, Plus, Settings2, Volume2, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, ChevronUp, Headphones, Metronome, Minus, Pause, Piano, Play, Plus, Settings2, Volume2, X } from "lucide-react";
 import { SessionMetronome } from "@/components/metronome/MetronomePanel";
 import { Button, Chip, IconButton, Progress, ScrollRow, Segmented } from "@/components/ui";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
@@ -33,12 +33,13 @@ import { SessionSummary } from "./SessionSummary";
 
 const TabPlayer = lazy(() => import("@/components/tab/TabPlayer"));
 
-/** The tab takes the screen under the header. */
-const TAB_HEIGHT = "max(16rem, calc(100dvh - 18rem))";
+/** The tab takes the screen under the collapsed header and the metronome. */
+const TAB_HEIGHT = "max(16rem, calc(100dvh - 22rem))";
 
 /**
  * A planned session: starts at once, one exercise after another as you tap "Дальше", or any block picked on top.
- * Time is counted per block in the background (a bar shows how far); a signal when it is up, and it keeps counting.
+ * Time is counted per block; a signal when it is up, and it keeps counting. While playing, the header folds into
+ * a slim bar with the block and its clock; a tap brings back the title, the clock and "Дальше".
  * Videos and notes start only when you press their play.
  */
 export function SessionPage() {
@@ -48,7 +49,7 @@ export function SessionPage() {
   const now = useNow(250, !!active);
   const [blocked, setBlocked] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
-  const [metronome, setMetronome] = useState(false);
+  const [headerOpen, setHeaderOpen] = useState(false);
   const control = useRef<PlayerControl | null>(null);
   useWakeLock(!!active);
 
@@ -129,63 +130,84 @@ export function SessionPage() {
   const section = findSection(item, entry?.sectionId);
   const title = block.kind === "improv" ? "Импровизация" : section ? `${section.title} — ${item?.title}` : item ? item.title : BLOCK_META[block.kind].title;
   const total = active.blocks.reduce((sum, _, i) => sum + blockSeconds(active, i, now), 0);
+  const blockTitle = BLOCK_META[block.kind].title;
+  const clock = formatClock(planned - spent);
+  const progress = Math.min(1, spent / (planned || 1)) * 100;
+  const barColor = over ? "bg-good" : running ? "bg-accent" : "bg-muted";
 
   return (
     <div className="pb-10">
-      {/* header: the blocks to jump between, the exercise, its clock with play/pause and "next", the metronome */}
-      <div className="sticky top-0 z-10 -mx-4 bg-bg/95 px-4 pb-3 pt-2 backdrop-blur">
-        <div className="flex items-center gap-2">
-          <div className="min-w-0 flex-1">
-            <ScrollRow>
-              {active.blocks.map((b, i) => {
-                const Icon = BLOCK_ICON[b.kind];
-                return (
-                  <Chip key={b.kind} active={i === active.block} onClick={() => i !== active.block && session.goToBlock(i)} className="px-3 py-1.5">
-                    <Icon /> {BLOCK_META[b.kind].title}
-                  </Chip>
-                );
-              })}
-            </ScrollRow>
+      {/* Time left in the block, whatever the exercises' own minutes. */}
+      {headerOpen ? (
+        <div className="sticky top-0 z-10 -mx-4 border-b border-line bg-bg/95 px-4 pb-1 pt-2 backdrop-blur">
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <ScrollRow>
+                {active.blocks.map((b, i) => {
+                  const Icon = BLOCK_ICON[b.kind];
+                  return (
+                    <Chip key={b.kind} active={i === active.block} onClick={() => i !== active.block && session.goToBlock(i)} className="px-3 py-1.5">
+                      <Icon /> {BLOCK_META[b.kind].title}
+                    </Chip>
+                  );
+                })}
+              </ScrollRow>
+            </div>
+            <IconButton label="Завершить" onClick={() => setConfirmEnd(true)} className="size-10 shrink-0">
+              <X />
+            </IconButton>
           </div>
-          <IconButton label="Завершить" onClick={() => setConfirmEnd(true)} className="size-10 shrink-0">
-            <X />
-          </IconButton>
-        </div>
-        <div className="mt-2.5 flex items-center gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-lg font-bold leading-tight">{title}</div>
-            {block.entries.length > 1 && (
-              <div className="text-xs text-muted">
-                {index + 1} из {block.entries.length}
+          <div className="mt-2.5 truncate text-lg font-bold leading-tight">{title}</div>
+          {block.entries.length > 1 && (
+            <div className="text-xs text-muted">
+              {index + 1} из {block.entries.length}
+            </div>
+          )}
+          <div className="mt-2.5 flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-2">
+                <span className={cn("text-3xl font-bold leading-none tabular-nums", over ? "text-good" : !running && "text-muted")}>{clock}</span>
+                <span className="truncate text-sm text-muted">из {formatClock(planned)}</span>
               </div>
-            )}
+              <Progress aria-label={`${blockTitle}: время раздела`} className="mt-1.5 h-1.5" indicatorClassName={barColor} value={progress} />
+            </div>
+            <IconButton label={running ? "Остановить время" : "Продолжить время"} onClick={togglePause} className="size-11 shrink-0">
+              {running ? <Pause fill="currentColor" /> : <Play fill="currentColor" />}
+            </IconButton>
+            <Button onClick={next} title={`Дальше: ${nextTitle}`} className="h-11 shrink-0 gap-1 px-3">
+              {lastEntry && isLast ? "Закончить" : "Дальше"}
+              {lastEntry && isLast ? <Check className="size-4" /> : <ChevronRight className="size-4" />}
+            </Button>
           </div>
-          <MetronomeButtons open={metronome} onOpen={setMetronome} />
+          {!(lastEntry && isLast) && <div className="mt-1 truncate text-right text-xs text-muted">Дальше: {nextTitle}</div>}
+          <button
+            type="button"
+            aria-expanded
+            aria-label="Свернуть"
+            onClick={() => setHeaderOpen(false)}
+            className="mx-auto flex h-7 w-32 items-center justify-center text-muted outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+          >
+            <ChevronUp className="size-5" />
+          </button>
         </div>
-        <div className="mt-2.5 flex items-center gap-2">
-          {/* Time is counted in the background, per block: only how far the block is, no clock. */}
-          <Progress
-            aria-label={`${BLOCK_META[block.kind].title}: время блока`}
-            className="h-2 min-w-0 flex-1"
-            indicatorClassName={over ? "bg-good" : running ? "bg-accent" : "bg-muted"}
-            value={Math.min(1, spent / (planned || 1)) * 100}
-          />
-          <IconButton label={running ? "Остановить время" : "Продолжить время"} onClick={togglePause} className="size-10 shrink-0">
-            {running ? <Pause fill="currentColor" /> : <Play fill="currentColor" />}
-          </IconButton>
-          <Button onClick={next} title={`Дальше: ${nextTitle}`} className="h-10 min-w-0 max-w-[50%] shrink-0 gap-1 px-3">
-            <span className="truncate">{lastEntry && isLast ? "Закончить" : "Дальше"}</span>
-            {lastEntry && isLast ? <Check className="size-4" /> : <ChevronRight className="size-4" />}
-          </Button>
-        </div>
-        {!(lastEntry && isLast) && <div className="mt-1 truncate text-right text-xs text-muted">{nextTitle}</div>}
-      </div>
-
-      {metronome && (
-        <div className="mb-3">
-          <SessionMetronome />
-        </div>
+      ) : (
+        <button
+          type="button"
+          aria-expanded={false}
+          aria-label="Показать раздел, таймер и «Дальше»"
+          onClick={() => setHeaderOpen(true)}
+          className="sticky top-0 z-10 -mx-4 flex h-13 w-[calc(100%+2rem)] items-center gap-2.5 border-b border-line bg-surface px-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/60"
+        >
+          <span className="max-w-[40%] shrink-0 truncate text-sm text-muted">{blockTitle}</span>
+          <span className={cn("shrink-0 font-bold tabular-nums", over ? "text-good" : !running && "text-muted")}>{clock}</span>
+          <Progress aria-hidden className="h-1 min-w-0 flex-1" indicatorClassName={barColor} value={progress} />
+          <ChevronDown className="size-5 shrink-0 text-muted" />
+        </button>
       )}
+
+      <div className="my-3">
+        <SessionMetronome controls />
+      </div>
 
       <Practice key={entryKey} kind={block.kind} entry={entry} item={item} control={control} onBlocked={setBlocked} />
 

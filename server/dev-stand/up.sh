@@ -2,7 +2,7 @@
 # Puts the code from this checkout on the test stand. Run on the server after every change:
 #   bash server/dev-stand/up.sh
 # Checks the code (tsc, tests), builds the app and the API (server/api), swaps them into /srv/guitar-dev, restarts the API
-# container and makes sure the stand now serves this build. Uses node from the server if it's there, else node:22 in docker.
+# container and makes sure the stand now serves this build, also through the tunnel's public address. Uses node from the server if it's there, else node:22 in docker.
 # Env: STAND_DIR (default /srv/guitar-dev), SKIP_CHECKS=1 to skip tsc and tests.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -36,16 +36,45 @@ rm -rf "$STAND_DIR/api"/* && cp -r dist-api/. "$STAND_DIR/api/"
 (cd server/dev-stand && docker compose up -d --build >/dev/null && docker restart guitar-dev-api dev-stand-web-1 >/dev/null)
 
 # The stand must serve this build, and its API must answer.
+ready=
 for _ in $(seq 20); do
   served=$(curl -fsS http://127.0.0.1:8788/version.txt 2>/dev/null || true)
   api=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8788/api/health 2>/dev/null || true)
   if [ "$served" = "$VERSION" ] && [ "$api" = "200" ]; then
-    url=$(cd server/dev-stand && docker compose logs tunnel 2>/dev/null | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1)
-    echo "OK: стенд поднят с $VERSION${url:+ — $url}"
-    exit 0
+    ready=1
+    break
   fi
   sleep 2
 done
-echo "ОШИБКА: стенд не поднялся с этим кодом: отдаёт '${served:-ничего}' вместо '$VERSION', /api/health → ${api:-нет ответа}." >&2
-echo "Смотри: cd server/dev-stand && docker compose ps && docker compose logs --tail 50" >&2
-exit 1
+if [ -z "$ready" ]; then
+  echo "ОШИБКА: стенд не поднялся с этим кодом: отдаёт '${served:-ничего}' вместо '$VERSION', /api/health → ${api:-нет ответа}." >&2
+  echo "Смотри: cd server/dev-stand && docker compose ps && docker compose logs --tail 50" >&2
+  exit 1
+fi
+
+# The address must open from outside too: the tunnel keeps naming its address even after Cloudflare has forgotten it.
+tunnel_url() { (cd server/dev-stand && docker compose logs tunnel 2>/dev/null | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1); }
+opens() {
+  for _ in $(seq 15); do
+    [ "$(curl -fsS -m 10 "$1/version.txt" 2>/dev/null || true)" = "$VERSION" ] && return 0
+    sleep 4
+  done
+  return 1
+}
+url=$(tunnel_url)
+if [ -z "$url" ] || ! opens "$url"; then
+  echo "Туннель ${url:-без адреса} не открывается снаружи, перезапускаю." >&2
+  old=$url
+  docker restart dev-stand-tunnel-1 >/dev/null
+  for _ in $(seq 15); do
+    url=$(tunnel_url)
+    [ -n "$url" ] && [ "$url" != "$old" ] && break
+    sleep 2
+  done
+  if [ -z "$url" ] || [ "$url" = "$old" ] || ! opens "$url"; then
+    echo "ОШИБКА: стенд работает локально, но туннель не открывается снаружи (${url:-нет адреса})." >&2
+    echo "Смотри: cd server/dev-stand && docker compose logs --tail 50 tunnel" >&2
+    exit 1
+  fi
+fi
+echo "OK: стенд поднят с $VERSION — $url"

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { m as motion } from "motion/react";
 import { Slider as SliderPrimitive } from "radix-ui";
-import { Check, Minus, Play, Plus, Square, Volume2 } from "lucide-react";
-import { Card, IconButton, Slider, Toggle } from "@/components/ui";
+import { Check, Metronome, Minus, Play, Plus, Settings2, Square, Volume2 } from "lucide-react";
+import { Button, Card, IconButton, Slider, Toggle } from "@/components/ui";
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { haptic } from "@/app/telegram";
 import { previewClick, toggleMetronome } from "@/audio/metronome";
@@ -350,7 +350,7 @@ function StartButton() {
           >
             {bpm}
           </span>
-          <span className="absolute mt-[50px] text-sm text-muted">ударов в мин.</span>
+          <span className="absolute mt-[50px] text-sm text-muted">bpm</span>
           <img
             src={`${BASE}metronome/hint-space.png`}
             alt=""
@@ -525,14 +525,29 @@ export function MetronomePanel() {
  * The same metronome for the session screen, in a few rows: size and pattern beside the tempo, the beats
  * (tap to accent), the tempo slider. It is started from the screen's own metronome button.
  */
-export function SessionMetronome() {
+export function SessionMetronome({ controls }: { controls?: boolean }) {
   const m = useMetronome();
   const rhythm = rhythmById(m.rhythm);
-  const [sheet, setSheet] = useState<"meter" | "rhythm" | null>(null);
+  const [sheet, setSheet] = useState<"meter" | "rhythm" | "settings" | null>(null);
   const picked = PICKABLE.includes(rhythm);
   return (
     <section className="select-none rounded-3xl border border-line bg-surface px-4 pb-3 pt-3">
-      <div className="flex items-center gap-3">
+      <div className={cn("flex items-center", controls ? "gap-2" : "gap-3")}>
+        {controls && (
+          <Button
+            variant={m.running ? "default" : "secondary"}
+            aria-pressed={m.running}
+            aria-label={m.running ? "Выключить метроном" : "Включить метроном"}
+            onClick={() => {
+              haptic();
+              toggleMetronome();
+            }}
+            className="h-11 gap-1.5 px-3"
+          >
+            <Metronome className="size-5" />
+            <span className="hidden text-sm font-semibold min-[360px]:inline">{m.running ? "Вкл" : "Выкл"}</span>
+          </Button>
+        )}
         <button type="button" onClick={() => setSheet("meter")} aria-label={`Размер ${m.beats}/${m.beatUnit}`} className={cn(CIRCLE, SERIF, "size-11 flex-col text-sm font-bold leading-none shadow-none")}>
           <span>{m.beats}</span>
           <span className="-mt-0.5">{m.beatUnit}</span>
@@ -540,9 +555,14 @@ export function SessionMetronome() {
         <button type="button" onClick={() => setSheet("rhythm")} aria-label={`Рисунок: ${rhythm.name}`} className={cn(CIRCLE, "size-11 shadow-none")}>
           {picked ? <RhythmImage rhythm={rhythm} unit={m.beatUnit} className="size-full p-2 opacity-50" /> : <span className="text-sm">{SUB_SHORT[6]}</span>}
         </button>
+        {controls && (
+          <IconButton label="Настройки метронома" onClick={() => setSheet("settings")} className="size-11 shrink-0">
+            <Settings2 />
+          </IconButton>
+        )}
         <div className="ml-auto text-right">
           <BpmNumber bpm={m.bpm} className="text-3xl" />
-          <div className="text-[11px] text-muted">ударов в мин.</div>
+          <div className="whitespace-nowrap text-[11px] text-muted">bpm</div>
         </div>
       </div>
       <div className="mt-2">
@@ -551,6 +571,17 @@ export function SessionMetronome() {
       <TempoSlider compact />
       <MeterSheet open={sheet === "meter"} onClose={() => setSheet(null)} />
       <RhythmSheet open={sheet === "rhythm"} onClose={() => setSheet(null)} />
+      {controls && (
+        <Drawer open={sheet === "settings"} onOpenChange={(o) => !o && setSheet(null)}>
+          <DrawerContent>
+            <DrawerTitle className="pb-3">Настройки метронома</DrawerTitle>
+            <DrawerDescription className="sr-only">Звук клика, громкость и вспышка экрана</DrawerDescription>
+            <div className="overflow-y-auto pb-4">
+              <SettingsPanel />
+            </div>
+          </DrawerContent>
+        </Drawer>
+      )}
     </section>
   );
 }

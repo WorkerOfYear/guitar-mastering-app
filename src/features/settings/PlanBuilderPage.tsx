@@ -9,19 +9,13 @@ import { templateSize } from "@/features/session/plan";
 import { entryKey, unitTitle } from "@/lib/progress";
 import { cn } from "@/lib/utils";
 import { useData } from "@/store/data";
-import { BLOCK_META, type Item, type PlanEntry, type PlanTemplate, type TemplateBlock } from "@/shared/types";
-import type { PracticeSettings } from "@/store/data";
+import { BLOCK_META, type PlanEntry, type TemplateBlock } from "@/shared/types";
 
 const BLOCKS: TemplateBlock[] = ["warmup", "new", "review"];
 
-const blockMinutes = (template: PlanTemplate, block: TemplateBlock, items: Item[], practice: PracticeSettings) =>
-  block === "warmup" && template.warmup.length
-    ? template.warmup.reduce((sum, e) => sum + (items.find((i) => i.id === e.itemId)?.minutes ?? 3), 0)
-    : practice.blocks[block];
-
 /** The user's plans. A new plan opens right away. */
 export function PlanBuilderPage() {
-  const { items, practice, plans = [], addPlan } = useData();
+  const { practice, plans = [], addPlan } = useData();
   const navigate = useNavigate();
   const create = () => navigate(`/settings/plan/${addPlan(`План ${plans.length + 1}`)}`);
   return (
@@ -32,7 +26,7 @@ export function PlanBuilderPage() {
       </p>
       {plans.map((p) => {
         const count = templateSize(p);
-        const total = BLOCKS.reduce((sum, b) => sum + blockMinutes(p, b, items, practice), 0) + practice.blocks.improv;
+        const total = BLOCKS.reduce((sum, b) => sum + practice.blocks[b], 0) + practice.blocks.improv;
         return (
           <Link key={p.id} to={`/settings/plan/${p.id}`} className="block">
             <Card className="flex items-center gap-3 transition-colors active:bg-surface-2">
@@ -69,7 +63,7 @@ export function PlanEditorPage() {
     [list[i], list[i + d]] = [list[i + d], list[i]];
     change(block, list);
   };
-  const minutes = (block: TemplateBlock) => blockMinutes(template, block, items, practice);
+  const minutes = (block: TemplateBlock) => practice.blocks[block];
 
   return (
     <div className="space-y-3">

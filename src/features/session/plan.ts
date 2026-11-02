@@ -25,10 +25,6 @@ function units(item: Item, status: "active" | "rotation"): PlanEntry[] {
   return item.status === status ? [{ itemId: item.id }] : [];
 }
 
-/** Warm-up lasts as long as its exercises (each item's own minutes, 3 by default). */
-const warmupLength = (entries: PlanEntry[], items: Item[], fallback: number) =>
-  entries.length ? entries.reduce((sum, e) => sum + (items.find((i) => i.id === e.itemId)?.minutes ?? 3), 0) : fallback;
-
 export const templateSize = (t?: PlanTemplate) => (t ? t.warmup.length + t.new.length + t.review.length : 0);
 
 /** The hand-made plan, minus entries whose item or section no longer exists. */
@@ -40,7 +36,8 @@ function fromTemplate(input: PlanInput, template: PlanTemplate, rnd: () => numbe
   };
   const warmup = template.warmup.filter(exists);
   return [
-    { kind: "warmup", minutes: warmupLength(warmup, items, practice.blocks.warmup), entries: warmup },
+    // Every block, the warm-up too, lasts as set for it, whatever its exercises' own minutes.
+    { kind: "warmup", minutes: practice.blocks.warmup, entries: warmup },
     { kind: "new", minutes: practice.blocks.new, entries: template.new.filter(exists) },
     { kind: "review", minutes: practice.blocks.review, entries: template.review.filter(exists) },
     { kind: "improv", minutes: practice.blocks.improv, entries: [], improv: randomTask({ recentKeys: input.recentKeys, rnd }) },
@@ -55,7 +52,6 @@ export function buildPlan(input: PlanInput, rnd = Math.random): PlanBlock[] {
 
   const warmupItems = live.filter((i) => i.warmup);
   const warmup = warmupItems.map((i) => ({ itemId: i.id }));
-  const warmupMinutes = warmupLength(warmup, items, practice.blocks.warmup);
 
   // Warm-up material (category "Разминка") is only ever played in the warm-up, even when switched off there.
   const study = live.filter((i) => !i.warmup && i.category !== WARMUP_CATEGORY);
@@ -79,7 +75,7 @@ export function buildPlan(input: PlanInput, rnd = Math.random): PlanBlock[] {
   }
 
   return [
-    { kind: "warmup", minutes: warmupMinutes, entries: warmup },
+    { kind: "warmup", minutes: practice.blocks.warmup, entries: warmup },
     { kind: "new", minutes: practice.blocks.new, entries: fresh },
     { kind: "review", minutes: practice.blocks.review, entries: review },
     { kind: "improv", minutes: practice.blocks.improv, entries: [], improv: randomTask({ recentKeys: input.recentKeys, rnd }) },
