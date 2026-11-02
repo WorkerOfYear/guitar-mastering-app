@@ -196,7 +196,7 @@ export function SessionPage() {
           aria-expanded={false}
           aria-label="Показать раздел, таймер и «Дальше»"
           onClick={() => setHeaderOpen(true)}
-          className="sticky top-0 z-10 -mx-4 flex h-13 w-[calc(100%+2rem)] items-center gap-2.5 border-b border-line bg-surface px-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/60"
+          className="sticky top-2 z-10 flex h-13 w-full items-center gap-2.5 rounded-3xl border border-line bg-surface px-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
         >
           <span className="max-w-[40%] shrink-0 truncate text-sm text-muted">{blockTitle}</span>
           <span className={cn("shrink-0 font-bold tabular-nums", over ? "text-good" : !running && "text-muted")}>{clock}</span>
