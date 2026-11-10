@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { PlayerControl } from "@/components/tab/TabPlayer";
+import { seekTarget } from "@/lib/videoControls";
+import { VideoBar } from "./VideoBar";
 
 // YouTube IFrame Player, controlled from outside like the tab player.
 
@@ -7,6 +9,11 @@ interface YTPlayer {
   playVideo(): void;
   pauseVideo(): void;
   seekTo(seconds: number, allowSeekAhead: boolean): void;
+  getCurrentTime(): number;
+  getDuration(): number;
+  setPlaybackRate(rate: number): void;
+  getPlaybackRate(): number;
+  getAvailablePlaybackRates(): number[];
   getPlayerState(): number;
   destroy(): void;
 }
@@ -38,14 +45,18 @@ interface Props {
   videoId: string;
   start?: number;
   playing: boolean;
+  /** On screen; going off it pauses the video, which keeps its place */
+  active?: boolean;
   onBlocked?: (blocked: boolean) => void;
   control?: RefObject<PlayerControl | null>;
 }
 
-export function YouTubePlayer({ videoId, start = 0, playing, onBlocked, control }: Props) {
+export function YouTubePlayer({ videoId, start = 0, playing, active = true, onBlocked, control }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const player = useRef<YTPlayer | null>(null);
   const [ready, setReady] = useState(false);
+  const [rate, setRate] = useState(1);
+  const [rates, setRates] = useState([1]);
   const blocked = useRef(onBlocked);
   blocked.current = onBlocked;
 
@@ -60,7 +71,16 @@ export function YouTubePlayer({ videoId, start = 0, playing, onBlocked, control 
         width: "100%",
         height: "100%",
         playerVars: { start: Math.floor(start), playsinline: 1, rel: 0, modestbranding: 1 },
-        events: { onReady: () => !cancelled && setReady(true) },
+        events: {
+          onReady: () => {
+            if (cancelled) return;
+            setRates(player.current?.getAvailablePlaybackRates() ?? [1]);
+            setRate(player.current?.getPlaybackRate() ?? 1);
+            setReady(true);
+          },
+          // Also when the speed is changed from YouTube's own menu.
+          onPlaybackRateChange: (e: { data: number }) => setRate(e.data),
+        },
       });
       if (control) control.current = { resume: () => player.current?.playVideo() };
     });
@@ -86,9 +106,21 @@ export function YouTubePlayer({ videoId, start = 0, playing, onBlocked, control 
     return () => clearTimeout(t);
   }, [playing, ready]);
 
+  useEffect(() => {
+    if (ready && !active) player.current?.pauseVideo();
+  }, [active, ready]);
+
+  const seek = (delta: number) => {
+    const p = player.current;
+    if (p) p.seekTo(seekTarget(p.getCurrentTime(), delta, p.getDuration()), true);
+  };
+
   return (
-    <div className="aspect-video w-full overflow-hidden rounded-3xl border border-line bg-black [&_iframe]:h-full [&_iframe]:w-full">
-      <div ref={host} className="h-full w-full" />
+    <div className="w-full overflow-hidden rounded-3xl border border-line bg-black">
+      <div className="aspect-video w-full [&_iframe]:h-full [&_iframe]:w-full">
+        <div ref={host} className="h-full w-full" />
+      </div>
+      <VideoBar rate={rate} rates={rates} onRate={(r) => player.current?.setPlaybackRate(r)} onSeek={seek} disabled={!ready} />
     </div>
   );
 }

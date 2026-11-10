@@ -81,6 +81,47 @@ function markSkipped(score: alphaTab.model.Score, skip: number[]) {
       }
 }
 
+/** A place in the piece that outlives a rebuilt player: bar, its pass (repeats) and how far into it. */
+interface Place {
+  bar: number;
+  pass: number;
+  share: number;
+}
+
+function placeAt(a: alphaTab.AlphaTabApi): Place | null {
+  const bars = a.tickCache?.masterBars ?? [];
+  const tick = a.tickPosition;
+  const i = bars.findIndex((b) => tick >= b.start && tick < b.end);
+  if (i < 0) return null;
+  const { start, end, masterBar } = bars[i];
+  const pass = bars.slice(0, i).filter((b) => b.masterBar.index === masterBar.index).length;
+  return { bar: masterBar.index, pass, share: (tick - start) / (end - start) };
+}
+
+/**
+ * The tick of that place. With and without the recording the same bar can sit at another tick (repeats it plays
+ * once), so ticks don't carry over; a pass the new order doesn't have falls back to the last one there is.
+ */
+function tickOf(a: alphaTab.AlphaTabApi, place: Place) {
+  const passes = (a.tickCache?.masterBars ?? []).filter((b) => b.masterBar.index === place.bar);
+  const b = passes[Math.min(place.pass, passes.length - 1)];
+  return b ? Math.round(b.start + place.share * (b.end - b.start)) : null;
+}
+
+/**
+ * Runs `fn` once the player can be moved. A recording's position maps through its length, unknown until the audio
+ * element reads the file: a seek before that lands at 0. Returns a cancel.
+ */
+function whenSeekable(a: alphaTab.AlphaTabApi, fn: () => void) {
+  const el = (a.player?.output as { audioElement?: HTMLAudioElement } | undefined)?.audioElement;
+  if (!el || el.readyState >= HTMLMediaElement.HAVE_METADATA) {
+    fn();
+    return;
+  }
+  el.addEventListener("loadedmetadata", fn, { once: true });
+  return () => el.removeEventListener("loadedmetadata", fn);
+}
+
 // alphaTab's ticks per quarter note (MidiUtils.QuarterTime, not exported).
 const QUARTER_TICKS = 960;
 
@@ -156,12 +197,23 @@ export default function TabPlayer({
   const skipRef = useRef(skip);
   skipRef.current = skip;
   const shownSkip = useRef("");
+  // Swapping the recording and the synthesizer rebuilds the player on the same source: it goes on from the same place.
+  const source = useRef<string | ArrayBuffer | undefined>(undefined);
+  const place = useRef<Place | null>(null);
+  const shownLoop = useRef("");
+  const [drawn, setDrawn] = useState(false);
+  const placeScroll = useRef(0);
   const cb = useRef({ onScore, onBlocked, onProgress, onBarClick });
   cb.current = { onScore, onBlocked, onProgress, onBarClick };
 
   // Create the player for this source.
   useEffect(() => {
     if (!host.current || !scroller.current || (!tex && !file)) return;
+    if (source.current !== (tex ?? file)) {
+      source.current = tex ?? file;
+      place.current = null;
+      shownLoop.current = "";
+    }
     const settings = new alphaTab.Settings();
     settings.core.fontDirectory = "/font/";
     settings.display.staveProfile = alphaTab.StaveProfile.Default;
@@ -215,14 +267,17 @@ export default function TabPlayer({
         barMs: barLengths(s),
       });
     });
+    // Having drawn the notes, alphaTab scrolls to its cursor, still at the start: not while a place is to be restored.
+    if (place.current) a.settings.player.scrollMode = alphaTab.ScrollMode.Off;
+    a.playerStateChanged.on((e) => {
+      if (e.state === alphaTab.synth.PlayerState.Playing) a.settings.player.scrollMode = alphaTab.ScrollMode.Continuous;
+    });
     a.playerReady.on(() => setReady(true));
+    a.postRenderFinished.on(() => setDrawn(true));
     a.beatMouseDown.on((beat) => cb.current.onBarClick?.(beat.voice.bar.masterBar.index + 1));
     a.error.on((e) => setError(e.message));
     a.playerPositionChanged.on(() => {
-      const t = a.tickPosition;
-      const bars = score.current?.masterBars ?? [];
-      let bar = 0;
-      while (bar + 1 < bars.length && bars[bar + 1].start <= t) bar++;
+      const bar = placeAt(a)?.bar ?? 0;
       // Current bar and pass, readable from outside (tests, debugging): data-bar="3" data-time="5123"
       if (host.current) {
         host.current.dataset.bar = String(bar + 1);
@@ -276,9 +331,15 @@ export default function TabPlayer({
       }
     }
     return () => {
+      // A place not restored yet is still the right one: this player never got there.
+      if (!place.current) {
+        place.current = placeAt(a);
+        placeScroll.current = scroller.current?.scrollTop ?? 0;
+      }
       a.destroy();
       api.current = null;
       setReady(false);
+      setDrawn(false);
       setLoading(true);
     };
   }, [tex, file, audio, (unrepeat ?? []).join(",")]);
@@ -308,6 +369,7 @@ export default function TabPlayer({
     const a = api.current;
     if (!a || !score.current || shownView.current === view) return;
     shownView.current = view;
+    a.settings.player.scrollMode = alphaTab.ScrollMode.Continuous;
     applyView(score.current, view);
     a.renderScore(score.current, [Math.min(trackRef.current, score.current.tracks.length - 1)]);
   }, [view]);
@@ -318,7 +380,7 @@ export default function TabPlayer({
     if (a && score.current && file && score.current.tracks[track]) a.renderTracks([score.current.tracks[track]]);
   }, [track, file]);
 
-  // Tempo, loop range, count-in and metronome.
+  // Tempo, count-in and metronome.
   useEffect(() => {
     const a = api.current;
     if (!a || !score.current) return;
@@ -328,16 +390,45 @@ export default function TabPlayer({
     // fillMidiEventQueueToEndTime for a main-track time that never advances → the page freezes.
     a.countInVolume = countIn && !audio ? 1 : 0;
     a.metronomeVolume = metronome ? 1 : 0;
+  }, [bpm, speed, countIn, metronome, ready, loading, audio]);
+
+  // Loop range. Apart from the tempo: setting it sends the cursor back to its start.
+  useEffect(() => {
+    const a = api.current;
+    if (!a || !score.current) return;
+    const s = score.current;
     if (loopBars && s.masterBars.length) {
       const first = s.masterBars[Math.max(0, loopBars[0] - 1)];
       const last = s.masterBars[Math.min(s.masterBars.length - 1, loopBars[1] - 1)];
+      // Ticks of the first pass as played: a repeat earlier in the piece puts them later than the bars' own `start`.
+      const played = (bar: alphaTab.model.MasterBar) => a.tickCache?.masterBars.find((b) => b.masterBar.index === bar.index);
+      const start = played(first)?.start ?? first.start;
       const range = new alphaTab.synth.PlaybackRange();
-      range.startTick = first.start;
-      range.endTick = last.start + last.calculateDuration();
+      range.startTick = start;
+      range.endTick = played(last)?.end ?? last.start + last.calculateDuration();
       a.playbackRange = range;
-      a.tickPosition = first.start;
+      // To the section's start only when the section is new, not when the player is rebuilt.
+      const loop = loopBars.join("-");
+      if (ready && shownLoop.current !== loop) {
+        shownLoop.current = loop;
+        whenSeekable(a, () => (a.tickPosition = start));
+      }
     } else a.playbackRange = null;
-  }, [bpm, speed, loopBars?.[0], loopBars?.[1], countIn, metronome, ready, loading, audio]);
+  }, [loopBars?.[0], loopBars?.[1], ready, loading, audio]);
+
+  // The rebuilt player goes on from where the previous one stopped.
+  useEffect(() => {
+    const a = api.current;
+    if (!a || !ready || !drawn || !place.current) return;
+    return whenSeekable(a, () => {
+      const tick = place.current && tickOf(a, place.current);
+      place.current = null;
+      if (tick === null) return;
+      a.tickPosition = tick;
+      // The same notes at the same width: the same scroll.
+      if (scroller.current) scroller.current.scrollTop = placeScroll.current;
+    });
+  }, [ready, drawn]);
 
   // Play / pause from outside. If the browser blocks audio without a tap, tell the parent.
   useEffect(() => {

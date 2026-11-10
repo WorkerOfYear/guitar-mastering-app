@@ -318,13 +318,37 @@ export function Practice({ kind, entry, item, control, onBlocked }: PracticeProp
   const materials = item ? materialsOf(item) : [];
   const [picked, setPicked] = useState<Material | undefined>(undefined);
   const material = picked && materials.includes(picked) ? picked : materials[0];
+  // Opened once, a material stays mounted: back on its tab, the video and the notes are where they were.
+  const [opened] = useState(() => new Set<Material>());
+  if (material) opened.add(material);
   if (kind === "improv") return null;
   return (
     <>
       {materials.length > 1 && (
-        <Segmented className="mb-3" value={material!} onChange={setPicked} options={materials.map((value) => ({ value, label: MATERIAL_LABEL[value] }))} />
+        <Segmented
+          className="mb-3"
+          value={material!}
+          onChange={(m) => {
+            onBlocked(false);
+            setPicked(m);
+          }}
+          options={materials.map((value) => ({ value, label: MATERIAL_LABEL[value] }))}
+        />
       )}
-      <Stage entry={entry} item={item} material={material} control={control} onBlocked={onBlocked} />
+      {material ? (
+        <div className="relative">
+          {materials
+            .filter((m) => opened.has(m))
+            .map((m) => (
+              // Laid out at full width, unlike display: none: the tab keeps its scroll and alphaTab doesn't redraw.
+              <div key={m} className={m === material ? undefined : "pointer-events-none invisible absolute inset-x-0 top-0 h-0 overflow-hidden"}>
+                <Stage entry={entry} item={item} material={m} active={m === material} control={control} onBlocked={onBlocked} />
+              </div>
+            ))}
+        </div>
+      ) : (
+        <Stage entry={entry} item={item} active control={control} onBlocked={onBlocked} />
+      )}
       {item && hasBlock(item, "recorder") && (
         <RecordButton itemId={item.id} bpm={withMetronome(item) ? useMetronome.getState().bpm : null} className="mt-3 w-full" />
       )}
@@ -336,23 +360,30 @@ interface StageProps {
   entry?: PlanEntry;
   item?: Item;
   material?: Material;
+  /** On screen; a hidden material stays silent */
+  active: boolean;
   control: RefObject<PlayerControl | null>;
   onBlocked: (b: boolean) => void;
 }
 
 /** What plays for the current exercise: the chosen material (video, notes, neck), or the card. Nothing starts on its own. */
-function Stage({ entry, item, material, control, onBlocked }: StageProps) {
+function Stage({ entry, item, material, active, control, onBlocked }: StageProps) {
+  // Every material has its own player; the "turn the sound on" tap goes to the one on screen.
+  const own = useRef<PlayerControl | null>(null);
+  useEffect(() => {
+    if (active) control.current = { resume: () => own.current?.resume() };
+  }, [active, control]);
   if (!entry || !item) return null;
   if (material === "video" && item.video)
     return (
       <div className="space-y-3">
-        <VideoPlayer key={item.id} itemId={item.id} video={item.video} playing={false} onBlocked={onBlocked} control={control} />
+        <VideoPlayer key={item.id} itemId={item.id} video={item.video} playing={false} active={active} onBlocked={onBlocked} control={own} />
         <Description item={item} />
       </div>
     );
   if (material === "score") {
-    if (item.tabFile || item.tab) return <NotesStage item={item} entry={entry} control={control} onBlocked={onBlocked} />;
-    if (item.audioFile) return <AudioStage key={item.id} item={item} entry={entry} />;
+    if (item.tabFile || item.tab) return <NotesStage item={item} entry={entry} active={active} control={own} onBlocked={onBlocked} />;
+    if (item.audioFile) return <AudioStage key={item.id} item={item} entry={entry} active={active} />;
   }
   return (
     <div className="space-y-3">
@@ -370,7 +401,7 @@ function Description({ item }: { item: Item }) {
 }
 
 /** A recording without a tab: loops it at the chosen speed (pitch is kept), started from its own controls. */
-function AudioStage({ item, entry }: { item: Item; entry: PlanEntry }) {
+function AudioStage({ item, entry, active }: { item: Item; entry: PlanEntry; active: boolean }) {
   const el = useRef<HTMLAudioElement>(null);
   const [url, setUrl] = useState<string | null | undefined>(undefined);
   const [speed, setSpeed] = useState(1);
@@ -388,6 +419,9 @@ function AudioStage({ item, entry }: { item: Item; entry: PlanEntry }) {
   useEffect(() => {
     if (el.current) el.current.playbackRate = speed;
   }, [speed, url]);
+  useEffect(() => {
+    if (!active) el.current?.pause();
+  }, [active]);
   if (url === null) return <EntryCard entry={entry} />;
   return (
     <div className="space-y-3">
@@ -422,7 +456,19 @@ function TempoBar({ label, onMinus, onPlus }: { label: string; onMinus: () => vo
  * The notes with their buttons on top, as in the item's card: track, view (tab / notes / both), the recording or
  * the synthesizer, play. A Guitar Pro file loops the section's bars; a text tab follows the metronome's tempo.
  */
-function NotesStage({ item, entry, control, onBlocked }: { item: Item; entry: PlanEntry; control: StageProps["control"]; onBlocked: (b: boolean) => void }) {
+function NotesStage({
+  item,
+  entry,
+  active,
+  control,
+  onBlocked,
+}: {
+  item: Item;
+  entry: PlanEntry;
+  active: boolean;
+  control: StageProps["control"];
+  onBlocked: (b: boolean) => void;
+}) {
   const [file, setFile] = useState<ArrayBuffer | null | undefined>(item.tabFile ? undefined : null);
   const [recording, setRecording] = useState<ArrayBuffer | null>(null);
   const [recordingLoaded, setRecordingLoaded] = useState(!item.audioFile);
@@ -443,6 +489,9 @@ function NotesStage({ item, entry, control, onBlocked }: { item: Item; entry: Pl
         setRecordingLoaded(true);
       });
   }, [item.id, item.tabFile, item.audioFile]);
+  useEffect(() => {
+    if (!active) setPlaying(false);
+  }, [active]);
   // The metronome follows the file at the chosen speed, so turning it on clicks along.
   const tempo = file ? (score?.tempo ?? 0) : 0;
   useEffect(() => {

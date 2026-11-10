@@ -3,6 +3,8 @@ import { ExternalLink, LoaderCircle } from "lucide-react";
 import type { PlayerControl } from "@/components/tab/TabPlayer";
 import type { VideoLink } from "@/shared/types";
 import { loadInstagramVideo } from "@/lib/tabFiles";
+import { VIDEO_RATES, seekTarget } from "@/lib/videoControls";
+import { VideoBar } from "./VideoBar";
 import { YouTubePlayer } from "./YouTubePlayer";
 
 // The item's video, controlled from outside like the tab player: YouTube through its IFrame player,
@@ -13,20 +15,23 @@ interface Props {
   itemId: string;
   video: VideoLink;
   playing: boolean;
+  /** On screen; going off it pauses the video, which keeps its place */
+  active?: boolean;
   onBlocked?: (blocked: boolean) => void;
   control?: RefObject<PlayerControl | null>;
 }
 
-export function VideoPlayer({ itemId, video, playing, onBlocked, control }: Props) {
+export function VideoPlayer({ itemId, video, playing, active, onBlocked, control }: Props) {
   if (video.instagramId !== undefined)
-    return <InstagramPlayer key={video.instagramId} itemId={itemId} code={video.instagramId} playing={playing} onBlocked={onBlocked} control={control} />;
-  return <YouTubePlayer videoId={video.youtubeId} start={video.start} playing={playing} onBlocked={onBlocked} control={control} />;
+    return <InstagramPlayer key={video.instagramId} itemId={itemId} code={video.instagramId} playing={playing} active={active} onBlocked={onBlocked} control={control} />;
+  return <YouTubePlayer videoId={video.youtubeId} start={video.start} playing={playing} active={active} onBlocked={onBlocked} control={control} />;
 }
 
-function InstagramPlayer({ itemId, code, playing, onBlocked, control }: Omit<Props, "video"> & { code: string }) {
+function InstagramPlayer({ itemId, code, playing, active = true, onBlocked, control }: Omit<Props, "video"> & { code: string }) {
   const el = useRef<HTMLVideoElement>(null);
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [rate, setRate] = useState(1);
   const blocked = useRef(onBlocked);
   blocked.current = onBlocked;
 
@@ -64,6 +69,15 @@ function InstagramPlayer({ itemId, code, playing, onBlocked, control }: Omit<Pro
     );
   }, [playing, url]);
 
+  useEffect(() => {
+    if (!active) el.current?.pause();
+  }, [active]);
+
+  const seek = (delta: number) => {
+    const v = el.current;
+    if (v) v.currentTime = seekTarget(v.currentTime, delta, v.duration || 0);
+  };
+
   if (error)
     return (
       <div className="space-y-2 rounded-3xl border border-line p-4 text-center text-sm">
@@ -82,7 +96,26 @@ function InstagramPlayer({ itemId, code, playing, onBlocked, control }: Omit<Pro
     );
   return (
     <div className="flex justify-center">
-      <video ref={el} src={url} playsInline controls loop preload="auto" className="max-h-[70vh] max-w-full rounded-3xl border border-line bg-black" />
+      <div className="max-w-full overflow-hidden rounded-3xl border border-line bg-black">
+        <video
+          ref={el}
+          src={url}
+          playsInline
+          controls
+          loop
+          preload="auto"
+          onRateChange={(e) => setRate(e.currentTarget.playbackRate)}
+          className="mx-auto block max-h-[60vh] max-w-full"
+        />
+        <VideoBar
+          rate={rate}
+          rates={VIDEO_RATES}
+          onRate={(r) => {
+            if (el.current) el.current.playbackRate = r;
+          }}
+          onSeek={seek}
+        />
+      </div>
     </div>
   );
 }
