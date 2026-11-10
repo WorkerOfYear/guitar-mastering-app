@@ -40,7 +40,7 @@ import { AudioSync, detectSync } from "./AudioSync";
 import { SectionStrip } from "./SectionStrip";
 import { fetchVideoAudio } from "@/lib/youtubeAudio";
 import { useAuth } from "@/store/auth";
-import { fetchScore, museScoreLink, type ScoreFormat } from "@/lib/scoreDownload";
+import { fetchScore, firstScoreTry, museScoreLink, saveFile, type ScoreFormat } from "@/lib/scoreDownload";
 import { useSettings } from "@/store/settings";
 import { useData } from "@/store/data";
 import { cn } from "@/lib/utils";
@@ -109,6 +109,17 @@ export const TAB_ACCEPT = ".gp,.gp3,.gp4,.gp5,.gpx,.gp7,.xml,.musicxml,.mxl,.cap
 export const TAB_MAX = 5_000_000;
 export const AUDIO_ACCEPT = "audio/*,.mp3,.m4a,.wav,.ogg,.flac";
 export const AUDIO_MAX = 40_000_000;
+
+const MENU_ITEM =
+  "flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2 outline-none data-[disabled]:cursor-default data-[disabled]:opacity-50 data-[highlighted]:bg-surface-2";
+
+const FORMAT_NAME: Record<ScoreFormat, string> = { pdf: "PDF", midi: "MIDI", mp3: "MP3", musicxml: "MusicXML" };
+const SCORE_FILES: { format: ScoreFormat; sub: string }[] = [
+  { format: "pdf", sub: "ноты для печати" },
+  { format: "musicxml", sub: "для MuseScore и Guitar Pro" },
+  { format: "midi", sub: "для секвенсора" },
+  { format: "mp3", sub: "как ноты звучат в MuseScore" },
+];
 
 const ICON = "flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent/12 text-accent [&_svg]:size-[18px]";
 
@@ -303,29 +314,34 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
   }, []);
 
   // Sheet music from the MuseScore link attached to the item, taken by the user's server (server/score-download).
+  // MusicXML goes into the tabs ("tabs"), mp3 can be bound as the recording ("audio"); any format can be saved as a file.
   const scoreReady = useAuth((s) => s.server.score);
   const scoreLink = museScoreLink(item.links);
-  const [scoreBusy, setScoreBusy] = useState<ScoreFormat | null>(null);
-  const grabScore = async (format: ScoreFormat) => {
+  const [scoreBusy, setScoreBusy] = useState<ScoreFormat | "tabs" | "audio" | null>(null);
+  const [scoreError, setScoreError] = useState<string | null>(null);
+  const grabScore = async (format: ScoreFormat, bind = false) => {
     if (!scoreLink) return;
     if (!scoreReady) return toast.error("Сервер нот MuseScore не подключён к API — см. server/api/README.md");
-    setScoreBusy(format);
+    setScoreBusy(bind ? (format === "mp3" ? "audio" : "tabs") : format);
+    if (bind && format === "musicxml") setScoreError(null);
     try {
       const { data, name } = await fetchScore(scoreLink, format);
+      if (!bind) return saveFile(data, name);
       if (format === "mp3") return await setRecording(data, { name, size: data.byteLength });
-      if (format === "musicxml") return await setTab(data, name);
-      const url = URL.createObjectURL(new Blob([data]));
-      const a = Object.assign(document.createElement("a"), { href: url, download: name });
-      document.body.append(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      await setTab(data, name, true);
     } catch (e) {
-      toast.error("Не удалось скачать с MuseScore", { description: (e as Error).message });
+      const message = (e as Error).message;
+      if (bind && format === "musicxml") setScoreError(message);
+      toast.error("Не удалось скачать с MuseScore", { description: message });
     } finally {
       setScoreBusy(null);
     }
   };
+  // Notes picked on MuseScore come in as tabs by themselves: the first time the item is opened with the link.
+  const noTabs = !item.tabFile && !item.tab;
+  useEffect(() => {
+    if (scoreLink && noTabs && scoreReady && firstScoreTry(item.id, scoreLink)) void grabScore("musicxml", true);
+  }, [scoreLink, noTabs, scoreReady]);
 
   const removeAudio = async () => {
     await deleteAudioFile(item.id);
@@ -334,13 +350,13 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
     updateItem(item.id, { audioFile: undefined, audioSync: undefined, audioUnrepeat: undefined, audioWarnings: undefined });
   };
 
-  const setTab = async (data: ArrayBuffer, name: string) => {
+  const setTab = async (data: ArrayBuffer, name: string, fromMuseScore = false) => {
     await saveTabFile(item.id, data);
     setFile(data);
     setMissing((m) => ({ ...m, tab: false }));
     setScore(null);
     // Another tab: what the check said about the old one no longer holds.
-    updateItem(item.id, { tabFile: { name, size: data.byteLength }, audioWarnings: undefined });
+    updateItem(item.id, { tabFile: { name, size: data.byteLength, ...(fromMuseScore ? { fromMuseScore } : {}) }, audioWarnings: undefined });
   };
 
   const upload = async (f: File) => {
@@ -399,6 +415,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
   const sectionCount = item.sections?.length ?? 0;
   const empty = !item.tabFile && !item.tab && !item.audioFile && (scoreOnly || (!item.video && !item.theory));
   const [showSync, setShowSync] = useState(false);
+  const [audioOpen, setAudioOpen] = useState(false);
   const audioInput = useRef<HTMLInputElement>(null);
   const tabView = useSettings((s) => s.tabView);
   const setTabView = useSettings((s) => s.setTabView);
@@ -486,24 +503,6 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
       )}
     </>
   );
-
-  // Sheet music from MuseScore, when the item links to it.
-  const museRow = scoreLink && (
-        <MaterialRow
-          icon={<FileMusic />}
-          title="Ноты с MuseScore"
-          sub="XML — в табы, mp3 — как запись, PDF и MIDI — файлом"
-          actions={
-            <>
-              {(["musicxml", "pdf", "midi", "mp3"] as const).map((f) => (
-                <Button key={f} variant="ghost" size="sm" disabled={!!scoreBusy} onClick={() => void grabScore(f)} className="px-2 text-xs uppercase">
-                  {scoreBusy === f ? <LoaderCircle className="size-4 animate-spin" /> : f === "musicxml" ? "xml" : f}
-                </Button>
-              ))}
-            </>
-          }
-        />
-      );
 
   const materials = (
     <div className="space-y-2">
@@ -608,7 +607,6 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
       )}
 
       {recording}
-      {museRow}
     </div>
   );
 
@@ -657,14 +655,88 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
         />
       </Suspense>
     );
-    // Like "Заменить видео" under the video: one wide button under the tabs.
-    const fileRow = item.tabFile ? (
-      <label className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "w-full cursor-pointer")}>
-        <RefreshCw className="size-4" /> {missing.tab ? "Загрузить табы на этом устройстве" : "Заменить табы"}
-        <input type="file" accept={TAB_ACCEPT} hidden onChange={(e) => e.target.files?.[0] && void upload(e.target.files[0])} />
-      </label>
-    ) : (
-      !item.tab && <AddRow icon={<FileMusic />} title="Загрузить табы или ноты" sub="Guitar Pro, MusicXML" accept={TAB_ACCEPT} onFile={(f) => void upload(f)} />
+    // "Скачать ▾": the tab file itself and, with a MuseScore link, the score in its other formats.
+    const scoreItems = scoreLink
+      ? SCORE_FILES.filter((s) => !(s.format === "musicxml" && item.tabFile?.fromMuseScore))
+      : [];
+    const downloadMenu = ((file && item.tabFile) || scoreItems.length > 0) && (
+      <DropdownMenu.Root modal={false}>
+        <DropdownMenu.Trigger asChild>
+          <Button variant="ghost" size="sm" disabled={!!scoreBusy && scoreBusy !== "tabs" && scoreBusy !== "audio"} className="group shrink-0 active:scale-100">
+            {scoreBusy && scoreBusy in FORMAT_NAME ? <LoaderCircle className="size-4 animate-spin" /> : <Download className="size-4" />}
+            {scoreBusy && scoreBusy in FORMAT_NAME ? `Скачиваю ${FORMAT_NAME[scoreBusy as ScoreFormat]}…` : "Скачать"}
+            <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" />
+          </Button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content align="end" sideOffset={6} className="z-50 w-72 rounded-2xl border border-line bg-surface p-1.5 text-fg shadow-xl">
+            {file && item.tabFile && (
+              <DropdownMenu.Item onSelect={() => saveFile(file, item.tabFile!.name)} className={MENU_ITEM}>
+                <FileMusic className="size-5 shrink-0 text-accent" />
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold">Файл табов</span>
+                  <span className="block truncate text-xs text-muted">{item.tabFile.name}</span>
+                </span>
+              </DropdownMenu.Item>
+            )}
+            {scoreItems.length > 0 && (
+              <DropdownMenu.Label className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wider text-muted">С MuseScore</DropdownMenu.Label>
+            )}
+            {scoreItems.map((s) => (
+              <DropdownMenu.Item key={s.format} disabled={!scoreReady || !!scoreBusy} onSelect={() => void grabScore(s.format)} className={MENU_ITEM}>
+                <Download className="size-5 shrink-0 text-accent" />
+                <span>
+                  <span className="block text-sm font-semibold">{FORMAT_NAME[s.format]}</span>
+                  <span className="block text-xs text-muted">{scoreReady ? s.sub : "сервер нот не подключён"}</span>
+                </span>
+              </DropdownMenu.Item>
+            ))}
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+    );
+    // Notes linked on MuseScore but not in the tabs yet: they're being taken, or taking them failed (a paid score).
+    const takingScore = scoreBusy === "tabs";
+    const museRow = scoreLink && noTabs && (
+      <AddRow
+        icon={<FileMusic />}
+        title={takingScore ? "Скачиваю ноты с MuseScore…" : "Ноты с MuseScore"}
+        sub={
+          takingScore
+            ? "MusicXML — табы появятся здесь секунд через 30"
+            : !scoreReady
+              ? "сервер нот не подключён"
+              : scoreError
+                ? `${scoreError}. Нажми, чтобы попробовать ещё раз`
+                : "скачать MusicXML и показать табами"
+        }
+        busy={takingScore}
+        onClick={() => void grabScore("musicxml", true)}
+      />
+    );
+    // Like "Заменить видео" under the video: one wide button under the tabs, "Скачать ▾" beside it.
+    const fileRow = (
+      <>
+        {museRow}
+        {item.tabFile ? (
+          <div className="flex gap-2">
+            <label className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "min-w-0 flex-1 cursor-pointer")}>
+              <RefreshCw className="size-4" /> {missing.tab ? "Загрузить табы на этом устройстве" : "Заменить табы"}
+              <input type="file" accept={TAB_ACCEPT} hidden onChange={(e) => e.target.files?.[0] && void upload(e.target.files[0])} />
+            </label>
+            {downloadMenu}
+          </div>
+        ) : (
+          !item.tab && (
+            <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <AddRow icon={<FileMusic />} title="Загрузить табы или ноты" sub="Guitar Pro, MusicXML" accept={TAB_ACCEPT} onFile={(f) => void upload(f)} />
+              </div>
+              {downloadMenu}
+            </div>
+          )
+        )}
+      </>
     );
     const trackSelect = score && score.tracks.length > 1 && (
       <Select value={String(track)} onValueChange={(v) => setTrack(Number(v))}>
@@ -681,40 +753,64 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
       </Select>
     );
     const bound = !!item.audioFile;
+    // A bound recording folds into a green "Аудио привязано ▾": open, it shows the player and what can be done with it.
     const audioRow = bound && (
       <div className="space-y-2">
-        <MaterialRow
-          icon={<Headphones />}
-          title={item.audioFile!.fromVideo ? "Звук из видео" : item.audioFile!.name}
-          sub={missing.audio ? "загрузи на этом устройстве" : hasTab ? (useRecording ? (synced ? "табы идут за записью" : "без синхронизации") : "сейчас играет синтезатор") : "запись"}
-          actions={
-            <>
-              {file && audioData && (
-                <IconAction
-                  label={useRecording ? "Играть синтезатором" : "Играть с записью"}
-                  onClick={() => {
-                    setPlaying(false);
-                    setUseRecording(!useRecording);
-                  }}
-                >
-                  {useRecording ? <Piano className="size-4" /> : <Headphones className="size-4" />}
-                </IconAction>
-              )}
-              {file && audioData && (
-                <IconAction label="Поправить синхронизацию" onClick={() => setShowSync(!showSync)}>
-                  <Link2 className="size-4" />
-                </IconAction>
-              )}
-              <IconAction label="Отвязать аудио" onClick={() => void removeAudio()}>
-                <Trash2 className="size-4" />
-              </IconAction>
-            </>
-          }
-        />
-        <MatchWarnings warnings={item.audioWarnings} />
-        {showSync && file && audioData && (
-          <div className="rounded-2xl bg-surface-2/40 p-3">
-            <AudioSync item={item} audio={audioData} tab={file} sections={score?.sections ?? []} bars={score?.bars ?? 1} />
+        <div className="flex">
+          <Button
+            variant="secondary"
+            size="sm"
+            aria-expanded={audioOpen}
+            onClick={() => setAudioOpen(!audioOpen)}
+            className="h-10 bg-good text-white hover:bg-good hover:brightness-110"
+          >
+            <Check className="size-4" /> Аудио привязано
+            {(!!item.audioWarnings?.length || missing.audio) && <TriangleAlert className="size-4" />}
+            <ChevronDown className={cn("size-4 transition-transform", audioOpen && "rotate-180")} />
+          </Button>
+        </div>
+        {audioOpen && (
+          <div className="space-y-2">
+            <MaterialRow
+              icon={<Headphones />}
+              title={item.audioFile!.fromVideo ? "Звук из видео" : item.audioFile!.name}
+              sub={missing.audio ? "загрузи на этом устройстве" : hasTab ? (useRecording ? (synced ? "табы идут за записью" : "без синхронизации") : "сейчас играет синтезатор") : "запись"}
+              actions={
+                <>
+                  {file && audioData && (
+                    <IconAction
+                      label={useRecording ? "Играть синтезатором" : "Играть с записью"}
+                      onClick={() => {
+                        setPlaying(false);
+                        setUseRecording(!useRecording);
+                      }}
+                    >
+                      {useRecording ? <Piano className="size-4" /> : <Headphones className="size-4" />}
+                    </IconAction>
+                  )}
+                  {file && audioData && (
+                    <IconAction label="Поправить синхронизацию" onClick={() => setShowSync(!showSync)}>
+                      <Link2 className="size-4" />
+                    </IconAction>
+                  )}
+                  {audioData && (
+                    <IconAction label="Скачать запись" onClick={() => downloadAudio(audioData, item.audioFile!.name)}>
+                      <Download className="size-4" />
+                    </IconAction>
+                  )}
+                  <IconAction label="Отвязать аудио" onClick={() => void removeAudio()}>
+                    <Trash2 className="size-4" />
+                  </IconAction>
+                </>
+              }
+            />
+            {audioData && <AudioPreview data={audioData} />}
+            <MatchWarnings warnings={item.audioWarnings} />
+            {showSync && file && audioData && (
+              <div className="rounded-2xl bg-surface-2/40 p-3">
+                <AudioSync item={item} audio={audioData} tab={file} sections={score?.sections ?? []} bars={score?.bars ?? 1} />
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -726,13 +822,14 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
       <input ref={audioInput} type="file" accept={AUDIO_ACCEPT} hidden onChange={(e) => e.target.files?.[0] && void uploadAudio(e.target.files[0])} />
     );
     const videoTitle = grabbing ? `Беру звук из видео…${grabAttempt > 1 ? ` (${grabAttempt})` : ""}` : "Из видео";
-    // "Привязать аудио ▾" opens the two ways: the video's sound or a file of one's own.
+    // "Привязать аудио ▾" opens the ways: the video's sound, a file of one's own or the MuseScore score's mp3.
     const bindMenu = !bound && (
       <div className="flex">
         <DropdownMenu.Root modal={false}>
           <DropdownMenu.Trigger asChild>
             <Button variant="dashed" size="sm" className="group h-10 active:scale-100">
-              {grabbing ? <LoaderCircle className="size-4 animate-spin" /> : <Link2 className="size-4" />} {grabbing ? videoTitle : "Привязать аудио"}
+              {grabbing || scoreBusy === "audio" ? <LoaderCircle className="size-4 animate-spin" /> : <Link2 className="size-4" />}{" "}
+              {grabbing ? videoTitle : scoreBusy === "audio" ? "Беру звук с MuseScore…" : "Привязать аудио"}
               <ChevronDown className="size-4 text-muted transition-transform group-data-[state=open]:rotate-180" />
             </Button>
           </DropdownMenu.Trigger>
@@ -741,7 +838,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
               <DropdownMenu.Item
                 disabled={!videoOk}
                 onSelect={() => void grabAudio()}
-                className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2 outline-none data-[disabled]:cursor-default data-[disabled]:opacity-50 data-[highlighted]:bg-surface-2"
+                className={MENU_ITEM}
               >
                 <Video className="size-5 shrink-0 text-accent" />
                 <span>
@@ -751,7 +848,7 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
               </DropdownMenu.Item>
               <DropdownMenu.Item
                 onSelect={() => audioInput.current?.click()}
-                className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2 outline-none data-[highlighted]:bg-surface-2"
+                className={MENU_ITEM}
               >
                 <Headphones className="size-5 shrink-0 text-accent" />
                 <span>
@@ -759,6 +856,15 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
                   <span className="block text-xs text-muted">mp3, m4a, wav с устройства</span>
                 </span>
               </DropdownMenu.Item>
+              {scoreLink && (
+                <DropdownMenu.Item disabled={!scoreReady || !!scoreBusy} onSelect={() => void grabScore("mp3", true)} className={MENU_ITEM}>
+                  <FileMusic className="size-5 shrink-0 text-accent" />
+                  <span>
+                    <span className="block text-sm font-semibold">Звук с MuseScore</span>
+                    <span className="block text-xs text-muted">{scoreReady ? "mp3 нот, сыгранный MuseScore" : "сервер нот не подключён"}</span>
+                  </span>
+                </DropdownMenu.Item>
+              )}
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
@@ -784,7 +890,6 @@ export function MediaCard({ item, part = "all" }: { item: Item; part?: "all" | "
         {fileRow}
         {audioFileInput}
         {audioRow || bindMenu}
-        {museRow}
       </div>
     );
   }

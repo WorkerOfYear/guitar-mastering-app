@@ -66,7 +66,7 @@ export interface Item {
   /** Play-along video (YouTube or Instagram) */
   video?: VideoLink;
   /** A Guitar Pro file is stored on this device for this item (IndexedDB) */
-  tabFile?: { name: string; size: number };
+  tabFile?: { name: string; size: number; /** Taken from the item's MuseScore link */ fromMuseScore?: boolean };
   /** The recording the tab was written from (IndexedDB), played in sync with the notes */
   audioFile?: { name: string; size: number; /** Taken from the item's video */ fromVideo?: boolean };
   /** Where bars start in the recording: bar (1-based) → milliseconds. Sorted by bar. */
