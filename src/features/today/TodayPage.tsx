@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { m } from "motion/react";
-import { ChevronDown, ChevronRight, Dices, Library, ListChecks, Music, Pencil, Play, PlayCircle, Plus, Shuffle, Sparkles, Video } from "lucide-react";
-import { Badge, Button, Card, Chip, ScrollRow } from "@/components/ui";
+import { ChevronDown, ChevronRight, Dices, Library, ListChecks, Music, Pencil, Play, PlayCircle, Plus, Shuffle, Video } from "lucide-react";
+import { Badge, Button, Card } from "@/components/ui";
 import { BLOCK_ICON, IconTile } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/Placeholder";
 import { audio } from "@/audio/player";
@@ -12,7 +12,6 @@ import { unitTitle } from "@/lib/progress";
 import { cn } from "@/lib/utils";
 import { useData } from "@/store/data";
 import { useFree } from "@/store/free";
-import { currentPlan } from "@/store/plans";
 import { useSession } from "@/store/session";
 import { BLOCK_META, type Item, type PlanBlock, type SavedPlan } from "@/shared/types";
 
@@ -33,18 +32,15 @@ function MediaBadge({ item }: { item?: Item }) {
   return null;
 }
 
-type Tab = "auto" | "mine";
-
 export function TodayPage() {
   const data = useData();
   const { active, start } = useSession();
   const freeActive = useFree((s) => !!s.active);
   const navigate = useNavigate();
   const plans = data.plans ?? [];
-  const [tab, setTab] = useState<Tab>(currentPlan(data) ? "mine" : "auto");
 
-  /** Starts a session; `planId` is remembered so the page opens on the same tab next time. */
-  const begin = (plan: PlanBlock[], planId: string | null) => {
+  /** Starts a session from one of the user's plans; `planId` is remembered as the last one played. */
+  const begin = (plan: PlanBlock[], planId: string) => {
     audio(); // unlock sound inside the tap
     const task = plan.find((b) => b.improv)?.improv;
     if (task) data.pushRecentKey(task.key);
@@ -82,39 +78,18 @@ export function TodayPage() {
               </Button>
             </Card>
           )}
-          <div className="mb-2.5">
-            <ScrollRow>
-              <Chip active={tab === "auto"} onClick={() => setTab("auto")}>
-                <Sparkles /> Автоплан
-              </Chip>
-              <Chip active={tab === "mine"} onClick={() => setTab("mine")}>
-                <ListChecks /> Мой план
-              </Chip>
-              <Chip onClick={() => navigate("/free")} sub={freeActive ? "идёт — вернуться" : undefined}>
-                <Shuffle /> Свободный режим
-              </Chip>
-            </ScrollRow>
-          </div>
-          {tab === "auto" ? <AutoPlan onStart={(plan) => begin(plan, null)} /> : <MyPlans plans={plans} onStart={begin} />}
+          {/* Free mode is no longer offered here; a free session already running can still be finished. */}
+          {freeActive && (
+            <Button asChild variant="secondary" className="mb-2.5 w-full">
+              <Link to="/free">
+                <Shuffle /> Вернуться в свободный режим
+              </Link>
+            </Button>
+          )}
+          <MyPlans plans={plans} onStart={begin} />
         </>
       )}
     </div>
-  );
-}
-
-/** The plan the app picks by itself: new items and what hasn't been played longest. */
-function AutoPlan({ onStart }: { onStart: (plan: PlanBlock[]) => void }) {
-  const data = useData();
-  const [seed, setSeed] = useState(0);
-  const plan = useMemo(() => buildPlan(data), [data.items, data.lastPlayed, data.practice, seed]);
-  return (
-    <>
-      <PlanBlocks plan={plan} onReroll={() => setSeed(seed + 1)} />
-      <Button size="xl" onClick={() => onStart(plan)} className="mt-3 w-full text-lg">
-        <Play className="size-6" fill="currentColor" />
-        Старт
-      </Button>
-    </>
   );
 }
 

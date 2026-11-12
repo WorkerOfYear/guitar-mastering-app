@@ -22,7 +22,7 @@ export function PlanBuilderPage() {
     <div className="space-y-3">
       <PageHeader title="Конструктор плана" />
       <p className="px-1 text-sm text-muted">
-        Составь несколько планов — они появятся на главной во вкладке «Мой план», там любой можно начать.
+        Составь несколько планов — они появятся на главной во вкладке «Сегодня», там любой можно начать.
       </p>
       {plans.map((p) => {
         const count = templateSize(p);
